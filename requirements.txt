@@ -1,0 +1,3 @@
+faster-whisper>=1.2.1,<2
+# Newer 1.30 builds write a telemetry session file even when telemetry is disabled.
+onnxruntime==1.23.2

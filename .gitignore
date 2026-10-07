@@ -1,0 +1,15 @@
+.venv/
+__pycache__/
+*.pyc
+.cache/
+*.transcript.json
+*_censored.*
+*_media/
+.DS_Store
+*.mov
+*.mp4
+*.mkv
+*.wav
+*.aiff
+*.fcpxml
+*.transcript.*.json
