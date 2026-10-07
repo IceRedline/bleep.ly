@@ -136,6 +136,20 @@ class IntegrationTests(unittest.TestCase):
         self.assertEqual(result, 1)
         self.assertEqual(output.read_bytes(), b"keep")
 
+    def test_mlx_cli_cache_is_separate_and_reused(self):
+        with patch("censor.cli.MLXWhisperBackend.transcribe", return_value=[WordTimestamp("бля", 1, 1.3)]) as gpu, \
+             patch("censor.cli.FasterWhisperBackend.transcribe", return_value=[WordTimestamp("бля", 1, 1.3)]) as cpu, \
+             contextlib.redirect_stdout(io.StringIO()):
+            self.assertEqual(main([str(self.source), "--backend", "mlx", "--transcribe-only"]), 0)
+            self.assertEqual(main([str(self.source), "--backend", "mlx", "--dry-run"]), 0)
+            gpu.assert_called_once()
+            cpu.assert_not_called()
+            self.assertEqual(main([str(self.source), "--dry-run"]), 0)
+            cpu.assert_called_once()
+        data = json.loads(self.source.with_suffix(".transcript.json").read_text())
+        self.assertEqual(data["metadata"]["backend"], "mlx")
+        self.assertEqual(data["metadata"]["compute_type"], "float16")
+
     def test_transcribe_only_saves_review_without_sound(self):
         with patch("censor.cli.FasterWhisperBackend.transcribe", return_value=[WordTimestamp("бля", 1, 1.3)]):
             with contextlib.redirect_stdout(io.StringIO()):

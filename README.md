@@ -1,7 +1,7 @@
 # Auto Censor
 
 Локальный CLI для запикивания русской ненормативной лексики в готовом видео.
-Распознаёт слова через **faster-whisper**, глушит исходный звук и накладывает ваш
+Распознаёт слова через **faster-whisper** (CPU) или **mlx-whisper** (Apple GPU), глушит исходный звук и накладывает ваш
 `beep.wav`. Видео копируется без кодирования (`-c:v copy`), звук экспортируется
 в AAC 320 kbit/s, 48 kHz, stereo. Есть FCPXML с отдельными connected audio clips.
 
@@ -55,8 +55,58 @@ python3 censor.py input.mov --sound beep.wav --model /path/to/local/model --offl
 
 faster-whisper использует CTranslate2, который поддерживает Apple ARM64 CPU,
 но не Apple Metal GPU. При проблемах с int8 попробуйте `--compute-type float32`.
-Интерфейс `TranscriptionBackend` отделён от CLI: позже можно добавить MLX-backend.
-Он сейчас не реализован. [Поддержка оборудования CTranslate2](https://opennmt.net/CTranslate2/hardware_support.html).
+[Поддержка оборудования CTranslate2](https://opennmt.net/CTranslate2/hardware_support.html).
+
+### Ускорение на Apple Silicon GPU
+
+Отдельный режим `--backend mlx` использует GPU через Metal, с моделью
+`mlx-community/whisper-large-v3-turbo` в `float16`. Требуется macOS на Apple Silicon
+и Python ARM64. Установите дополнительные зависимости в то же окружение:
+
+```bash
+pip install -r requirements-mlx.txt
+python3 censor.py input.mov --sound beep_trimmed.wav --backend mlx
+```
+
+Первый запуск скачивает отдельные MLX-веса (около 1.6 GB); веса CTranslate2
+не подходят. После скачивания работает `--offline`. Если модели лежат в
+локальном кэше этой рабочей папки, используйте:
+
+```bash
+HF_HOME="$PWD/.cache/huggingface" python3 censor.py input.mov \
+  --sound beep_trimmed.wav --backend mlx --offline
+```
+
+`--model` принимает каталог MLX-модели или полный ID её репозитория Hugging Face.
+Имя `large-v3-turbo` автоматически выбирает MLX-вариант. Для MLX доступны
+`--compute-type float16` (по умолчанию) и `float32`; `int8` относится к CPU-режиму.
+При недоступном Metal скрипт сообщает ошибку, а не незаметно переходит на CPU.
+Это ускорение **GPU**, Neural Engine в этом режиме не используется.
+
+В обоих режимах применяется одинаковый Silero VAD; после удаления пауз
+временные отметки возвращаются на исходный таймлайн. MLX использует greedy
+декодирование (beam search в mlx-whisper 0.4.3 не реализован) и краткую подсказку
+русской разговорной лексики, чтобы реже пропускать ругательства.
+Результаты распознавания могут отличаться от CPU, поэтому сравнивайте пропуски
+и границы слов на своём материале. Кэш каждого режима отдельный.
+Заглушение середины слова и воспроизведение полного cue используют общий код;
+если передать один JSON через `--from-transcript`, звук будет тем же.
+
+Прогресс MLX обновляется после окон распознавания; длительные паузы могут
+давать скачки. Первый запуск дополнительно тратит время на загрузку библиотек
+и компиляцию. Скорость следует сравнивать после установки и загрузки весов.
+Обычный запуск без `--backend` по-прежнему использует faster-whisper.
+
+Локальная проверка на M3 Pro: первые 120 секунд `стрим.m4v` распознаны за
+30.24 s на faster-whisper CPU/int8 и 9.92 s на MLX GPU/float16 — примерно в 3 раза
+быстрее. Время включает загрузку уже скачанной модели и VAD, но не скачивание
+и не рендер. На этом фрагменте найдено 22 и 23 совпадения соответственно;
+совпадения и границы отличаются, число совпадений само по себе не означает
+лучшую точность. На коротком контрольном видео оба режима находят 8 ругательств.
+Это измерение на конкретном материале, а не гарантия ускорения любого ролика.
+
+[MLX Whisper](https://github.com/ml-explore/mlx-examples/tree/main/whisper),
+[MLX-модель](https://huggingface.co/mlx-community/whisper-large-v3-turbo).
 
 ## Проверка и ручная корректировка
 
@@ -286,6 +336,7 @@ Whisper timestamps — оценка, а не гарантированная фо
 .
 ├── censor.py
 ├── requirements.txt
+├── requirements-mlx.txt
 ├── README.md
 ├── profanity.txt
 ├── censor/
@@ -293,6 +344,7 @@ Whisper timestamps — оценка, а не гарантированная фо
 │   ├── cli.py
 │   ├── models.py
 │   ├── transcription.py
+│   ├── mlx_backend.py
 │   ├── profanity.py
 │   ├── progress.py
 │   ├── ranges.py
@@ -306,6 +358,8 @@ Whisper timestamps — оценка, а не гарантированная фо
     ├── test_transcription.py
     ├── test_fcpxml.py
     ├── test_progress.py
+    ├── test_mlx.py
+    ├── test_long_render.py
     └── test_integration.py
 ```
 
@@ -320,7 +374,8 @@ Unit-тесты используют стандартный `unittest`. Инте
 fades, длительность beep, смещение аудио, multiple streams, кэш, ручные флаги и
 отсутствие файлов при dry run. Для тестов не скачиваются Whisper-модели.
 
-Проверка реализации: **40 тестов прошли**, включая прогресс, ETA и обработку ошибок,
+Проверка реализации: **48 тестов прошли**, включая MLX, независимые кэши,
+350 интервалов заглушения, прогресс, ETA и обработку ошибок,
 проверку однократного полного
 проигрывания в исходном темпе, возвращения речи под хвостом beep без увеличения
 заглушения и отдельных FCPXML lanes для перекрывающихся звуков.

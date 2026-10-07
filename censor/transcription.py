@@ -63,9 +63,10 @@ def file_hash(path: Path, progress: Callable[[float], None] | None = None) -> st
 
 
 def cache_key(path: Path, model: str, language: str, compute_type: str, audio_index: int,
-              progress: Callable[[float], None] | None = None) -> tuple[str, dict]:
+              progress: Callable[[float], None] | None = None,
+              backend: str = "faster-whisper") -> tuple[str, dict]:
     try:
-        version = importlib.metadata.version("faster-whisper")
+        version = importlib.metadata.version("mlx-whisper" if backend == "mlx" else "faster-whisper")
     except importlib.metadata.PackageNotFoundError:
         version = "uninstalled"
     model_path = Path(model)
@@ -73,10 +74,19 @@ def cache_key(path: Path, model: str, language: str, compute_type: str, audio_in
     model_files = ({str(p.relative_to(model_path)): [p.stat().st_size, p.stat().st_mtime_ns]
                     for p in sorted(model_path.rglob("*")) if p.is_file()}
                    if model_path.is_dir() else None)
-    metadata = dict(schema=CACHE_VERSION, source_sha256=file_hash(path, progress), backend="faster-whisper",
+    metadata = dict(schema=CACHE_VERSION, source_sha256=file_hash(path, progress), backend=backend,
                     backend_version=version, model=model, local_model_files=model_files,
                     language=language, compute_type=compute_type, audio_index=audio_index,
                     word_timestamps=True, vad_filter=True, beam_size=5)
+    if backend == "mlx":
+        from .mlx_backend import INITIAL_PROMPT
+        metadata.update(beam_size=1)
+        metadata["initial_prompt"] = INITIAL_PROMPT if language == "ru" else None
+        metadata["vad_backend_version"] = importlib.metadata.version("faster-whisper")
+        try:
+            metadata["mlx_version"] = importlib.metadata.version("mlx")
+        except importlib.metadata.PackageNotFoundError:
+            metadata["mlx_version"] = "uninstalled"
     digest = hashlib.sha256(json.dumps(metadata, sort_keys=True).encode()).hexdigest()
     return digest, metadata
 

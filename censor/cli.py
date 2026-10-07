@@ -12,6 +12,7 @@ from .ffmpeg import extract_audio, media_info, require_tools, sound_duration
 from .ranges import censor_ranges, middle_ranges
 from .profanity import ProfanityMatcher
 from .progress import Progress
+from .mlx_backend import MLXWhisperBackend, resolve_model
 from .transcription import (FasterWhisperBackend, cache_key, classify, load_cache,
                             parse_words, read_transcript, save_transcript)
 from .utils import CensorError, timestamp
@@ -37,8 +38,11 @@ def parser() -> argparse.ArgumentParser:
     cli.add_argument("--sound", type=Path, help="custom WAV/audio file (required for rendering)")
     cli.add_argument("--output", type=Path, help="video output; default: INPUT_censored.mov")
     cli.add_argument("--language", default="ru")
-    cli.add_argument("--model", default="large-v3-turbo", help="faster-whisper model name or local directory")
-    cli.add_argument("--compute-type", choices=["int8", "float32", "int8_float32"], default="int8")
+    cli.add_argument("--model", default="large-v3-turbo", help="model name, backend-compatible HF repo or local directory")
+    cli.add_argument("--backend", choices=["faster-whisper", "mlx"], default="faster-whisper",
+                     help="faster-whisper: CPU (default); mlx: Apple Silicon GPU")
+    cli.add_argument("--compute-type", choices=["int8", "float16", "float32", "int8_float32"],
+                     help="default: int8 for CPU, float16 for MLX; MLX supports float16/float32")
     cli.add_argument("--offline", action="store_true", help="forbid model downloads")
     cli.add_argument("--padding-before", type=nonnegative, default=.05, metavar="SECONDS")
     cli.add_argument("--padding-after", type=nonnegative, default=.08, metavar="SECONDS")
@@ -92,6 +96,13 @@ def preflight(args: argparse.Namespace, source: Path, output: Path | None, trans
 def execute(args: argparse.Namespace) -> None:
     if sys.version_info < (3, 11):
         raise CensorError("Python 3.11 or newer is required.")
+    args.compute_type = args.compute_type or ("float16" if args.backend == "mlx" else "int8")
+    if args.backend == "mlx":
+        args.model = resolve_model(args.model)
+        if args.compute_type not in {"float16", "float32"}:
+            raise CensorError("--backend mlx supports --compute-type float16 or float32.")
+    elif args.compute_type == "float16":
+        raise CensorError("CPU backend does not support float16; use int8 or float32.")
     source = args.input.resolve()
     require_tools()
     info = media_info(source, args.audio_stream)
@@ -125,7 +136,8 @@ def execute(args: argparse.Namespace) -> None:
                 raise CensorError(f"Cannot load blacklist: {exc}") from exc
             print("Checking transcription cache…", flush=True)
             with Progress("Reading input", source.stat().st_size, unit="bytes") as bar:
-                key, metadata = cache_key(source, args.model, args.language, args.compute_type, info.audio_index, bar.update)
+                key, metadata = cache_key(source, args.model, args.language, args.compute_type,
+                                          info.audio_index, bar.update, backend=args.backend)
             cache_dir = args.cache_dir or source.parent / ".cache" / "auto-censor"
             cache_path = cache_dir / f"{key}.json"
             # A cache destination must never overwrite a user-selected input/output.
@@ -136,8 +148,11 @@ def execute(args: argparse.Namespace) -> None:
                 audio = work / "speech.wav"
                 with Progress("Extracting audio", info.duration) as bar:
                     extract_audio(source, audio, info, bar.update)
-                print("Loading model / transcribing locally (CPU). First progress update follows the first segment.", flush=True)
-                backend = FasterWhisperBackend(args.model, args.language, args.compute_type, args.offline)
+                device = "Apple GPU / Metal" if args.backend == "mlx" else "CPU"
+                print(f"Loading model / transcribing locally ({device}, {args.compute_type}). "
+                      "First progress update follows the first segment.", flush=True)
+                backend_type = MLXWhisperBackend if args.backend == "mlx" else FasterWhisperBackend
+                backend = backend_type(args.model, args.language, args.compute_type, args.offline)
                 with Progress("Transcribing", info.duration) as bar:
                     raw = backend.transcribe(audio, bar.update)
                 # Whisper occasionally emits zero-duration punctuation/words.

@@ -8,6 +8,7 @@ __pycache__/
 .DS_Store
 *.mov
 *.mp4
+*.m4v
 *.mkv
 *.wav
 *.aiff

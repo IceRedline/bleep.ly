@@ -1,0 +1,3 @@
+-r requirements.txt
+# Optional Apple Silicon GPU backend; frame-progress adapter tested with this API.
+mlx-whisper==0.4.3
