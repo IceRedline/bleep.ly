@@ -8,6 +8,8 @@ class WordTimestamp:
     start: float
     end: float
     profane: bool = False
+    speaker: str | None = None
+    speaker_coverage: float | None = None
 
 
 @dataclass(frozen=True, order=True)

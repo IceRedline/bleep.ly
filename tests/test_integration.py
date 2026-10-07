@@ -188,6 +188,30 @@ class IntegrationTests(unittest.TestCase):
         self.assertEqual(len(data), 43200)
         self.assertAlmostEqual(data[0], 0, places=6)
 
+    def test_two_speaker_cues_preserve_full_tails_and_mute_timing(self):
+        other = self.work / 'other.wav'
+        run(['ffmpeg', '-v', 'error', '-f', 'lavfi', '-i', 'sine=frequency=2000:sample_rate=48000:duration=0.5',
+             '-c:a', 'pcm_s16le', str(other)])
+        self.transcript.write_text(json.dumps({'words': [
+            dict(word='бля', start=1, end=1.2, profane=True, speaker='me'),
+            dict(word='бля', start=2, end=2.2, profane=True, speaker='others')]}))
+        output = self.work / 'two.mov'
+        xml = self.work / 'two.fcpxml'
+        self.cli('--from-transcript', self.transcript, '--sound', self.sound, '--sound-others', other,
+                 '--padding-before', '0', '--padding-after', '0', '--output', output, '--fcpxml', xml)
+        mine = self.decode(output, 1.04, .1)
+        theirs = self.decode(output, 2.04, .1)
+        self.assertGreater(self.amplitude(mine, 1000), .05)
+        self.assertLess(self.amplitude(mine, 2000), .005)
+        self.assertGreater(self.amplitude(theirs, 2000), .05)
+        self.assertLess(self.amplitude(theirs, 1000), .005)
+        tail = self.decode(output, 2.3, .1)
+        self.assertGreater(self.amplitude(tail, 440), .1)
+        self.assertGreater(self.amplitude(tail, 2000), .05)
+        clips = ET.parse(xml).getroot().findall('.//spine/asset-clip/asset-clip')[1:]
+        self.assertEqual([clip.get('duration') for clip in clips], ['9/10s', '1/2s'])
+        self.assertEqual(len(self.decode(self.work / 'two_media/beep_0002.wav', 0, 1)), 24000)
+
     def test_sound_plays_once_at_original_speed(self):
         cue = self.work / "two-tone.wav"
         run(["ffmpeg", "-v", "error", "-f", "lavfi", "-i", "sine=frequency=1000:sample_rate=48000:duration=0.2",

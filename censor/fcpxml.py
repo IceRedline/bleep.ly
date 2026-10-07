@@ -19,7 +19,10 @@ def rational_time(seconds: float | Fraction, rate: int = RATE) -> str:
 
 
 def build_xml(source: Path, info: MediaInfo, media_dir: Path, ranges: list[CensorRange],
-              cue_duration: float) -> ET.ElementTree:
+              cue_duration: float | list[float]) -> ET.ElementTree:
+    durations = cue_duration if isinstance(cue_duration, list) else [cue_duration] * len(ranges)
+    if len(durations) != len(ranges):
+        raise CensorError("Cue duration count must match censor intervals.")
     root = ET.Element("fcpxml", version="1.10")
     resources = ET.SubElement(root, "resources")
     attrs = dict(id="r1", frameDuration=rational_time(1 / info.fps),
@@ -42,7 +45,7 @@ def build_xml(source: Path, info: MediaInfo, media_dir: Path, ranges: list[Censo
     ET.SubElement(bed, "media-rep", kind="original-media", src=(media_dir / "original_censored.wav").resolve().as_uri())
     for i, item in enumerate(ranges):
         beep = ET.SubElement(resources, "asset", id=f"r{i + 4}", name=f"BEEP {i + 1:03d}", start="0s",
-                      duration=rational_time(cue_duration), hasAudio="1", audioSources="1", audioChannels="2", audioRate=str(RATE))
+                      duration=rational_time(durations[i]), hasAudio="1", audioSources="1", audioChannels="2", audioRate=str(RATE))
         ET.SubElement(beep, "media-rep", kind="original-media", src=(media_dir / f"beep_{i + 1:04d}.wav").resolve().as_uri())
     library = ET.SubElement(root, "library")
     event = ET.SubElement(library, "event", name="Auto Censor")
@@ -59,20 +62,25 @@ def build_xml(source: Path, info: MediaInfo, media_dir: Path, ranges: list[Censo
         lane = next((j for j, end in enumerate(lane_ends) if end <= samples(item.start)), len(lane_ends))
         if lane == len(lane_ends):
             lane_ends.append(0)
-        lane_ends[lane] = samples(item.start) + samples(cue_duration)
+        lane_ends[lane] = samples(item.start) + samples(durations[i])
         ET.SubElement(original, "asset-clip", ref=f"r{i + 4}", name=f"BEEP {i + 1:03d}", lane=str(-2 - lane),
                       offset=rational_time(info.timecode + Fraction(samples(item.start), RATE)),
-                      start="0s", duration=rational_time(cue_duration), audioRole="effects")
+                      start="0s", duration=rational_time(durations[i]), audioRole="effects")
     ET.indent(root, space="  ")
     return ET.ElementTree(root)
 
 
 def export_fcpxml(source: Path, sound: Path, output: Path, info: MediaInfo,
-                  ranges: list[CensorRange], mode: str, duck_db: float, work: Path) -> None:
+                  ranges: list[CensorRange], mode: str, duck_db: float, work: Path,
+                  other_sound: Path | None = None, owners: list[str] | None = None) -> None:
     media_dir = output.with_name(output.stem + "_media")
     if media_dir.exists() or output.exists():
         raise CensorError(f"FCPXML or media folder already exists: {output}, {media_dir}")
-    tree = build_xml(source, info, media_dir, ranges, sound_duration(sound))
+    if other_sound and (owners is None or len(owners) != len(ranges)):
+        raise CensorError("Each censor interval requires a speaker label for two-sound FCPXML.")
+    cues = [other_sound if other_sound and owners[i] == "others" else sound for i in range(len(ranges))]
+    durations = {path: sound_duration(path) for path in set(cues)}
+    tree = build_xml(source, info, media_dir, ranges, [durations[path] for path in cues])
     output.parent.mkdir(parents=True, exist_ok=True)
     with tempfile.TemporaryDirectory(prefix=".fcpxml-", dir=output.parent) as folder:
         staged = Path(folder) / "media"
@@ -81,7 +89,7 @@ def export_fcpxml(source: Path, sound: Path, output: Path, info: MediaInfo,
             render_bed(source, staged / "original_censored.wav", info, ranges, mode, duck_db, work, bar.update)
         with Progress("FCPXML beep clips", len(ranges), unit="items") as bar:
             for i, item in enumerate(ranges):
-                render_beep(sound, staged / f"beep_{i + 1:04d}.wav")
+                render_beep(cues[i], staged / f"beep_{i + 1:04d}.wav")
                 bar.update(i + 1)
         # Reserve the destination; an existing directory is never replaced.
         media_dir.mkdir()

@@ -104,7 +104,15 @@ def parse_words(data: dict, duration: float, require_flags: bool = True) -> list
             raise CensorError(f"Transcript word {i}: require 0 <= start < end <= video duration ({duration:.3f}s).")
         if (require_flags or "profane" in item) and not isinstance(item.get("profane"), bool):
             raise CensorError(f"Transcript word {i}: 'profane' must be true or false.")
-        result.append(WordTimestamp(item["word"], start, min(end, duration), item.get("profane", False)))
+        speaker = item.get("speaker")
+        if speaker is not None and (not isinstance(speaker, str) or speaker not in {"me", "others", "unknown"}):
+            raise CensorError(f"Transcript word {i}: speaker must be me, others or unknown.")
+        coverage = item.get("speaker_coverage")
+        if coverage is not None:
+            coverage = finite_number(coverage, f"word {i} speaker_coverage")
+            if not 0 <= coverage <= 1:
+                raise CensorError(f"Transcript word {i}: speaker_coverage must be between 0 and 1.")
+        result.append(WordTimestamp(item["word"], start, min(end, duration), item.get("profane", False), speaker, coverage))
     return sorted(result, key=lambda w: (w.start, w.end))
 
 

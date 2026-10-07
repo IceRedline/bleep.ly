@@ -63,13 +63,20 @@ def prepare_sound(sound: Path, output: Path, duration: float) -> None:
 
 
 def filter_graph(info: MediaInfo, ranges: list[CensorRange], mode: str, duck_db: float,
-                 source_duration: float) -> str:
+                 source_duration: float, other_duration: float | None = None,
+                 owners: list[str] | None = None) -> str:
     graph = [f"[0:{info.audio_index}]{bed_filter(info, ranges, mode, duck_db)}[bed]"]
-    labels = "".join(f"[s{i}]" for i in range(len(ranges)))
-    graph.append(f"[1:a:0]asplit={len(ranges)}{labels}")
+    if other_duration is not None and (owners is None or len(owners) != len(ranges)):
+        raise CensorError("Each censor interval requires a speaker label for two-sound rendering.")
+    indices = [1 if other_duration is not None and owners[i] == "others" else 0 for i in range(len(ranges))]
+    for slot in sorted(set(indices)):
+        selected = [i for i, value in enumerate(indices) if value == slot]
+        labels = "".join(f"[s{i}]" for i in selected)
+        graph.append(f"[{slot + 1}:a:0]asplit={len(selected)}{labels}")
     for i, item in enumerate(ranges):
         # Cue duration is independent of the unchanged mute/duck interval.
-        graph.append(f"[s{i}]{beep_filter(source_duration)},"
+        duration = other_duration if indices[i] else source_duration
+        graph.append(f"[s{i}]{beep_filter(duration)},"
                      f"adelay={samples(item.start)}S:all=1[b{i}]")
     inputs = "[bed]" + "".join(f"[b{i}]" for i in range(len(ranges)))
     graph.append(f"{inputs}amix=inputs={len(ranges) + 1}:duration=first:normalize=0,"
@@ -93,13 +100,16 @@ def new_output(path: Path):
 
 def render_video(source: Path, sound: Path, output: Path, info: MediaInfo,
                  ranges: list[CensorRange], mode: str, duck_db: float, work: Path,
-                 progress: Callable[[float], None] | None = None) -> None:
+                 progress: Callable[[float], None] | None = None,
+                 other_sound: Path | None = None, owners: list[str] | None = None) -> None:
     graph = work / "mix.ffgraph"
-    graph.write_text(filter_graph(info, ranges, mode, duck_db, sound_duration(sound)), encoding="utf-8")
+    graph.write_text(filter_graph(info, ranges, mode, duck_db, sound_duration(sound),
+                                 sound_duration(other_sound) if other_sound else None, owners), encoding="utf-8")
     with new_output(output) as staged:
         try:
             run(["ffmpeg", "-hide_banner", "-loglevel", "error", "-nostdin", "-n",
                  *input_args(source, info), "-i", str(sound),
+                 *(["-i", str(other_sound)] if other_sound else []),
                  "-filter_complex_script", str(graph), "-map", f"0:{info.video_index}",
                  "-map", "[out]", "-map_metadata", "0", "-map_chapters", "0",
                  "-c:v", "copy", "-c:a", "aac", "-b:a", "320k", "-ar", str(RATE),

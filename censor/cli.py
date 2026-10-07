@@ -1,4 +1,5 @@
 import argparse
+import json
 import logging
 import math
 import sys
@@ -13,6 +14,7 @@ from .ranges import censor_ranges, middle_ranges
 from .profanity import ProfanityMatcher
 from .progress import Progress
 from .mlx_backend import MLXWhisperBackend, resolve_model
+from .speakers import cue_owners, diarize, identify_reference, label_words, validate_segments
 from .transcription import (FasterWhisperBackend, cache_key, classify, load_cache,
                             parse_words, read_transcript, save_transcript)
 from .utils import CensorError, timestamp
@@ -36,6 +38,13 @@ def parser() -> argparse.ArgumentParser:
     cli = argparse.ArgumentParser(description="Locally censor Russian profanity in video without re-encoding video.")
     cli.add_argument("input", type=Path, help="source video")
     cli.add_argument("--sound", type=Path, help="custom WAV/audio file (required for rendering)")
+    cli.add_argument("--sound-others", type=Path, help="second cue for other speakers; --sound is your cue")
+    cli.add_argument("--speaker-reference", nargs=2, type=nonnegative, metavar=("START", "END"),
+                     help="seconds in this video where only you speak; enables speaker labeling")
+    cli.add_argument("--num-speakers", type=int, default=4, help="speaker count for diarization (default: 4)")
+    cli.add_argument("--speaker-model-dir", type=Path,
+                     default=Path(__file__).resolve().parent.parent / ".cache" / "speaker-models")
+    cli.add_argument("--speaker-segments", type=Path, help="reuse local diarization JSON with --speaker-reference")
     cli.add_argument("--output", type=Path, help="video output; default: INPUT_censored.mov")
     cli.add_argument("--language", default="ru")
     cli.add_argument("--model", default="large-v3-turbo", help="model name, backend-compatible HF repo or local directory")
@@ -95,7 +104,7 @@ def unique_transcript(source: Path) -> Path:
 
 
 def preflight(args: argparse.Namespace, source: Path, output: Path | None, transcript: Path | None) -> None:
-    reads = [source, args.sound, args.from_transcript, args.words]
+    reads = [source, args.sound, args.sound_others, args.speaker_segments, args.from_transcript, args.words]
     protected = {p.resolve() for p in reads if p is not None}
     writes = [p.resolve() for p in (output, args.fcpxml, transcript) if p is not None]
     if len(set(writes)) != len(writes) or protected.intersection(writes):
@@ -127,6 +136,16 @@ def execute(args: argparse.Namespace) -> None:
     source = args.input.resolve()
     require_tools()
     info = media_info(source, args.audio_stream)
+    if args.speaker_reference:
+        start, end = args.speaker_reference
+        if not 0 <= start < end <= info.duration or not 1 <= args.num_speakers <= 100:
+            raise CensorError("Reference must satisfy 0 <= START < END <= duration; speaker count must be 1..100.")
+        if not (args.dry_run or args.transcribe_only or args.sound_others):
+            raise CensorError("Supply --sound-others for speaker-based rendering, or use --transcribe-only.")
+    if args.speaker_segments and not args.speaker_reference:
+        raise CensorError("--speaker-segments requires --speaker-reference START END.")
+    if args.sound_others and not (args.speaker_reference or args.from_transcript):
+        raise CensorError("--sound-others requires --speaker-reference or a transcript with speaker labels.")
     print(f"Auto Censor\n{'─' * 24}\nInput: {source}\nDuration: {timestamp(info.duration)}", flush=True)
     if info.audio_count > 1:
         print("Note: output includes only the selected audio track (downmixed to stereo).")
@@ -134,7 +153,7 @@ def execute(args: argparse.Namespace) -> None:
         raise CensorError("--transcribe-only cannot be combined with --output or --fcpxml.")
     output = (None if args.transcribe_only else
               args.output or (None if args.fcpxml else source.with_name(source.stem + "_censored.mov")))
-    transcript = args.transcript_output or (None if args.from_transcript else unique_transcript(source))
+    transcript = args.transcript_output or (None if args.from_transcript and not args.speaker_reference else unique_transcript(source))
     sound_seconds = None
     if args.dry_run and args.sound:
         sound_seconds = sound_duration(args.sound.resolve())
@@ -144,6 +163,8 @@ def execute(args: argparse.Namespace) -> None:
             if args.sound is None:
                 raise CensorError("Supply --sound censor.wav for rendering, or use --dry-run / --transcribe-only.")
             sound_seconds = sound_duration(args.sound.resolve())
+    if args.sound_others:
+        sound_duration(args.sound_others.resolve())
     with tempfile.TemporaryDirectory(prefix="auto-censor-") as folder:
         work = Path(folder)
         metadata = {"source": str(source)}
@@ -162,7 +183,8 @@ def execute(args: argparse.Namespace) -> None:
             cache_dir = args.cache_dir or source.parent / ".cache" / "auto-censor"
             cache_path = cache_dir / f"{key}.json"
             # A cache destination must never overwrite a user-selected input/output.
-            if cache_path.resolve() in {p.resolve() for p in (source, args.sound, args.words, output, args.fcpxml, transcript) if p}:
+            if cache_path.resolve() in {p.resolve() for p in (source, args.sound, args.sound_others, args.speaker_segments,
+                                                            args.words, output, args.fcpxml, transcript) if p}:
                 raise CensorError("Cache path collides with an input or output file.")
             words = load_cache(cache_path, info.duration)
             if words is None:
@@ -186,6 +208,25 @@ def execute(args: argparse.Namespace) -> None:
             else:
                 print("Using cached word timestamps.", flush=True)
             words = classify(words, matcher)
+        if args.speaker_reference:
+            if args.speaker_segments:
+                segments = validate_segments(json.loads(args.speaker_segments.read_text()), info.duration)
+            else:
+                audio = work / "speech.wav"
+                if not audio.exists():
+                    with Progress("Extracting audio", info.duration) as bar:
+                        extract_audio(source, audio, info, bar.update)
+                with Progress("Identifying speakers", info.duration) as bar:
+                    segments = diarize(audio, args.speaker_model_dir, args.num_speakers,
+                                       args.cache_dir or source.parent / ".cache" / "auto-censor",
+                                       bar.update, info.duration, save_cache=not args.dry_run)
+            mine, reference = identify_reference(segments, *args.speaker_reference)
+            words = label_words(words, segments, mine)
+            metadata["speaker_reference"] = reference
+            metadata["speaker_segments"] = segments
+            print(f"Your voice: speaker {mine}; reference dominance: {reference['dominance']:.0%}.")
+        if args.sound_others and any(w.profane and w.speaker is None for w in words):
+            raise CensorError("Transcript has missing speaker labels. Supply --speaker-reference or label words as me/others/unknown.")
         if not args.dry_run and transcript:
             # All writes are preflighted before inference. No source JSON is rewritten.
             if transcript.exists():
@@ -195,13 +236,20 @@ def execute(args: argparse.Namespace) -> None:
         occurrences = [w for w in words if w.profane]
         ranges = (middle_ranges(words, info.duration, sound_seconds) if args.censor_style == "middle" else
                   censor_ranges(words, info.duration, args.padding_before, args.padding_after, args.merge_gap))
+        owners = cue_owners(words, ranges) if args.sound_others else None
+        if args.speaker_reference or args.sound_others:
+            counts = {label: sum(w.speaker == label for w in occurrences) for label in ("me", "others", "unknown")}
+            print(f"Profanity by speaker: {counts}")
+            if counts["unknown"] or (owners and "unknown" in owners):
+                print("Review unknown speaker labels in JSON. Ambiguous intervals use your original cue; nothing is left uncensored.")
         if args.censor_style == "middle":
             print("Censor style: word middle, single playback at original speed.")
             if sound_seconds is None:
                 print("Interval durations are estimates without --sound; rendering also caps them to sound length.")
         print(f"Words detected: {len(words)}\nFound {len(occurrences)} profanity occurrences:\n")
         for word in occurrences:
-            print(f"[{timestamp(word.start)} - {timestamp(word.end)}] {word.word}")
+            label = f" [{word.speaker}]" if word.speaker else ""
+            print(f"[{timestamp(word.start)} - {timestamp(word.end)}] {word.word}{label}")
         print(f"\nTotal censored duration: {sum(r.duration for r in ranges):.2f} sec ({len(ranges)} merged intervals)")
         if not words:
             print("Warning: empty transcription. Check the audio stream/language or review manually.")
@@ -217,12 +265,18 @@ def execute(args: argparse.Namespace) -> None:
         normalized = work / "sound.wav"
         print("Generating censor track…", flush=True)
         prepare_sound(args.sound.resolve(), normalized, sound_seconds)
+        normalized_other = None
+        if args.sound_others:
+            normalized_other = work / "other-sound.wav"
+            prepare_sound(args.sound_others.resolve(), normalized_other, sound_duration(args.sound_others.resolve()))
         if output:
             with Progress("Rendering video", info.duration) as bar:
-                render_video(source, normalized, output.resolve(), info, ranges, args.mode, args.duck_db, work, bar.update)
+                render_video(source, normalized, output.resolve(), info, ranges, args.mode, args.duck_db, work,
+                             bar.update, other_sound=normalized_other, owners=owners)
             print(f"Output: {output.resolve()}", flush=True)
         if args.fcpxml:
-            export_fcpxml(source, normalized, args.fcpxml.resolve(), info, ranges, args.mode, args.duck_db, work)
+            export_fcpxml(source, normalized, args.fcpxml.resolve(), info, ranges, args.mode, args.duck_db, work,
+                          other_sound=normalized_other, owners=owners)
             print(f"FCPXML: {args.fcpxml.resolve()}", flush=True)
         print("Done.")
 
