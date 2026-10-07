@@ -15,7 +15,7 @@ class FCPXMLTests(unittest.TestCase):
 
     def test_xml_structure_and_timecode_offsets(self):
         info = MediaInfo(10, 0, 1, 1, 1920, 1080, Fraction(25), timecode=Fraction(3600))
-        tree = build_xml(Path('/tmp/видео & "test".mov'), info, Path('/tmp/censor media'), [CensorRange(1.25, 1.75)])
+        tree = build_xml(Path('/tmp/видео & "test".mov'), info, Path('/tmp/censor media'), [CensorRange(1.25, 1.75)], .8)
         root = ET.fromstring(ET.tostring(tree.getroot()))
         primary = root.find(".//spine/asset-clip")
         self.assertEqual(primary.get("srcEnable"), "video")
@@ -23,7 +23,7 @@ class FCPXMLTests(unittest.TestCase):
         clips = primary.findall("asset-clip")
         self.assertEqual([c.get("lane") for c in clips], ["-1", "-2"])
         self.assertEqual(clips[1].get("offset"), "14405/4s")
-        self.assertEqual(clips[1].get("duration"), "1/2s")
+        self.assertEqual(clips[1].get("duration"), "4/5s")
         ids = {r.get("id") for r in root.find("resources")}
         self.assertTrue(all(c.get("ref") in ids for c in root.iter("asset-clip")))
         self.assertIn("%26", root.find("resources/asset/media-rep").get("src"))
@@ -33,5 +33,13 @@ class FCPXMLTests(unittest.TestCase):
         self.assertEqual(timecode_seconds("01:00:00:00", Fraction(25)), 3600)
         self.assertEqual(timecode_seconds("00:01:00;02", fps), Fraction(1800, 1) / fps)
         info = MediaInfo(1001 / 300, 0, 1, 1, 1920, 1080, fps)
-        root = build_xml(Path('/tmp/a.mov'), info, Path('/tmp/media'), []).getroot()
+        root = build_xml(Path('/tmp/a.mov'), info, Path('/tmp/media'), [], .4).getroot()
         self.assertEqual(root.find('resources/format').get('frameDuration'), "1001/30000s")
+
+    def test_overlapping_sound_tails_have_separate_lanes(self):
+        info = MediaInfo(10, 0, 1, 1, 1920, 1080, Fraction(25))
+        root = build_xml(Path('/tmp/a.mov'), info, Path('/tmp/media'),
+                         [CensorRange(1, 1.1), CensorRange(1.3, 1.4)], .8).getroot()
+        clips = root.findall('.//spine/asset-clip/asset-clip')[1:]
+        self.assertEqual([c.get('lane') for c in clips], ['-2', '-3'])
+        self.assertTrue(all(c.get('duration') == '4/5s' for c in clips))

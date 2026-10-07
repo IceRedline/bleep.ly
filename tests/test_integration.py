@@ -86,7 +86,7 @@ class IntegrationTests(unittest.TestCase):
         self.assertEqual(self.rms(self.decode(bed, 1.05, .6)), 0)
         self.assertGreater(self.rms(self.decode(bed, .2, .4)), .08)
         beep = self.work / "edit_media/beep_0001.wav"
-        self.assertEqual(len(self.decode(beep, 0, 2)), round(.83 * 48000))
+        self.assertEqual(len(self.decode(beep, 0, 2)), round(.9 * 48000))
         info = media_info(self.source)
         duck = self.work / "duck.wav"
         render_bed(self.source, duck, info, [CensorRange(1, 1.7)], "duck", -30, self.work)
@@ -165,13 +165,13 @@ class IntegrationTests(unittest.TestCase):
         extract_audio(shifted, speech, info)
         self.assertGreater(self.rms(self.decode(speech, .1, .2)), .05)
 
-    def test_short_interval_and_long_sound_trim(self):
+    def test_sound_export_preserves_entire_cue(self):
         sound = self.work / "normalized.wav"
         prepare_sound(self.sound, sound, .9)
         beep = self.work / "short.wav"
-        render_beep(sound, beep, .003)
+        render_beep(sound, beep)
         data = self.decode(beep, 0, 1)
-        self.assertEqual(len(data), 144)
+        self.assertEqual(len(data), 43200)
         self.assertAlmostEqual(data[0], 0, places=6)
 
     def test_sound_plays_once_at_original_speed(self):
@@ -180,14 +180,14 @@ class IntegrationTests(unittest.TestCase):
              "-f", "lavfi", "-i", "sine=frequency=2000:sample_rate=48000:duration=0.2",
              "-filter_complex", "[0:a][1:a]concat=n=2:v=0:a=1[out]", "-map", "[out]", str(cue)])
         result = self.work / "once.wav"
-        render_beep(cue, result, .8)
-        self.assertEqual(len(self.decode(result, 0, 2)), 38400)
+        render_beep(cue, result)
+        self.assertEqual(len(self.decode(result, 0, 2)), 19200)
         opening = self.decode(result, .1, .1)
         latter = self.decode(result, .25, .1)
         self.assertGreater(self.amplitude(opening, 1000), .09)
         self.assertLess(self.amplitude(latter, 1000), .005)
         self.assertGreater(self.amplitude(latter, 2000), .09)
-        self.assertEqual(self.rms(self.decode(result, .45, .1)), 0)
+        self.assertEqual(len(self.decode(result, .45, .1)), 0)
 
     def test_middle_mode_preserves_start_and_end_of_word(self):
         output = self.work / "middle.mov"
@@ -199,6 +199,10 @@ class IntegrationTests(unittest.TestCase):
         center = self.decode(output, 1.1, .05)
         self.assertLess(self.amplitude(center, 440), .002)
         self.assertGreater(self.amplitude(center, 1000), .09)
+        # Once mute ends at 1.24, speech resumes while the full cue continues.
+        tail = self.decode(output, 1.26, .05)
+        self.assertGreater(self.amplitude(tail, 440), .09)
+        self.assertGreater(self.amplitude(tail, 1000), .09)
 
     def test_delayed_audio_keeps_video_timeline(self):
         delayed = self.work / "delayed.mov"

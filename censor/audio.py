@@ -49,20 +49,14 @@ def prepare_sound(sound: Path, output: Path, duration: float) -> None:
          "-c:a", "pcm_f32le", str(output)])
 
 
-def fitted_beep_filter(duration: float, source_duration: float) -> str:
-    """Play once at natural speed, then silence only in explicit full mode."""
-    # Middle-mode ranges are capped to source_duration; full mode can mute longer.
-    return f"apad=whole_len={max(1, samples(duration))},{beep_filter(min(duration, source_duration))}" + (
-        f",apad=whole_len={max(1, samples(duration))}" if duration > source_duration else "")
-
-
 def filter_graph(info: MediaInfo, ranges: list[CensorRange], mode: str, duck_db: float,
                  source_duration: float) -> str:
     graph = [f"[0:{info.audio_index}]{bed_filter(info, ranges, mode, duck_db)}[bed]"]
     labels = "".join(f"[s{i}]" for i in range(len(ranges)))
     graph.append(f"[1:a:0]asplit={len(ranges)}{labels}")
     for i, item in enumerate(ranges):
-        graph.append(f"[s{i}]{fitted_beep_filter(item.duration, source_duration)},"
+        # Cue duration is independent of the unchanged mute/duck interval.
+        graph.append(f"[s{i}]{beep_filter(source_duration)},"
                      f"adelay={samples(item.start)}S:all=1[b{i}]")
     inputs = "[bed]" + "".join(f"[b{i}]" for i in range(len(ranges)))
     graph.append(f"{inputs}amix=inputs={len(ranges) + 1}:duration=first:normalize=0,"
@@ -111,7 +105,7 @@ def render_bed(source: Path, output: Path, info: MediaInfo, ranges: list[CensorR
          "-c:a", "pcm_s24le", "-rf64", "auto", str(output)])
 
 
-def render_beep(sound: Path, output: Path, duration: float) -> None:
+def render_beep(sound: Path, output: Path) -> None:
     run(["ffmpeg", "-hide_banner", "-loglevel", "error", "-nostdin", "-n",
-         "-i", str(sound), "-map", "0:a:0", "-af", fitted_beep_filter(duration, sound_duration(sound)),
+         "-i", str(sound), "-map", "0:a:0", "-af", beep_filter(sound_duration(sound)),
          "-c:a", "pcm_s24le", "-rf64", "auto", str(output)])
