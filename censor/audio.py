@@ -23,8 +23,20 @@ def gain_expression(ranges: list[CensorRange], mode: str, duck_db: float) -> str
     floor = 0 if mode == "mute" else 10 ** (duck_db / 20)
     ramps = [f"max(0,min(1,min((t-({r.start - FADE:.9f}))/{FADE},"
              f"(({r.end + FADE:.9f})-t)/{FADE})))" for r in ranges]
+    # Large left-associative sums exceed FFmpeg's expression parser depth.
+    # A bounded tree also skips distant intervals during sample evaluation.
+    def tree(start: int, end: int) -> str:
+        if end - start == 1:
+            return ramps[start]
+        middle = (start + end) // 2
+        lo = min(r.start for r in ranges[start:end]) - FADE
+        hi = max(r.end for r in ranges[start:end]) + FADE
+        return (f"if(between(t,{lo:.9f},{hi:.9f}),"
+                f"({tree(start, middle)})+({tree(middle, end)}),0)")
+
+    envelope = '+'.join(ramps) if len(ranges) <= 32 else tree(0, len(ranges))
     # Fade outside the padded interval: the entire interval remains fully muted.
-    return f"1-({1 - floor:.12f})*min(1,({'+'.join(ramps)}))"
+    return f"1-({1 - floor:.12f})*min(1,({envelope}))"
 
 
 def bed_filter(info: MediaInfo, ranges: list[CensorRange], mode: str, duck_db: float) -> str:
