@@ -9,7 +9,7 @@ from pathlib import Path
 from .audio import prepare_sound, render_video
 from .fcpxml import export_fcpxml
 from .ffmpeg import extract_audio, media_info, require_tools, sound_duration
-from .ranges import censor_ranges, middle_ranges, include_full_sound
+from .ranges import censor_ranges, middle_ranges
 from .profanity import ProfanityMatcher
 from .transcription import (FasterWhisperBackend, cache_key, classify, load_cache,
                             parse_words, read_transcript, save_transcript)
@@ -43,7 +43,7 @@ def parser() -> argparse.ArgumentParser:
     cli.add_argument("--padding-after", type=nonnegative, default=.08, metavar="SECONDS")
     cli.add_argument("--merge-gap", type=nonnegative, default=.02, metavar="SECONDS")
     cli.add_argument("--censor-style", choices=["middle", "full"], default="middle",
-                     help="middle (default): start inside the word and play the entire sound; full: mute the whole padded word, also preserving the sound")
+                     help="middle (default): cover only the middle 60%% of each word, capped by sound length; full: mute the whole padded word")
     cli.add_argument("--mode", choices=["mute", "duck"], default="mute")
     cli.add_argument("--duck-db", type=attenuation, default=-30, metavar="DB")
     cli.add_argument("--fcpxml", type=Path, help="export FCPXML + WAV assets; no video unless --output is also supplied")
@@ -166,12 +166,10 @@ def execute(args: argparse.Namespace) -> None:
         occurrences = [w for w in words if w.profane]
         ranges = (middle_ranges(words, info.duration, sound_seconds) if args.censor_style == "middle" else
                   censor_ranges(words, info.duration, args.padding_before, args.padding_after, args.merge_gap))
-        if args.censor_style == "full" and sound_seconds is not None:
-            ranges = include_full_sound(ranges, info.duration, sound_seconds)
         if args.censor_style == "middle":
             print("Censor style: word middle, single playback at original speed.")
             if sound_seconds is None:
-                print("Interval durations are estimates without --sound; rendering allows the entire sound to finish.")
+                print("Interval durations are estimates without --sound; rendering also caps them to sound length.")
         print(f"Words detected: {len(words)}\nFound {len(occurrences)} profanity occurrences:\n")
         for word in occurrences:
             print(f"[{timestamp(word.start)} - {timestamp(word.end)}] {word.word}")

@@ -50,8 +50,10 @@ def prepare_sound(sound: Path, output: Path, duration: float) -> None:
 
 
 def fitted_beep_filter(duration: float, source_duration: float) -> str:
-    """Always keep the whole cue at natural speed, irrespective of word length."""
-    return f"{beep_filter(source_duration)},apad=whole_len={max(1, samples(max(duration, source_duration)))}"
+    """Play once at natural speed, then silence only in explicit full mode."""
+    # Middle-mode ranges are capped to source_duration; full mode can mute longer.
+    return f"apad=whole_len={max(1, samples(duration))},{beep_filter(min(duration, source_duration))}" + (
+        f",apad=whole_len={max(1, samples(duration))}" if duration > source_duration else "")
 
 
 def filter_graph(info: MediaInfo, ranges: list[CensorRange], mode: str, duck_db: float,

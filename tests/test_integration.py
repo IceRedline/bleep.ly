@@ -86,7 +86,7 @@ class IntegrationTests(unittest.TestCase):
         self.assertEqual(self.rms(self.decode(bed, 1.05, .6)), 0)
         self.assertGreater(self.rms(self.decode(bed, .2, .4)), .08)
         beep = self.work / "edit_media/beep_0001.wav"
-        self.assertEqual(len(self.decode(beep, 0, 2)), round(.9 * 48000))
+        self.assertEqual(len(self.decode(beep, 0, 2)), round(.83 * 48000))
         info = media_info(self.source)
         duck = self.work / "duck.wav"
         render_bed(self.source, duck, info, [CensorRange(1, 1.7)], "duck", -30, self.work)
@@ -165,15 +165,14 @@ class IntegrationTests(unittest.TestCase):
         extract_audio(shifted, speech, info)
         self.assertGreater(self.rms(self.decode(speech, .1, .2)), .05)
 
-    def test_short_interval_keeps_entire_sound(self):
+    def test_short_interval_and_long_sound_trim(self):
         sound = self.work / "normalized.wav"
         prepare_sound(self.sound, sound, .9)
         beep = self.work / "short.wav"
         render_beep(sound, beep, .003)
         data = self.decode(beep, 0, 1)
-        self.assertEqual(len(data), 43200)
+        self.assertEqual(len(data), 144)
         self.assertAlmostEqual(data[0], 0, places=6)
-        self.assertGreater(self.amplitude(self.decode(beep, .75, .1), 1000), .09)
 
     def test_sound_plays_once_at_original_speed(self):
         cue = self.work / "two-tone.wav"
@@ -190,19 +189,16 @@ class IntegrationTests(unittest.TestCase):
         self.assertGreater(self.amplitude(latter, 2000), .09)
         self.assertEqual(self.rms(self.decode(result, .45, .1)), 0)
 
-    def test_middle_mode_preserves_start_but_finishes_sound_after_word(self):
+    def test_middle_mode_preserves_start_and_end_of_word(self):
         output = self.work / "middle.mov"
         self.cli("--censor-style", "middle", "--from-transcript", self.transcript,
                  "--sound", self.sound, "--output", output)
-        # Start inside the first word, but let the 0.9s cue finish beyond it.
-        for start in (1.005, 2.4):
+        # First word [1, 1.3]: cover [1.06, 1.24], leaving both edges audible.
+        for start in (1.005, 1.255):
             self.assertGreater(self.amplitude(self.decode(output, start, .025), 440), .08)
         center = self.decode(output, 1.1, .05)
         self.assertLess(self.amplitude(center, 440), .002)
         self.assertGreater(self.amplitude(center, 1000), .09)
-        tail = self.decode(output, 1.8, .05)
-        self.assertGreater(self.amplitude(tail, 1000), .09)
-        self.assertLess(self.amplitude(tail, 440), .002)
 
     def test_delayed_audio_keeps_video_timeline(self):
         delayed = self.work / "delayed.mov"

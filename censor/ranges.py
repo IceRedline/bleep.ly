@@ -4,7 +4,7 @@ from .models import CensorRange, WordTimestamp
 
 def middle_ranges(words: list[WordTimestamp], duration: float, sound_duration: float | None,
                   fraction: float = .6) -> list[CensorRange]:
-    """Start inside each word, then allow the entire natural cue to finish."""
+    """Cover the middle of each word, at most one natural sound duration."""
     if not math.isfinite(fraction) or not 0 < fraction <= 1:
         raise ValueError("Censor fraction must be between 0 (exclusive) and 1.")
     if sound_duration is not None and (not math.isfinite(sound_duration) or sound_duration <= 0):
@@ -24,22 +24,9 @@ def middle_ranges(words: list[WordTimestamp], duration: float, sound_duration: f
     merged = censor_ranges(selected, duration, before=0, after=0, merge_gap=0)
     if sound_duration is None:
         return merged
-    return include_full_sound(merged, duration, sound_duration)
-
-
-def include_full_sound(ranges: list[CensorRange], duration: float, sound_duration: float) -> list[CensorRange]:
-    """Extend mute to fit the cue; near EOF move it earlier instead of clipping."""
-    if not ranges:
-        return []
-    if sound_duration > duration:
-        raise ValueError("Censor sound is longer than the video; choose a shorter sound to play it in full.")
-    extended = []
-    for item in ranges:
-        start = max(0, min(item.start, duration - sound_duration))
-        end = max(item.end, start + sound_duration)
-        extended.append(WordTimestamp("", start, end, True))
-    # Nearby words share one complete cue, never overlapping copies.
-    return censor_ranges(extended, duration, before=0, after=0, merge_gap=0)
+    # Overlapping manual annotations must not lengthen the mute past the cue.
+    return [CensorRange((r.start + r.end) / 2 - min(r.duration, sound_duration) / 2,
+                        (r.start + r.end) / 2 + min(r.duration, sound_duration) / 2) for r in merged]
 
 
 def censor_ranges(words: list[WordTimestamp], duration: float, before: float = .05,

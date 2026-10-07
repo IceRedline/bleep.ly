@@ -6,26 +6,24 @@ from censor.utils import CensorError, timestamp
 
 
 class RangeTests(unittest.TestCase):
-    def test_middle_preserves_start_and_plays_whole_sound(self):
+    def test_middle_preserves_word_edges_and_caps_to_sound(self):
         result = middle_ranges([WordTimestamp("блять", 0, .72, True),
                                 WordTimestamp("похуй", 9.28, 9.6, True)], 20, .383)
         self.assertAlmostEqual(result[0].start, .1685)
         self.assertAlmostEqual(result[0].end, .5515)
-        self.assertAlmostEqual(result[1].duration, .383)
+        self.assertAlmostEqual(result[1].duration, .192)
         self.assertGreater(result[1].start, 9.28)
-        self.assertGreater(result[1].end, 9.6)
+        self.assertLess(result[1].end, 9.6)
 
-    def test_middle_overlaps_share_a_whole_sound(self):
+    def test_middle_overlaps_do_not_exceed_sound(self):
         result = middle_ranges([WordTimestamp("мат", 0, 1, True), WordTimestamp("мат", .1, 1.1, True)], 2, .2)
         self.assertEqual(len(result), 1)
-        self.assertGreaterEqual(result[0].duration, .2)
+        self.assertAlmostEqual(result[0].duration, .2)
 
-    def test_whole_sound_near_end_moves_earlier(self):
+    def test_middle_near_end_does_not_expand_mute(self):
         result = middle_ranges([WordTimestamp("мат", 1.9, 2, True)], 2, .4)
-        self.assertAlmostEqual(result[0].start, 1.6)
-        self.assertAlmostEqual(result[0].end, 2)
-        with self.assertRaisesRegex(ValueError, "longer than the video"):
-            middle_ranges([WordTimestamp("мат", 0, .2, True)], .2, .4)
+        self.assertAlmostEqual(result[0].start, 1.92)
+        self.assertAlmostEqual(result[0].end, 1.98)
 
     def test_padding(self):
         result = censor_ranges([WordTimestamp("мат", 10.2, 10.65, True)], 20, .05, .1)
