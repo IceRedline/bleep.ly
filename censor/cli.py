@@ -39,8 +39,8 @@ def parser() -> argparse.ArgumentParser:
     cli.add_argument("--output", type=Path, help="video output; default: INPUT_censored.mov")
     cli.add_argument("--language", default="ru")
     cli.add_argument("--model", default="large-v3-turbo", help="model name, backend-compatible HF repo or local directory")
-    cli.add_argument("--backend", choices=["faster-whisper", "mlx"], default="faster-whisper",
-                     help="faster-whisper: CPU (default); mlx: Apple Silicon GPU")
+    cli.add_argument("--backend", choices=["faster-whisper", "mlx"],
+                     help="skip the interactive CPU/Apple GPU menu; non-interactive default: faster-whisper")
     cli.add_argument("--compute-type", choices=["int8", "float16", "float32", "int8_float32"],
                      help="default: int8 for CPU, float16 for MLX; MLX supports float16/float32")
     cli.add_argument("--offline", action="store_true", help="forbid model downloads")
@@ -63,6 +63,26 @@ def parser() -> argparse.ArgumentParser:
     cli.add_argument("--audio-stream", type=int, help="zero-based AUDIO stream to process; required for multiple audio tracks")
     cli.add_argument("--verbose", action="store_true")
     return cli
+
+
+def select_backend(explicit: str | None, from_transcript: Path | None) -> str:
+    if explicit is not None:
+        return explicit
+    if from_transcript or not (sys.stdin.isatty() and sys.stdout.isatty()):
+        return "faster-whisper"
+    print("\nКакое ускорение использовать?\n"
+          "  1 — Apple GPU (MLX / Metal)\n"
+          "  2 — Без GPU — CPU (faster-whisper)")
+    while True:
+        try:
+            answer = input("Выберите 1 или 2 [Enter — 2]: ").strip()
+        except EOFError as exc:
+            raise CensorError("Выбор отменён. Для запуска без вопроса укажите --backend mlx или --backend faster-whisper.") from exc
+        if answer == "1":
+            return "mlx"
+        if answer in {"", "2"}:
+            return "faster-whisper"
+        print("Введите 1 или 2.")
 
 
 def unique_transcript(source: Path) -> Path:
@@ -96,6 +116,7 @@ def preflight(args: argparse.Namespace, source: Path, output: Path | None, trans
 def execute(args: argparse.Namespace) -> None:
     if sys.version_info < (3, 11):
         raise CensorError("Python 3.11 or newer is required.")
+    args.backend = select_backend(args.backend, args.from_transcript)
     args.compute_type = args.compute_type or ("float16" if args.backend == "mlx" else "int8")
     if args.backend == "mlx":
         args.model = resolve_model(args.model)
