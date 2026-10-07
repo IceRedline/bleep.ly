@@ -10,6 +10,7 @@ from .audio import RATE, new_output, render_bed, render_beep, samples
 from .ffmpeg import sound_duration
 from .models import CensorRange, MediaInfo
 from .utils import CensorError
+from .progress import Progress
 
 
 def rational_time(seconds: float | Fraction, rate: int = RATE) -> str:
@@ -76,9 +77,12 @@ def export_fcpxml(source: Path, sound: Path, output: Path, info: MediaInfo,
     with tempfile.TemporaryDirectory(prefix=".fcpxml-", dir=output.parent) as folder:
         staged = Path(folder) / "media"
         staged.mkdir()
-        render_bed(source, staged / "original_censored.wav", info, ranges, mode, duck_db, work)
-        for i, item in enumerate(ranges):
-            render_beep(sound, staged / f"beep_{i + 1:04d}.wav")
+        with Progress("FCPXML audio", info.duration) as bar:
+            render_bed(source, staged / "original_censored.wav", info, ranges, mode, duck_db, work, bar.update)
+        with Progress("FCPXML beep clips", len(ranges), unit="items") as bar:
+            for i, item in enumerate(ranges):
+                render_beep(sound, staged / f"beep_{i + 1:04d}.wav")
+                bar.update(i + 1)
         # Reserve the destination; an existing directory is never replaced.
         media_dir.mkdir()
         try:

@@ -3,6 +3,7 @@ import os
 import tempfile
 from contextlib import contextmanager
 from pathlib import Path
+from typing import Callable
 
 from .ffmpeg import input_args, run, sound_duration
 from .models import CensorRange, MediaInfo
@@ -79,7 +80,8 @@ def new_output(path: Path):
 
 
 def render_video(source: Path, sound: Path, output: Path, info: MediaInfo,
-                 ranges: list[CensorRange], mode: str, duck_db: float, work: Path) -> None:
+                 ranges: list[CensorRange], mode: str, duck_db: float, work: Path,
+                 progress: Callable[[float], None] | None = None) -> None:
     graph = work / "mix.ffgraph"
     graph.write_text(filter_graph(info, ranges, mode, duck_db, sound_duration(sound)), encoding="utf-8")
     with new_output(output) as staged:
@@ -89,7 +91,7 @@ def render_video(source: Path, sound: Path, output: Path, info: MediaInfo,
                  "-filter_complex_script", str(graph), "-map", f"0:{info.video_index}",
                  "-map", "[out]", "-map_metadata", "0", "-map_chapters", "0",
                  "-c:v", "copy", "-c:a", "aac", "-b:a", "320k", "-ar", str(RATE),
-                 "-avoid_negative_ts", "disabled", "-t", f"{info.duration:.9f}", str(staged)])
+                 "-avoid_negative_ts", "disabled", "-t", f"{info.duration:.9f}", str(staged)], progress)
         except CensorError as exc:
             raise CensorError(f"Video export failed; video was NOT re-encoded. "
                               f"The codec/container may not support stream copy; try --output result.mov "
@@ -97,12 +99,13 @@ def render_video(source: Path, sound: Path, output: Path, info: MediaInfo,
 
 
 def render_bed(source: Path, output: Path, info: MediaInfo, ranges: list[CensorRange],
-               mode: str, duck_db: float, work: Path) -> None:
+               mode: str, duck_db: float, work: Path,
+               progress: Callable[[float], None] | None = None) -> None:
     graph = work / "bed.ffgraph"
     graph.write_text(f"[0:{info.audio_index}]{bed_filter(info, ranges, mode, duck_db)}[out]", encoding="utf-8")
     run(["ffmpeg", "-hide_banner", "-loglevel", "error", "-nostdin", "-n",
          *input_args(source, info), "-filter_complex_script", str(graph), "-map", "[out]",
-         "-c:a", "pcm_s24le", "-rf64", "auto", str(output)])
+         "-c:a", "pcm_s24le", "-rf64", "auto", str(output)], progress)
 
 
 def render_beep(sound: Path, output: Path) -> None:

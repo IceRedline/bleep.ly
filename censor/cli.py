@@ -11,6 +11,7 @@ from .fcpxml import export_fcpxml
 from .ffmpeg import extract_audio, media_info, require_tools, sound_duration
 from .ranges import censor_ranges, middle_ranges
 from .profanity import ProfanityMatcher
+from .progress import Progress
 from .transcription import (FasterWhisperBackend, cache_key, classify, load_cache,
                             parse_words, read_transcript, save_transcript)
 from .utils import CensorError, timestamp
@@ -123,7 +124,8 @@ def execute(args: argparse.Namespace) -> None:
             except (OSError, ValueError) as exc:
                 raise CensorError(f"Cannot load blacklist: {exc}") from exc
             print("Checking transcription cache…", flush=True)
-            key, metadata = cache_key(source, args.model, args.language, args.compute_type, info.audio_index)
+            with Progress("Reading input", source.stat().st_size, unit="bytes") as bar:
+                key, metadata = cache_key(source, args.model, args.language, args.compute_type, info.audio_index, bar.update)
             cache_dir = args.cache_dir or source.parent / ".cache" / "auto-censor"
             cache_path = cache_dir / f"{key}.json"
             # A cache destination must never overwrite a user-selected input/output.
@@ -132,26 +134,17 @@ def execute(args: argparse.Namespace) -> None:
             words = load_cache(cache_path, info.duration)
             if words is None:
                 audio = work / "speech.wav"
-                print("Extracting audio…", flush=True)
-                extract_audio(source, audio, info)
-                print("Transcribing locally (CPU)…", flush=True)
-                last_percent = -1
-
-                def progress(seconds: float) -> None:
-                    nonlocal last_percent
-                    percent = min(99, int(seconds / info.duration * 100))
-                    if percent // 10 > last_percent // 10:
-                        print(f"  Transcribing… {percent}%", flush=True)
-                        last_percent = percent
-
+                with Progress("Extracting audio", info.duration) as bar:
+                    extract_audio(source, audio, info, bar.update)
+                print("Loading model / transcribing locally (CPU). First progress update follows the first segment.", flush=True)
                 backend = FasterWhisperBackend(args.model, args.language, args.compute_type, args.offline)
-                raw = backend.transcribe(audio, progress)
+                with Progress("Transcribing", info.duration) as bar:
+                    raw = backend.transcribe(audio, bar.update)
                 # Whisper occasionally emits zero-duration punctuation/words.
                 valid = [w for w in raw if w.end > w.start and w.start < info.duration]
                 if len(valid) != len(raw):
                     print(f"Warning: ignored {len(raw) - len(valid)} words with empty/out-of-range timestamps.")
                 words = parse_words({"words": [asdict(w) for w in valid]}, info.duration)
-                print("  Transcribing… 100%", flush=True)
                 if not args.dry_run:
                     save_transcript(cache_path, words, metadata)
             else:
@@ -189,7 +182,8 @@ def execute(args: argparse.Namespace) -> None:
         print("Generating censor track…", flush=True)
         prepare_sound(args.sound.resolve(), normalized, sound_seconds)
         if output:
-            render_video(source, normalized, output.resolve(), info, ranges, args.mode, args.duck_db, work)
+            with Progress("Rendering video", info.duration) as bar:
+                render_video(source, normalized, output.resolve(), info, ranges, args.mode, args.duck_db, work, bar.update)
             print(f"Output: {output.resolve()}", flush=True)
         if args.fcpxml:
             export_fcpxml(source, normalized, args.fcpxml.resolve(), info, ranges, args.mode, args.duck_db, work)

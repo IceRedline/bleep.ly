@@ -50,15 +50,20 @@ class FasterWhisperBackend:
                               "The first model download requires network access; --offline forbids it.") from exc
 
 
-def file_hash(path: Path) -> str:
+def file_hash(path: Path, progress: Callable[[float], None] | None = None) -> str:
     digest = hashlib.sha256()
+    count = 0
     with path.open("rb") as handle:
         for block in iter(lambda: handle.read(4 * 1024 * 1024), b""):
             digest.update(block)
+            count += len(block)
+            if progress is not None:
+                progress(count)
     return digest.hexdigest()
 
 
-def cache_key(path: Path, model: str, language: str, compute_type: str, audio_index: int) -> tuple[str, dict]:
+def cache_key(path: Path, model: str, language: str, compute_type: str, audio_index: int,
+              progress: Callable[[float], None] | None = None) -> tuple[str, dict]:
     try:
         version = importlib.metadata.version("faster-whisper")
     except importlib.metadata.PackageNotFoundError:
@@ -68,7 +73,7 @@ def cache_key(path: Path, model: str, language: str, compute_type: str, audio_in
     model_files = ({str(p.relative_to(model_path)): [p.stat().st_size, p.stat().st_mtime_ns]
                     for p in sorted(model_path.rglob("*")) if p.is_file()}
                    if model_path.is_dir() else None)
-    metadata = dict(schema=CACHE_VERSION, source_sha256=file_hash(path), backend="faster-whisper",
+    metadata = dict(schema=CACHE_VERSION, source_sha256=file_hash(path, progress), backend="faster-whisper",
                     backend_version=version, model=model, local_model_files=model_files,
                     language=language, compute_type=compute_type, audio_index=audio_index,
                     word_timestamps=True, vad_filter=True, beam_size=5)

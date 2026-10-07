@@ -5,8 +5,10 @@ import re
 import shlex
 import shutil
 import subprocess
+import tempfile
 from fractions import Fraction
 from pathlib import Path
+from typing import Callable
 
 from .models import MediaInfo
 from .utils import CensorError
@@ -20,7 +22,9 @@ def require_tools() -> None:
             raise CensorError(f"{tool} is not installed. On macOS: brew install ffmpeg")
 
 
-def run(args: list[str]) -> str:
+def run(args: list[str], progress: Callable[[float], None] | None = None) -> str:
+    if progress is not None:
+        return run_with_progress(args, progress)
     LOG.debug("%s", shlex.join(args))
     try:
         result = subprocess.run(args, capture_output=True, text=True, check=False)
@@ -29,6 +33,43 @@ def run(args: list[str]) -> str:
     if result.returncode:
         raise CensorError(f"{args[0]} failed:\n{result.stderr[-5000:].strip()}")
     return result.stdout
+
+
+def run_with_progress(args: list[str], progress: Callable[[float], None]) -> str:
+    """Read FFmpeg's output timestamps while keeping error output off the bar."""
+    command = [args[0], "-progress", "pipe:1", "-nostats", *args[1:]]
+    LOG.debug("%s", shlex.join(command))
+    with tempfile.TemporaryFile() as errors:
+        try:
+            process = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=errors, text=True)
+        except FileNotFoundError as exc:
+            raise CensorError(f"{args[0]} is not installed. On macOS: brew install ffmpeg") from exc
+        try:
+            for line in process.stdout:
+                key, _, value = line.strip().partition("=")
+                if key == "out_time_us":
+                    try:
+                        seconds = float(value) / 1_000_000
+                    except ValueError:
+                        continue
+                    if math.isfinite(seconds) and seconds >= 0:
+                        progress(seconds)
+            code = process.wait()
+        except BaseException:
+            process.terminate()
+            try:
+                process.wait(timeout=3)
+            except subprocess.TimeoutExpired:
+                process.kill()
+                process.wait()
+            raise
+        finally:
+            process.stdout.close()
+        if code:
+            errors.seek(0, 2)
+            errors.seek(max(0, errors.tell() - 5000))
+            raise CensorError(f"{args[0]} failed:\n{errors.read().decode('utf-8', errors='replace').strip()}")
+    return ""
 
 
 def probe(path: Path) -> dict:
@@ -108,8 +149,9 @@ def input_args(path: Path, info: MediaInfo) -> list[str]:
     return ["-copyts", "-itsoffset", f"{-info.start:.9f}", "-i", str(path)]
 
 
-def extract_audio(path: Path, output: Path, info: MediaInfo) -> None:
+def extract_audio(path: Path, output: Path, info: MediaInfo,
+                  progress: Callable[[float], None] | None = None) -> None:
     run(["ffmpeg", "-hide_banner", "-loglevel", "error", "-nostdin", "-n",
          *input_args(path, info), "-map", f"0:{info.audio_index}", "-vn",
          "-af", "aresample=16000:async=1:first_pts=0,apad",
-         "-t", f"{info.duration:.9f}", "-ac", "1", "-c:a", "pcm_s16le", str(output)])
+         "-t", f"{info.duration:.9f}", "-ac", "1", "-c:a", "pcm_s16le", str(output)], progress)
