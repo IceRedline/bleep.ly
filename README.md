@@ -126,7 +126,7 @@ HF_HOME="$PWD/.cache/huggingface" python3 censor.py input.mov \
 
 Режим работает с общей аудиодорожкой. Whisper по-прежнему распознаёт слова,
 а отдельная локальная модель размечает говорящих. Используются Pyannote
-segmentation 3.0 и WeSpeaker ResNet34-LM через sherpa-onnx (CPU).
+segmentation 3.0 и 3D-Speaker ERes2Net через sherpa-onnx (CPU).
 Это отдельный этап; выбор MLX в меню ускоряет именно Whisper.
 Голоса не извлекаются в отдельные дорожки: при заглушении по-прежнему глушится общий микс.
 
@@ -138,8 +138,8 @@ mkdir -p .cache/speaker-models
 curl -fL https://github.com/k2-fsa/sherpa-onnx/releases/download/speaker-segmentation-models/sherpa-onnx-pyannote-segmentation-3-0.tar.bz2 \
   -o .cache/speaker-models/segmentation.tar.bz2
 tar -xjf .cache/speaker-models/segmentation.tar.bz2 -C .cache/speaker-models
-curl -fL https://github.com/k2-fsa/sherpa-onnx/releases/download/speaker-recongition-models/wespeaker_en_voxceleb_resnet34_LM.onnx \
-  -o .cache/speaker-models/wespeaker_en_voxceleb_resnet34_LM.onnx
+curl -fL https://github.com/k2-fsa/sherpa-onnx/releases/download/speaker-recongition-models/3dspeaker_speech_eres2net_base_sv_zh-cn_3dspeaker_16k.onnx \
+  -o .cache/speaker-models/3dspeaker_speech_eres2net_base_sv_zh-cn_3dspeaker_16k.onnx
 ```
 
 Параметр `--speaker-reference START END` указывает **секунды в обрабатываемом
@@ -183,11 +183,23 @@ FCPXML также поддерживает два звука и полную д�
 это список объектов `{ "start": 0.0, "end": 2.0, "speaker": 0 }` в таймлайне этого же видео.
 Для моделей в другой папке укажите `--speaker-model-dir`.
 
-Проверка на `стрим.m4v`: разметка 27:44 заняла около 3:14; образец 24–52 s
-полностью попал в один кластер. Из 329 найденных ругательств 182 помечены `me`,
-92 — `others`, 55 — `unknown`. Это автоматическая разметка, не ручная проверка
-точности на всех репликах. Крики, шум и похожие голоса могут ошибочно попасть
-в один кластер; число 4 не гарантирует правильное разделение.
+Предыдущая модель WeSpeaker ResNet34-LM смешивала голос владельца с чужими
+репликами на `стрим.m4v`, в том числе около 16:05, 17:53 и 18:13.
+Образец 24–52 s целиком в одном кластере не доказывает, что остальные реплики
+этого кластера принадлежат тому же человеку. Для этой записи выбран 3D-Speaker
+ERes2Net. Старые размеченные JSON не исправляются автоматически: нужно заново
+выполнить `--speaker-reference`, не передавая старый `--speaker-segments`.
+Кэш разметки зависит от содержимого модели и обновляется при её замене.
+Разметка остаётся автоматической: крики, шум и похожие голоса могут ошибочно
+попасть в один кластер; число 4 не гарантирует правильное разделение.
+
+В повторном полном прогоне 3D-Speaker исправил все три указанные пользователем
+ошибки: слова на 964.55, 1072.38 и 1092.40 s получили `others`; ругательства
+в образце 24–52 s сохранили `me`. Разметка заняла около 2:53. Новые метки:
+207 `me`, 62 `others`, 60 `unknown`. Результат сохранён отдельно как
+`стрим_two_sounds_v2.mov`, разметка — `стрим.speakers_v2.transcript.json`.
+Эта проверка подтверждает исправление конкретных примеров, но не точность
+всех остальных реплик. Для 60 спорных мест по-прежнему используется первый звук.
 
 [Документация sherpa-onnx](https://k2-fsa.github.io/sherpa/onnx/speaker-diarization/index.html),
 [модели голосов](https://github.com/k2-fsa/sherpa-onnx/releases/tag/speaker-recongition-models).

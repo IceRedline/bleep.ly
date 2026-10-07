@@ -8,7 +8,7 @@ from .transcription import file_hash
 from .utils import CensorError, finite_number, write_json
 
 SEGMENTATION = "sherpa-onnx-pyannote-segmentation-3-0/model.onnx"
-EMBEDDING = "wespeaker_en_voxceleb_resnet34_LM.onnx"
+EMBEDDING = "3dspeaker_speech_eres2net_base_sv_zh-cn_3dspeaker_16k.onnx"
 
 
 def validate_segments(data, duration):
