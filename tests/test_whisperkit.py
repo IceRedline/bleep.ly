@@ -8,7 +8,7 @@ from censor.benchmark import compare
 from censor.models import WordTimestamp
 from censor.utils import CensorError
 from censor.whisperkit_backend import (WhisperKitBackend, prepare_assets, cache_identity,
-    COMPONENTS, MODEL, MODEL_REVISION, TOKENIZER_REVISION)
+    COMPONENTS, MODEL, MODEL_REVISION, TOKENIZER_REVISION, download_progress_bar)
 
 
 class WhisperKitTests(unittest.TestCase):
@@ -41,6 +41,59 @@ class WhisperKitTests(unittest.TestCase):
             (self.work / COMPONENTS[0] / 'model.mil').write_text('')
             with self.assertRaises(CensorError):
                 prepare_assets(self.work)
+
+    def test_byte_progress_counts_reconstruction_not_xet_transfer_twice(self):
+        updates = []
+        bar_type = download_progress_bar(updates.append)
+        with bar_type(total=100, initial=20, unit='B', disable=True,
+                      desc='weights: reconstructing file', name='hub') as bar:
+            bar.update(30)
+            bar.update(50)
+        self.assertEqual(updates, [20, 50, 100])
+        with bar_type(total=100, unit='B', desc='weights: downloading bytes') as transfer:
+            transfer.update(100)
+        self.assertEqual(updates, [20, 50, 100])
+
+    def test_first_install_reports_download_install_and_ready_then_reuses_assets(self):
+        from huggingface_hub import RepoFile
+        entries = [RepoFile(path=f'{MODEL}/{component}/{name}', size=100, oid='test')
+                   for component in COMPONENTS for name in ('weights/weight.bin', 'coremldata.bin', 'model.mil')]
+        tokens = [RepoFile(path=name, size=100, oid='test') for name in ('tokenizer.json', 'tokenizer_config.json')]
+        events = []
+        def tree(repo, **kwargs):
+            return entries if repo == 'argmaxinc/whisperkit-coreml' else tokens
+        def download(repo, name, **kwargs):
+            with kwargs['tqdm_class'](total=100, unit='B', desc=name) as bar:
+                bar.update(40)
+                bar.update(60)
+            path = Path(kwargs['local_dir']) / name
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_bytes(b'x' * 100)
+            return str(path)
+        with patch('huggingface_hub.HfApi.list_repo_tree', side_effect=tree), \
+             patch('huggingface_hub.hf_hub_download', side_effect=download) as downloads, \
+             patch('censor.whisperkit_backend.time.monotonic', side_effect=range(1000)):
+            prepare_assets(self.work, offline=False, progress=lambda *e: events.append(e))
+        self.assertEqual(downloads.call_count, 11)
+        self.assertTrue(any(label.startswith('Downloading WhisperKit') and 0 < value < .98 for label, value in events))
+        self.assertIn(('Installing WhisperKit model', .99), events)
+        self.assertEqual(events[-1], ('WhisperKit model ready', 1))
+        self.assertEqual([e[1] for e in events], sorted(e[1] for e in events))
+        with patch('huggingface_hub.HfApi.list_repo_tree', side_effect=AssertionError('network')):
+            cached_events = []
+            prepare_assets(self.work, progress=lambda *e: cached_events.append(e))
+            self.assertEqual(cached_events, [])
+
+    def test_download_failure_never_reports_ready_or_marks_assets_installed(self):
+        from huggingface_hub import RepoFile
+        entry = RepoFile(path=f'{MODEL}/{COMPONENTS[0]}/weights/weight.bin', size=100, oid='test')
+        events = []
+        with patch('huggingface_hub.HfApi.list_repo_tree', return_value=[entry]), \
+             patch('huggingface_hub.hf_hub_download', side_effect=OSError('connection lost')):
+            with self.assertRaisesRegex(OSError, 'connection lost'):
+                prepare_assets(self.work, offline=False, progress=lambda *e: events.append(e))
+        self.assertFalse((self.work / 'bleep-model.json').exists())
+        self.assertFalse(any(value == 1 for _, value in events))
 
     def helper(self, body):
         import sys

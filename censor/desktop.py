@@ -79,7 +79,8 @@ def analyze(request):
             native_engine = WhisperKitBackend(executable, model_folder,
                 stage=lambda label: emit("progress", stage=label, fraction=0))
             emit("progress", stage="Preparing WhisperKit model", fraction=0)
-            prepare_assets(model_folder, offline=request.get("offline", True))
+            prepare_assets(model_folder, offline=request.get("offline", True),
+                           progress=lambda label, value: emit("progress", stage=label, fraction=value))
             key, metadata = cache_identity(source, model_folder, executable, info.audio_index,
                                           progress("Reading media", source.stat().st_size))
         else:

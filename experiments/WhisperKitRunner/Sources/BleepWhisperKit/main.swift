@@ -49,7 +49,7 @@ struct Runner {
             guard !FileManager.default.fileExists(atPath: output.path) else { throw NSError(domain: "Output already exists", code: 1) }
             // Validate locally before the SDK's tokenizer loader (which has a Hub fallback).
             _ = try await AutoTokenizerWrapper.from(modelFolder: folder)
-            emit(["event": "stage", "stage": "Loading WhisperKit (experimental)"])
+            emit(["event": "stage", "stage": "Preparing WhisperKit · first run may take a few minutes"])
             let start = ProcessInfo.processInfo.systemUptime
             let pipe = try await WhisperKit(WhisperKitConfig(
                 modelFolder: folder.path, tokenizerFolder: folder,
