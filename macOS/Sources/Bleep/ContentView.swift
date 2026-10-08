@@ -371,9 +371,8 @@ struct ContentView: View {
                         .help("Original audio stays playable during preparation. Switch between prepared sounds from cache. Export is always censored.")
                 }
             }
-            Picker("Censor sound", selection: $model.sound) {
-                Text("Beep").tag("beep"); Text("Silence").tag("silence"); Text("Custom").tag("custom")
-            }.labelsHidden().pickerStyle(.segmented).frame(width: 250)
+            CensorSoundPicker(selection: $model.sound, chooseCustomSound: model.chooseSound)
+                .frame(width: 250, height: 24)
             Button(action: model.chooseSound) {
                 Text(model.customSound?.lastPathComponent ?? "Drop a sound here or choose…").lineLimit(1).truncationMode(.middle)
             }.buttonStyle(.borderless).font(.caption)
