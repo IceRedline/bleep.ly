@@ -119,14 +119,14 @@ struct ContentView: View {
                     VStack(alignment: .leading, spacing: 6) {
                         Label("Saved next to your original", systemImage: "folder")
                         Text("Video stays video. Audio becomes WAV.\nExisting files are never overwritten.")
-                            .font(.caption).foregroundStyle(.secondary)
+                            .font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
                     }
                     .opacity(model.workflowMode == .fast ? 1 : 0)
                     .accessibilityHidden(model.workflowMode != .fast)
                     VStack(alignment: .leading, spacing: 6) {
                         Label("Review every word", systemImage: "waveform.path")
                         Text("Choose your sound, then drop a file.\nCensored preview prepares automatically.")
-                            .font(.caption).foregroundStyle(.secondary)
+                            .font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
                     }
                     .opacity(model.workflowMode == .advanced ? 1 : 0)
                     .accessibilityHidden(model.workflowMode != .advanced)
