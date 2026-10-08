@@ -49,6 +49,7 @@ final class VideoPreviewTests: XCTestCase {
         """.utf8).write(to: transcript)
 
         let model = AppModel()
+        model.selectMode(.advanced)
         let host = NSHostingView(rootView: ContentView(model: model).frame(width: 1120, height: 780))
         let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 1120, height: 780),
                               styleMask: [.borderless], backing: .buffered, defer: false)

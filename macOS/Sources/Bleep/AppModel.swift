@@ -7,6 +7,7 @@ import UniformTypeIdentifiers
 final class AppModel: ObservableObject {
     enum Phase: String { case ready, analyzing, review, exporting, done }
     @Published var phase: Phase = .ready
+    @Published private(set) var workflowMode: WorkflowMode
     @Published var document: ReviewDocument?
     @Published var selected: UUID?
     @Published var stage = "Preparing"
@@ -25,6 +26,8 @@ final class AppModel: ObservableObject {
     @Published var hasEdits = false
     let player = AVPlayer()
     private let bridge = PythonBridge()
+    private let defaults: UserDefaults
+    private let supportDirectory: URL
     private var observer: Any?
     private var auditionEnd: Double?
     private var previewGeneration = UUID()
@@ -41,10 +44,10 @@ final class AppModel: ObservableObject {
     var busy: Bool { phase == .analyzing || phase == .exporting }
     var canUndo: Bool { !undoDocuments.isEmpty }
     var root: URL {
-        URL(fileURLWithPath: UserDefaults.standard.string(forKey: "projectRoot") ?? Self.defaultRoot)
+        URL(fileURLWithPath: defaults.string(forKey: "projectRoot") ?? Self.defaultRoot)
     }
     var python: URL {
-        let path = UserDefaults.standard.string(forKey: "pythonPath") ?? ""
+        let path = defaults.string(forKey: "pythonPath") ?? ""
         return path.isEmpty ? root.appendingPathComponent(".venv/bin/python") : URL(fileURLWithPath: path)
     }
     var visibleWords: [ReviewWord] {
@@ -52,7 +55,10 @@ final class AppModel: ObservableObject {
             (search.isEmpty || $0.word.localizedCaseInsensitiveContains(search)) }
     }
 
-    init() {
+    init(defaults: UserDefaults = .standard, supportDirectory: URL? = nil) {
+        self.defaults = defaults
+        self.supportDirectory = supportDirectory ?? Self.support
+        self.workflowMode = WorkflowMode(rawValue: defaults.string(forKey: "workflowMode") ?? "") ?? .fast
         observer = player.addPeriodicTimeObserver(forInterval: CMTime(seconds: 0.04, preferredTimescale: 600), queue: .main) { [weak self] time in
             Task { @MainActor in
                 guard let self else { return }
@@ -71,8 +77,17 @@ final class AppModel: ObservableObject {
         if panel.runModal() == .OK, let url = panel.url { open(url) }
     }
 
-    func open(_ url: URL, transcript: URL? = nil) {
-        guard !busy else { return }
+    @discardableResult
+    func open(_ url: URL, transcript: URL? = nil, workflow: WorkflowMode? = nil) -> Task<Void, Never>? {
+        guard !busy else { return nil }
+        let selectedMode = workflow ?? (transcript == nil ? workflowMode : .advanced)
+        if selectedMode == .fast && sound == "custom" && customSound == nil {
+            error = "Choose a custom censor sound before opening media, or select Beep or Silence."
+            return nil
+        }
+        selectMode(selectedMode)
+        let selectedSound = sound
+        let selectedCustomSound = customSound
         // A new source deliberately starts a fresh review; the last draft stays on disk until success.
         pause()
         pendingSource = url
@@ -82,15 +97,20 @@ final class AppModel: ObservableObject {
         cancelling = false
         error = nil
         phase = .analyzing
-        Task {
+        return Task {
+            if cancelling {
+                phase = document == nil ? .ready : .review
+                cancelling = false
+                return
+            }
             do {
                 var request: [String: Any] = ["operation": "analyze", "source": url.path,
-                    "cache_dir": Self.support.appendingPathComponent("cache").path,
-                    "backend": UserDefaults.standard.string(forKey: "backend") ?? "faster-whisper",
-                    "censor_style": UserDefaults.standard.string(forKey: "censorStyle") ?? "middle",
-                    "offline": !UserDefaults.standard.bool(forKey: "allowDownloads")]
-                let stream = UserDefaults.standard.integer(forKey: "audioStream")
-                // -1 requests automatic selection and reports ambiguous multi-track media.
+                    "cache_dir": supportDirectory.appendingPathComponent("cache").path,
+                    "backend": defaults.string(forKey: "backend") ?? "faster-whisper",
+                    "censor_style": defaults.string(forKey: "censorStyle") ?? "middle",
+                    "offline": !defaults.bool(forKey: "allowDownloads")]
+                let stream = defaults.integer(forKey: "audioStream")
+                // 0 requests automatic selection and reports ambiguous multi-track media.
                 if stream > 0 { request["audio_stream"] = stream - 1 }
                 if let transcript { request["transcript"] = transcript.path }
                 let result = try await bridge.run(root: root, python: python, request: request, progress: updateProgress)
@@ -102,14 +122,38 @@ final class AppModel: ObservableObject {
                 exportURL = nil
                 player.replaceCurrentItem(with: AVPlayerItem(url: url))
                 playhead = 0
-                phase = .review
                 saveDraft()
+                if selectedMode == .fast, let document {
+                    let destination = document.automaticOutputURL()
+                    try await render(document, to: destination, format: document.hasVideo ? "video" : "audio",
+                                     sound: selectedSound, customSound: selectedCustomSound)
+                } else {
+                    phase = .review
+                }
             } catch {
                 if !cancelling { self.error = error.localizedDescription }
                 phase = document == nil ? .ready : .review
+                sourceName = document?.url.lastPathComponent ?? url.lastPathComponent
             }
             cancelling = false
         }
+    }
+
+    func selectMode(_ mode: WorkflowMode) {
+        guard !busy else { return }
+        pause()
+        workflowMode = mode
+        defaults.set(mode.rawValue, forKey: "workflowMode")
+    }
+
+    func startNewFile() {
+        guard !busy else { return }
+        pause()
+        player.replaceCurrentItem(with: nil)
+        document = nil; selected = nil; exportURL = nil; error = nil
+        undoDocuments = []; pendingSource = nil; sourceName = ""
+        search = ""; showAllWords = false; hasEdits = false
+        phase = .ready
     }
 
     func updateProgress(_ label: String, _ value: Double) {
@@ -186,18 +230,19 @@ final class AppModel: ObservableObject {
     func saveDraft() {
         guard let document else { return }
         do {
-            try FileManager.default.createDirectory(at: Self.support, withIntermediateDirectories: true)
-            try JSONEncoder.bridge.encode(document).write(to: Self.support.appendingPathComponent("last-review.json"), options: .atomic)
+            try FileManager.default.createDirectory(at: supportDirectory, withIntermediateDirectories: true)
+            try JSONEncoder.bridge.encode(document).write(to: supportDirectory.appendingPathComponent("last-review.json"), options: .atomic)
         } catch { self.error = "Could not save your review: \(error.localizedDescription)" }
     }
     func restoreDraft() {
         guard !busy else { return }
         do {
-            let data = try Data(contentsOf: Self.support.appendingPathComponent("last-review.json"))
+            let data = try Data(contentsOf: supportDirectory.appendingPathComponent("last-review.json"))
             let restored = try JSONDecoder.bridge.decode(ReviewDocument.self, from: data)
             guard FileManager.default.fileExists(atPath: restored.source) else {
                 throw BridgeFailure(message: "The original media has moved. Open it again.")
             }
+            selectMode(.advanced)
             pause(); document = restored; undoDocuments = []; selected = nil
             sourceName = restored.url.lastPathComponent
             player.replaceCurrentItem(with: AVPlayerItem(url: restored.url))
@@ -231,20 +276,42 @@ final class AppModel: ObservableObject {
         if FileManager.default.fileExists(atPath: destination.path) {
             error = "Choose a new filename. Existing files are kept intact."; return
         }
-        pause(); phase = .exporting; stage = "Preparing export"; fraction = 0; cancelling = false
-        Task {
+        beginExport(to: destination)
+    }
+
+    @discardableResult
+    func beginExport(to destination: URL? = nil) -> Task<Void, Never>? {
+        guard !busy, let document else { return nil }
+        guard sound != "custom" || customSound != nil else {
+            error = "Choose a custom censor sound first."; return nil
+        }
+        let output = destination ?? document.automaticOutputURL()
+        let format = destination == nil ? (document.hasVideo ? "video" : "audio") : exportFormat
+        let selectedSound = sound
+        let selectedCustomSound = customSound
+        error = nil; exportURL = nil
+        // Set busy synchronously so two clicks cannot launch competing exports.
+        pause(); phase = .exporting; cancelling = false
+        return Task {
+            if cancelling { phase = .review; cancelling = false; return }
             do {
-                var request: [String: Any] = ["operation": "export", "output": destination.path,
-                    "format": exportFormat, "sound": sound,
-                    "document": try JSONSerialization.jsonObject(with: JSONEncoder.bridge.encode(document))]
-                if let customSound { request["custom_sound"] = customSound.path }
-                _ = try await bridge.run(root: root, python: python, request: request, progress: updateProgress)
-                exportURL = destination; phase = .done
+                try await render(document, to: output, format: format, sound: selectedSound, customSound: selectedCustomSound)
             } catch {
                 if !cancelling { self.error = error.localizedDescription }
                 phase = .review
             }
             cancelling = false
         }
+    }
+
+    private func render(_ document: ReviewDocument, to destination: URL, format: String,
+                        sound: String, customSound: URL?) async throws {
+        pause(); phase = .exporting; stage = "Preparing export"; fraction = 0
+        var request: [String: Any] = ["operation": "export", "output": destination.path,
+            "format": format, "sound": sound,
+            "document": try JSONSerialization.jsonObject(with: JSONEncoder.bridge.encode(document))]
+        if let customSound { request["custom_sound"] = customSound.path }
+        _ = try await bridge.run(root: root, python: python, request: request, progress: updateProgress)
+        exportURL = destination; phase = .done
     }
 }

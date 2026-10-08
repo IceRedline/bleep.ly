@@ -28,7 +28,10 @@ struct ContentView: View {
             VStack(spacing: 0) {
                 header
                 if model.busy { processing }
-                else if let document = model.document { review(document) }
+                else if let document = model.document {
+                    if model.workflowMode == .fast { fastResult(document) }
+                    else { review(document) }
+                }
                 else { welcome }
             }.padding(30)
         }
@@ -50,6 +53,10 @@ struct ContentView: View {
             Text("bleep.ly").font(.system(size: 24, weight: .bold, design: .rounded)).tracking(-0.7)
             Text("A little less explicit.").font(.callout).foregroundStyle(.secondary).padding(.leading, 12)
             Spacer()
+            Picker("Workflow", selection: Binding(get: { model.workflowMode }, set: { model.selectMode($0) })) {
+                Text("Fast Mode").tag(WorkflowMode.fast)
+                Text("Advanced").tag(WorkflowMode.advanced)
+            }.labelsHidden().pickerStyle(.segmented).frame(width: 220).disabled(model.busy)
             if model.document != nil && !model.busy {
                 Button(action: model.chooseSource) { Label("Open", systemImage: "plus") }.buttonStyle(.borderless)
             }
@@ -71,7 +78,7 @@ struct ContentView: View {
                 VStack(spacing: 12) {
                     Text("Drop your video or audio here")
                         .font(.system(size: 30, weight: .semibold)).tracking(-0.7)
-                    Text("Keep the story. Clean up the language.")
+                    Text(model.workflowMode == .fast ? "Drop it. Get a clean file. That’s it." : "Listen, adjust, then export your clean cut.")
                         .font(.system(size: 16)).foregroundStyle(.secondary)
                 }
                 Button("Choose a file…", action: model.chooseSource)
@@ -85,11 +92,22 @@ struct ContentView: View {
                 guard let url = urls.first, url.isFileURL, urls.count == 1 else { return false }
                 model.open(url); return true
             } isTargeted: { dropTarget = $0 }
-            HStack(spacing: 32) {
-                Label("On-device recognition", systemImage: "lock.shield")
-                Label("Review every word", systemImage: "waveform.path")
-                Label("Original video quality", systemImage: "film")
-            }.font(.callout).foregroundStyle(.secondary)
+            if model.workflowMode == .fast {
+                HStack(spacing: 32) {
+                    soundControls
+                    VStack(alignment: .leading, spacing: 6) {
+                        Label("Saved next to your original", systemImage: "folder")
+                        Text("Video stays video. Audio becomes WAV.\nExisting files are never overwritten.")
+                            .font(.caption).foregroundStyle(.secondary)
+                    }
+                }
+            } else {
+                HStack(spacing: 32) {
+                    Label("On-device recognition", systemImage: "lock.shield")
+                    Label("Review every word", systemImage: "waveform.path")
+                    Label("Original video quality", systemImage: "film")
+                }.font(.callout).foregroundStyle(.secondary)
+            }
             Button("Resume last review", action: model.restoreDraft).buttonStyle(.plain).foregroundStyle(.mint)
             Spacer(minLength: 10)
             Text("Made for the final cut.").font(.caption).foregroundStyle(.secondary)
@@ -263,22 +281,60 @@ struct ContentView: View {
         }
     }
 
+    private func fastResult(_ document: ReviewDocument) -> some View {
+        VStack(spacing: 24) {
+            Spacer()
+            Image(systemName: model.exportURL == nil ? "waveform" : "checkmark.circle.fill")
+                .font(.system(size: 70, weight: .light)).foregroundStyle(.mint)
+            VStack(spacing: 10) {
+                Text(model.exportURL == nil ? "Ready for the clean cut." : "Your clean cut is ready.")
+                    .font(.system(size: 30, weight: .semibold)).tracking(-0.7)
+                Text(document.url.lastPathComponent).lineLimit(1).truncationMode(.middle).foregroundStyle(.secondary)
+                Text("\(document.count) selected words · \(clockText(document.duration))")
+                    .font(.callout).foregroundStyle(.secondary)
+            }
+            if let url = model.exportURL {
+                Text(url.path).font(.caption).foregroundStyle(.secondary).textSelection(.enabled)
+                HStack(spacing: 12) {
+                    Button("Play result") { NSWorkspace.shared.open(url) }.buttonStyle(.borderedProminent)
+                    Button("Show in Finder") { NSWorkspace.shared.activateFileViewerSelecting([url]) }
+                }.controlSize(.large)
+            } else {
+                Text("Your review is saved. Finish automatically or choose a different destination.")
+                    .foregroundStyle(.secondary)
+                soundControls
+                HStack {
+                    Button("Finish automatically") { model.beginExport() }.buttonStyle(.borderedProminent)
+                    Button("Save as…", action: model.export)
+                }
+            }
+            Button("Review in Advanced Mode") { model.selectMode(.advanced) }.buttonStyle(.borderless)
+            Spacer()
+            Button("Process another file", action: model.startNewFile).controlSize(.large)
+        }.frame(maxWidth: .infinity)
+    }
+
+    private var soundControls: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("Censor sound").font(.caption).foregroundStyle(.secondary)
+            Picker("Censor sound", selection: $model.sound) {
+                Text("Beep").tag("beep"); Text("Silence").tag("silence"); Text("Custom").tag("custom")
+            }.labelsHidden().pickerStyle(.segmented).frame(width: 250)
+            Button(action: model.chooseSound) {
+                Text(model.customSound?.lastPathComponent ?? "Drop a sound here or choose…").lineLimit(1).truncationMode(.middle)
+            }.buttonStyle(.borderless).font(.caption)
+                .frame(width: 250, alignment: .leading)
+                .dropDestination(for: URL.self) { urls, _ in
+                    guard urls.count == 1, let url = urls.first, url.isFileURL else { return false }
+                    model.setSound(url); return true
+                }
+        }
+    }
+
+
     private func exportControls(_ document: ReviewDocument) -> some View {
         HStack(alignment: .center, spacing: 22) {
-            VStack(alignment: .leading, spacing: 8) {
-                Text("Censor sound").font(.caption).foregroundStyle(.secondary)
-                Picker("Censor sound", selection: $model.sound) {
-                    Text("Beep").tag("beep"); Text("Silence").tag("silence"); Text("Custom").tag("custom")
-                }.labelsHidden().pickerStyle(.segmented).frame(width: 250)
-                Button(action: model.chooseSound) {
-                    Text(model.customSound?.lastPathComponent ?? "Drop a sound here or choose…").lineLimit(1).truncationMode(.middle)
-                }.buttonStyle(.borderless).font(.caption)
-                    .frame(width: 250, alignment: .leading)
-                    .dropDestination(for: URL.self) { urls, _ in
-                        guard urls.count == 1, let url = urls.first, url.isFileURL else { return false }
-                        model.setSound(url); return true
-                    }
-            }
+            soundControls
             VStack(alignment: .leading, spacing: 8) {
                 Text("Export as").font(.caption).foregroundStyle(.secondary)
                 Picker("Export format", selection: $model.exportFormat) {

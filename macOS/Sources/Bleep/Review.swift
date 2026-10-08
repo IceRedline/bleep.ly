@@ -58,3 +58,25 @@ struct BridgeFailure: LocalizedError {
     let message: String
     var errorDescription: String? { message }
 }
+
+enum WorkflowMode: String, CaseIterable {
+    case fast, advanced
+}
+
+extension ReviewDocument {
+    /// Match supported source containers; use MKV for other video formats.
+    /// The renderer still publishes atomically and refuses a racing overwrite.
+    func automaticOutputURL() -> URL {
+        let sourceExtension = url.pathExtension.lowercased()
+        let ext = hasVideo ? (["mov", "mp4", "mkv"].contains(sourceExtension) ? sourceExtension : "mkv") : "wav"
+        let stem = url.deletingPathExtension().lastPathComponent + "_censored"
+        let folder = url.deletingLastPathComponent()
+        var counter = 1
+        while true {
+            let name = stem + (counter == 1 ? "" : "_\(counter)") + "." + ext
+            let candidate = folder.appendingPathComponent(name)
+            if (try? FileManager.default.attributesOfItem(atPath: candidate.path)) == nil { return candidate }
+            counter += 1
+        }
+    }
+}

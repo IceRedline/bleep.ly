@@ -26,6 +26,14 @@ brew install ffmpeg
 
 The app defaults to the project's `.venv/bin/python`, CPU/faster-whisper, `large-v3-turbo`, and Russian speech. Choose **Apple GPU · MLX** in Settings to use the existing MLX implementation. No WhisperKit is involved. Model downloads are disabled by default; enable **Allow first-time model download** if your chosen engine's model is not cached. The app reuses the repository’s `.cache/huggingface` model cache (or an explicitly inherited `HF_HOME`). Recognition happens locally in both cases. No recording is uploaded.
 
+## Fast Mode and Advanced Mode
+
+The header switches between **Fast Mode** (the initial default) and **Advanced**; your choice is remembered. Both use the same local recognition engine and censoring preference. Fast Mode does not reduce recognition quality.
+
+In **Fast Mode**, choose a censor sound if needed, then drop your media. Recognition and export run automatically without a review or save dialog. Video stays video (MOV/MP4/MKV source container, otherwise MKV); audio becomes WAV. The output is saved beside the source as `NAME_censored.ext`, then `NAME_censored_2.ext`, etc. Existing files are never overwritten. The completion screen offers playback, Finder, another file, or **Review in Advanced Mode**. If export fails (for example the source folder is read-only), the review remains available; retry or use **Save as…** without repeating recognition. Cancel stops the current operation. Automatic detection can miss words; use Advanced when you want to verify each interval.
+
+In **Advanced Mode**, analysis stops at the timeline for manual review. Switching modes does not rerun recognition or discard edits. Resuming a saved review or importing a reviewed transcript always opens Advanced. The steps below describe Advanced Mode.
+
 ## Workflow
 
 1. Drop a single video/audio file or choose **Open Media…** (⌘O).
@@ -54,7 +62,7 @@ SWIFTPM_MODULECACHE_OVERRIDE="$PWD/.cache/clang" \
 swift test --disable-sandbox --package-path macOS --scratch-path .cache/swift-build -c release
 ```
 
-The Python integration tests cover audio inputs, silence, cue tails, no-clobber exports, zero findings, edited intervals, cache reuse, the JSON protocol, and video stream identity. When the local approved reference is available its mute intervals are compared exactly. Swift tests cover protocol decoding/encoding, manual-interval validation, real Swift → Python → WAV export, cancellation of a worker group, and native view rendering for visual review. Video regression tests load a generated MOV, check seeking and screen transitions, and verify that the standalone executable links AVKit (the XCTest host can otherwise mask a missing framework). Run these tests from a local macOS session with access to native media decoding services.
+The Python integration tests cover audio inputs, silence, cue tails, no-clobber exports, zero findings, edited intervals, cache reuse, the JSON protocol, and video stream identity. When the local approved reference is available its mute intervals are compared exactly. Swift tests cover protocol decoding/encoding, manual-interval validation, real Swift → Python → WAV export, cancellation of a worker group, and native view rendering for visual review. Workflow tests run automatic video/audio export, preserve existing files, check preferences and edits, retry failures, and cancel before processing. Video regression tests load a generated MOV, check seeking and screen transitions, and verify that the standalone executable links AVKit (the XCTest host can otherwise mask a missing framework). Run these tests from a local macOS session with access to native media decoding services.
 
 ## Structure
 

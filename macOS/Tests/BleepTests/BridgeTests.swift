@@ -82,7 +82,13 @@ final class BridgeTests: XCTestCase {
         let folder = root.appendingPathComponent(".cache/macos-previews")
         try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
         let model = AppModel()
-        for phase in [AppModel.Phase.ready, .analyzing, .review] {
+        for phase in [AppModel.Phase.ready, .analyzing, .review, .done] {
+            if phase == .review { model.phase = .ready; model.selectMode(.advanced) }
+            if phase == .ready { model.selectMode(.fast) }
+            if phase == .done {
+                model.selectMode(.fast)
+                model.exportURL = URL(fileURLWithPath: "/tmp/Podcast_censored.wav")
+            }
             model.phase = phase
             if phase == .analyzing { model.fraction = 0.43; model.stage = "Recognizing speech"; model.sourceName = "Podcast.wav" }
             if phase == .review {
