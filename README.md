@@ -38,7 +38,7 @@ Enable **Allow first-time model download** in Settings if the selected model is 
 
 The drop target stays in place when switching modes; controls below it fade. The window background extends behind the native traffic lights and changes color with the processing stage.
 
-Stage progress uses worker reports where available. Sparse recognition/export updates are supplemented by a visibly labeled **Estimated** percentage and elapsed time; estimates cannot complete a stage. WhisperKit's initial download shows received/total MB, followed by installation and Core ML preparation.
+Reading media uses a simple activity indicator without percentages. Other stage progress uses worker reports where available. Sparse recognition/export updates are supplemented by a visibly labeled **Estimated** percentage and elapsed time; estimates cannot complete a stage. The Estimated label stays visible throughout stages that use interpolation, and status columns keep a fixed width. WhisperKit's initial download shows received/total MB, followed by installation and Core ML preparation.
 
 In Settings, choose **Word middle** (default) or **Whole word**. The choice applies to newly analyzed/imported media. Existing reviews and manual edits keep their timing. A custom sound plays **once, in full, at its original speed**; speech resumes at the approved mute endpoint underneath any remaining sound tail. The cue never extends the mute interval. The end of the media still limits the output.
 

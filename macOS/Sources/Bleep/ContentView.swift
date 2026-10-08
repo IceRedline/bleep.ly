@@ -27,6 +27,7 @@ struct ContentView: View {
                            center: .topLeading, startRadius: 30, endRadius: 950)
             RadialGradient(colors: [tint.opacity(0.20), .clear], center: .bottomTrailing, startRadius: 0, endRadius: 650)
             }.ignoresSafeArea()
+                .animation(reduceMotion ? nil : .easeInOut(duration: 0.65), value: tint)
             VStack(spacing: 0) {
                 header
                 if model.document?.engine == "whisperkit" && !model.busy {
@@ -41,7 +42,6 @@ struct ContentView: View {
                 else { welcome }
             }.padding(30)
         }
-        .animation(reduceMotion ? nil : .easeInOut(duration: 0.65), value: tint)
         .background(WindowChrome())
         .preferredColorScheme(.dark)
         .tint(.mint)
@@ -146,7 +146,7 @@ struct ContentView: View {
             Spacer()
             ZStack {
                 Circle().stroke(.white.opacity(0.08), lineWidth: 8)
-                Circle().trim(from: 0, to: max(0.015, model.fraction))
+                Circle().trim(from: 0, to: StageProgress.isReadingMedia(model.stage) ? 0 : max(0.015, model.fraction))
                     .stroke(.mint, style: StrokeStyle(lineWidth: 8, lineCap: .round)).rotationEffect(.degrees(-90))
                     .animation(reduceMotion ? nil : .easeOut(duration: 0.2), value: model.fraction)
                 Image(systemName: model.phase == .exporting ? "arrow.up.doc" : "waveform")
@@ -159,9 +159,7 @@ struct ContentView: View {
             }
             VStack(spacing: 8) {
                 Text(model.stage).font(.headline)
-                if model.fraction > 0 {
-                    Text("\(model.progressIsEstimated ? "Estimated " : "")\(Int(model.fraction * 100))% · \(clockText(model.stageElapsed)) elapsed").monospacedDigit().foregroundStyle(.secondary)
-                } else { HStack { ProgressView().controlSize(.small); Text("\(clockText(model.stageElapsed)) elapsed").foregroundStyle(.secondary).monospacedDigit() } }
+                StageProgressDetails(stage: model.stage, fraction: model.fraction, elapsed: model.stageElapsed)
             }.frame(height: 48)
             Text(model.phase == .analyzing ? "Audio stays on your Mac. The first model load can take a moment." : "Your review and original media are kept intact.")
                 .font(.callout).foregroundStyle(.secondary)
