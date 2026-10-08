@@ -8,6 +8,7 @@ swift build --disable-sandbox --package-path macOS --scratch-path .cache/swift-b
 APP="$ROOT/build/bleep.ly.app"
 mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
 cp .cache/swift-build/release/Bleep "$APP/Contents/MacOS/Bleep"
+bash scripts/build-icon.sh "$APP/Contents/Resources/AppIcon.icns"
 /usr/bin/python3 - "$APP" "$ROOT" <<'PY'
 import plistlib
 import sys
@@ -20,6 +21,7 @@ with (Path(app) / 'Contents/Info.plist').open('wb') as file:
         'CFBundleName': 'bleep.ly',
         'CFBundleDisplayName': 'bleep.ly',
         'CFBundlePackageType': 'APPL',
+        'CFBundleIconFile': 'AppIcon',
         'CFBundleShortVersionString': '0.2.0',
         'CFBundleVersion': '3',
         'LSMinimumSystemVersion': '14.0',
