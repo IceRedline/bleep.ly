@@ -43,8 +43,28 @@ final class ProgressAndContextTests: XCTestCase {
         XCTAssertTrue(StageProgress.usesEstimates(progress.stage))
         progress.report("Recognizing speech", fraction: 0.5, now: 13)
         XCTAssertFalse(progress.estimated)
-        // A real callback catching up must not remove the stage's Estimated label.
+        // A real callback catching up must not remove the stage's approximation marker.
         XCTAssertTrue(StageProgress.usesEstimates(progress.stage))
+    }
+
+    func testRemainingTimeUsesWorkerSpeedAndResetsBetweenStages() throws {
+        var progress = StageProgress()
+        progress.report("Recognizing speech", fraction: 0, now: 0)
+        progress.advance(now: 30)
+        XCTAssertGreaterThan(progress.displayed, 0)
+        XCTAssertNil(progress.remaining(now: 30), "Synthetic progress is not throughput evidence")
+        progress.report("Recognizing speech", fraction: 0.11, now: 64)
+        XCTAssertEqual(try XCTUnwrap(progress.remaining(now: 64)), 64 / 0.11 - 64, accuracy: 0.01)
+        XCTAssertEqual(try XCTUnwrap(progress.remaining(now: 74)), 64 / 0.11 - 74, accuracy: 0.01)
+        XCTAssertNil(progress.remaining(now: 600), "Do not claim zero while the worker is unfinished")
+        progress.report("Recognizing speech", fraction: 1, now: 601)
+        XCTAssertEqual(progress.remaining(now: 601), 0)
+        progress.report("Exporting video", fraction: 0, now: 602)
+        XCTAssertNil(progress.remaining(now: 602))
+        progress.report("Exporting video", fraction: 0.5, now: 612)
+        XCTAssertEqual(progress.remaining(now: 612), 10)
+        progress.report("Reading media", fraction: 0.5, now: 613)
+        XCTAssertNil(progress.remaining(now: 613))
     }
 
     @MainActor
@@ -52,7 +72,7 @@ final class ProgressAndContextTests: XCTestCase {
         let samples: [(Double, Double)] = [(0, 0), (0.01, 9), (0.09, 59), (0.10, 60), (0.99, 3599), (1, 3600)]
         var expected: NSSize?
         for (fraction, elapsed) in samples {
-            let host = NSHostingView(rootView: StageProgressDetails(stage: "Recognizing speech", fraction: fraction, elapsed: elapsed))
+            let host = NSHostingView(rootView: StageProgressDetails(stage: "Recognizing speech", fraction: fraction, elapsed: elapsed, remaining: fraction == 0 ? nil : 6000 * (1 - fraction)))
             let size = host.fittingSize
             if let expected { XCTAssertEqual(size, expected) } else { expected = size }
         }
@@ -61,12 +81,12 @@ final class ProgressAndContextTests: XCTestCase {
         let host = NSHostingView(rootView: VStack(spacing: 22) {
             Text("Recognizing speech").font(.headline)
             ForEach(samples.indices, id: \.self) { index in
-                StageProgressDetails(stage: "Recognizing speech", fraction: samples[index].0, elapsed: samples[index].1)
+                StageProgressDetails(stage: "Recognizing speech", fraction: samples[index].0, elapsed: samples[index].1, remaining: index == 0 ? nil : 6000 * (1 - samples[index].0))
             }
             Text("Reading media").font(.headline)
             StageProgressDetails(stage: "Reading media", fraction: 1, elapsed: 2)
-        }.padding(30).frame(width: 480, height: 390).background(Color.black).environment(\.colorScheme, .dark))
-        host.frame = NSRect(x: 0, y: 0, width: 480, height: 390)
+        }.padding(30).frame(width: 480, height: 560).background(Color.black).environment(\.colorScheme, .dark))
+        host.frame = NSRect(x: 0, y: 0, width: 480, height: 560)
         host.layoutSubtreeIfNeeded()
         let bitmap = try XCTUnwrap(host.bitmapImageRepForCachingDisplay(in: host.bounds))
         host.cacheDisplay(in: host.bounds, to: bitmap)

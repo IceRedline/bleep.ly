@@ -34,6 +34,15 @@ struct StageProgress {
         estimated = displayed > actual
     }
 
+    /// ETA uses measured worker throughput only, never the interpolated percentage.
+    /// If the estimate expires without another callback, wait for fresh evidence.
+    func remaining(now: Double) -> Double? {
+        guard Self.usesEstimates(stage) else { return nil }
+        if actual >= 1 { return 0 }
+        guard let measuredExpected, measuredExpected > now - started else { return nil }
+        return measuredExpected - max(0, now - started)
+    }
+
     mutating func advance(now: Double) {
         let elapsed = max(0, now - started)
         guard Self.usesEstimates(stage), actual < 1 else { return }

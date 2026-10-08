@@ -37,7 +37,7 @@ In **Advanced Mode**, analysis stops at the timeline for manual review. Switchin
 ## Workflow
 
 1. Drop a single video/audio file or choose **Open Media…** (⌘O).
-2. Follow stage progress. Sparse recognition/export callbacks are supplemented by a labeled Estimated percentage and elapsed time; estimates never reach 100%. Model initialization remains indeterminate. Cancel stops the Python process group and FFmpeg children.
+2. Follow stage progress. Sparse recognition/export callbacks are supplemented by an approximate percentage (≈), elapsed time, and estimated stage time remaining in three compact columns. ETA uses real worker throughput and shows a dash while unavailable; interpolated percentages never reach 100%. Model initialization remains indeterminate. Cancel stops the Python process group and FFmpeg children.
 3. Click a word or timeline marker to hear its original context (0.2 seconds before, 0.2 seconds after). The main player previews the original media, clearly labeled in the interface. The exported file is the processed preview; use **Play export** afterwards.
 4. Uncheck false positives; use **All words** to flag a missed transcript word. **Add interval** handles words absent from the transcript. The timing button edits exact mute boundaries in seconds. ⌘Z undoes up to 100 review edits.
 5. Pick **Beep**, **Silence**, or drop/choose custom audio. The full custom cue plays once at original speed. Speech resumes at the same approved mute endpoint, even while a cue tail is still playing. A cue is only cut by the end of the entire media, not by word length. Overlapping mute ranges form one interval with one cue.

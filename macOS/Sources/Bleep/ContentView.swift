@@ -159,8 +159,8 @@ struct ContentView: View {
             }
             VStack(spacing: 8) {
                 Text(model.stage).font(.headline)
-                StageProgressDetails(stage: model.stage, fraction: model.fraction, elapsed: model.stageElapsed)
-            }.frame(height: 48)
+                StageProgressDetails(stage: model.stage, fraction: model.fraction, elapsed: model.stageElapsed, remaining: model.stageRemaining)
+            }.frame(height: 72)
             Text(model.phase == .analyzing ? "Audio stays on your Mac. The first model load can take a moment." : "Your review and original media are kept intact.")
                 .font(.callout).foregroundStyle(.secondary)
             Button("Cancel", action: model.cancel).disabled(model.cancelling)

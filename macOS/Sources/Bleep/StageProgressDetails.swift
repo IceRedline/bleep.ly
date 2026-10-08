@@ -1,37 +1,40 @@
 import SwiftUI
 
-/// Stable columns: real callbacks and interpolated updates share one stage label.
+/// Equal, compact metric columns keep numbers anchored as their digits change.
 struct StageProgressDetails: View {
     let stage: String
     let fraction: Double
     let elapsed: Double
+    var remaining: Double? = nil
 
     var body: some View {
         Group {
             if StageProgress.isReadingMedia(stage) {
                 ProgressView().controlSize(.small)
             } else if StageProgress.usesEstimates(stage) || fraction > 0 {
-                HStack(spacing: 6) {
-                    Text(StageProgress.usesEstimates(stage) ? "Estimated" : "Progress")
-                        .frame(width: 78, alignment: .trailing)
-                    Text("\(Int(fraction * 100))%")
-                        .frame(width: 44, alignment: .trailing)
-                    Text("·")
-                    Text(clockText(elapsed))
-                        .frame(width: 72, alignment: .trailing)
-                    Text("elapsed")
-                }.monospacedDigit()
+                HStack(spacing: 16) {
+                    metric("Progress", value: "\(StageProgress.usesEstimates(stage) && fraction < 1 ? "≈" : "")\(Int(fraction * 100))%")
+                    metric("Elapsed", value: clockText(elapsed))
+                    if StageProgress.usesEstimates(stage) {
+                        metric("Remaining (est.)", value: remaining.map { "~" + clockText(ceil($0)) } ?? "—")
+                            .help("Estimated time left in this stage, based on recognition or export speed. Waiting for a progress update when unavailable.")
+                    }
+                }
             } else {
-                HStack(spacing: 6) {
+                HStack(spacing: 8) {
                     ProgressView().controlSize(.small)
-                    Text(clockText(elapsed)).monospacedDigit().frame(width: 72, alignment: .trailing)
-                    Text("elapsed")
+                    Text("\(clockText(elapsed)) elapsed").monospacedDigit().foregroundStyle(.secondary)
                 }
             }
         }
-        .foregroundStyle(.secondary)
-        .frame(height: 20)
-        // Background color interpolation must not animate status text or geometry.
+        .frame(height: 44)
         .transaction { $0.animation = nil }
+    }
+
+    private func metric(_ label: String, value: String) -> some View {
+        VStack(spacing: 4) {
+            Text(value).monospacedDigit().fontWeight(.medium)
+            Text(label).font(.caption).foregroundStyle(.secondary)
+        }.frame(width: 96)
     }
 }

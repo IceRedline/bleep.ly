@@ -15,6 +15,7 @@ final class AppModel: ObservableObject {
     @Published var fraction = 0.0
     @Published var progressIsEstimated = false
     @Published var stageElapsed = 0.0
+    @Published var stageRemaining: Double?
     private var progressState = StageProgress()
     private var progressTask: Task<Void, Never>?
     @Published var error: String?
@@ -110,7 +111,7 @@ final class AppModel: ObservableObject {
         beginProgressUpdates()
         return Task {
             defer {
-                progressTask?.cancel(); progressTask = nil; progressIsEstimated = false; stageElapsed = 0
+                progressTask?.cancel(); progressTask = nil; progressIsEstimated = false; stageElapsed = 0; stageRemaining = nil
                 if returnHomeAfterCancel { returnHomeAfterCancel = false; startNewFile() }
             }
             if cancelling {
@@ -207,6 +208,7 @@ final class AppModel: ObservableObject {
                 self.stageElapsed = max(0, now - self.progressState.started)
                 guard !self.cancelling else { continue }
                 self.progressState.advance(now: now)
+                self.stageRemaining = self.progressState.remaining(now: now)
                 self.fraction = self.progressState.displayed
                 self.progressIsEstimated = self.progressState.estimated
             }
@@ -217,7 +219,9 @@ final class AppModel: ObservableObject {
         guard busy, !cancelling else { return }
         progressState.report(label, fraction: value, now: ProcessInfo.processInfo.systemUptime)
         stage = label
-        stageElapsed = max(0, ProcessInfo.processInfo.systemUptime - progressState.started)
+        let now = ProcessInfo.processInfo.systemUptime
+        stageElapsed = max(0, now - progressState.started)
+        stageRemaining = progressState.remaining(now: now)
         fraction = progressState.displayed
         progressIsEstimated = progressState.estimated
     }
@@ -417,7 +421,7 @@ final class AppModel: ObservableObject {
         beginProgressUpdates()
         return Task {
             defer {
-                progressTask?.cancel(); progressTask = nil; progressIsEstimated = false; stageElapsed = 0
+                progressTask?.cancel(); progressTask = nil; progressIsEstimated = false; stageElapsed = 0; stageRemaining = nil
                 if returnHomeAfterCancel { returnHomeAfterCancel = false; startNewFile() }
             }
             if cancelling { phase = .review; cancelling = false; return }
