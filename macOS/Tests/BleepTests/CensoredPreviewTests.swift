@@ -177,7 +177,8 @@ final class CensoredPreviewTests: XCTestCase {
         XCTAssertEqual(restored.resolvingSymlinksInPath(), source.resolvingSymlinksInPath())
         XCTAssertNil(model.error)
         await model.setPreviewCensorship(true)?.value
-        model.setSound(source.deletingLastPathComponent().appendingPathComponent("missing.wav"))
+        model.setSound(source)
+        try FileManager.default.removeItem(at: XCTUnwrap(model.customSound))
         for _ in 0..<100 where model.preparingPreview { try await Task.sleep(nanoseconds: 50_000_000) }
         XCTAssertNotNil(model.error)
         XCTAssertNil(model.player.currentItem)

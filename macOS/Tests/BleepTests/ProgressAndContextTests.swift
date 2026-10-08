@@ -67,6 +67,36 @@ final class ProgressAndContextTests: XCTestCase {
         XCTAssertNil(progress.remaining(now: 613))
     }
 
+    func testSmoothedEstimateAndCoarseStepsResistSmallOscillations() throws {
+        var progress = StageProgress()
+        progress.report("Recognizing speech", fraction: 0, now: 0)
+        progress.report("Recognizing speech", fraction: 0.25, now: 30)
+        XCTAssertEqual(progress.displayRemaining(now: 30), 90)
+        // A new measurement implies 120 seconds remaining, but the filter should absorb the jump.
+        progress.report("Recognizing speech", fraction: 0.26, now: 42)
+        let smoothed = try XCTUnwrap(progress.remaining(now: 42))
+        XCTAssertGreaterThan(smoothed, 78)
+        XCTAssertLessThan(smoothed, 120)
+        XCTAssertEqual(progress.displayRemaining(now: 42), 90)
+        // A tiny fluctuation does not immediately promote the next bucket.
+        progress.report("Recognizing speech", fraction: 0.27, now: 43)
+        XCTAssertEqual(progress.displayRemaining(now: 43), 90)
+        // Sustained slowdown must still be reflected, rather than forcing a false countdown.
+        progress.report("Recognizing speech", fraction: 0.28, now: 100)
+        XCTAssertGreaterThan(try XCTUnwrap(progress.displayRemaining(now: 100)), 90)
+        progress.report("Exporting video", fraction: 0, now: 101)
+        XCTAssertNil(progress.displayRemaining(now: 101))
+        progress.report("Exporting video", fraction: 0.2, now: 131)
+        XCTAssertEqual(progress.displayRemaining(now: 131), 120)
+        XCTAssertEqual(progress.displayRemaining(now: 161), 90)
+        XCTAssertEqual(progress.displayRemaining(now: 191), 60)
+        XCTAssertEqual(StageProgress.remainingText(120), "~2 min")
+        XCTAssertEqual(StageProgress.remainingText(90), "~1.5 min")
+        XCTAssertEqual(StageProgress.remainingText(60), "~1 min")
+        XCTAssertEqual(StageProgress.remainingText(30), "~30 sec")
+        XCTAssertEqual(StageProgress.remainingText(nil), "—")
+    }
+
     @MainActor
     func testProgressColumnsStayFixedAcrossDigitAndTimeChanges() throws {
         let samples: [(Double, Double)] = [(0, 0), (0.01, 9), (0.09, 59), (0.10, 60), (0.99, 3599), (1, 3600)]
@@ -81,7 +111,7 @@ final class ProgressAndContextTests: XCTestCase {
         let host = NSHostingView(rootView: VStack(spacing: 22) {
             Text("Recognizing speech").font(.headline)
             ForEach(samples.indices, id: \.self) { index in
-                StageProgressDetails(stage: "Recognizing speech", fraction: samples[index].0, elapsed: samples[index].1, remaining: index == 0 ? nil : 6000 * (1 - samples[index].0))
+                StageProgressDetails(stage: "Recognizing speech", fraction: samples[index].0, elapsed: samples[index].1, remaining: index == 0 ? nil : [120.0, 120, 90, 60, 30, 0][index])
             }
             Text("Reading media").font(.headline)
             StageProgressDetails(stage: "Reading media", fraction: 1, elapsed: 2)

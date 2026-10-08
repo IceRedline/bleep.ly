@@ -20,8 +20,15 @@ final class AppModel: ObservableObject {
     private var progressTask: Task<Void, Never>?
     @Published var error: String?
     @Published var sourceName = ""
-    @Published var sound = "beep" { didSet { if sound != oldValue { refreshCensoredPreview() } } }
-    @Published var customSound: URL? { didSet { if customSound != oldValue { refreshCensoredPreview() } } }
+    @Published var sound = "beep" {
+        didSet {
+            if sound != oldValue {
+                defaults.set(sound, forKey: "censorSound")
+                refreshCensoredPreview()
+            }
+        }
+    }
+    @Published private(set) var customSound: URL? { didSet { if customSound != oldValue { refreshCensoredPreview() } } }
     @Published private(set) var previewCensorship = false
     @Published private(set) var preparingPreview = false
     @Published private(set) var previewPreparation = "Preparing censored preview…"
@@ -73,6 +80,14 @@ final class AppModel: ObservableObject {
         self.defaults = defaults
         self.supportDirectory = supportDirectory ?? Self.support
         self.workflowMode = WorkflowMode(rawValue: defaults.string(forKey: "workflowMode") ?? "") ?? .fast
+        self.customSound = SavedCensorSound(directory: self.supportDirectory, defaults: defaults).url
+        let savedSound = defaults.string(forKey: "censorSound") ?? "beep"
+        self.sound = ["beep", "silence", "custom"].contains(savedSound) ? savedSound : "beep"
+        if self.sound == "custom" && self.customSound == nil {
+            self.sound = "beep"
+            defaults.set("beep", forKey: "censorSound")
+            self.error = "The saved custom sound is unavailable. Choose it again."
+        }
         observer = player.addPeriodicTimeObserver(forInterval: CMTime(seconds: 0.04, preferredTimescale: 600), queue: .main) { [weak self] time in
             Task { @MainActor in
                 guard let self, self.player.currentItem != nil else { return }
@@ -220,7 +235,7 @@ final class AppModel: ObservableObject {
                 self.stageElapsed = max(0, now - self.progressState.started)
                 guard !self.cancelling else { continue }
                 self.progressState.advance(now: now)
-                self.stageRemaining = self.progressState.remaining(now: now)
+                self.stageRemaining = self.progressState.displayRemaining(now: now)
                 self.fraction = self.progressState.displayed
                 self.progressIsEstimated = self.progressState.estimated
             }
@@ -233,7 +248,7 @@ final class AppModel: ObservableObject {
         stage = label
         let now = ProcessInfo.processInfo.systemUptime
         stageElapsed = max(0, now - progressState.started)
-        stageRemaining = progressState.remaining(now: now)
+        stageRemaining = progressState.displayRemaining(now: now)
         fraction = progressState.displayed
         progressIsEstimated = progressState.estimated
     }
@@ -459,7 +474,13 @@ final class AppModel: ObservableObject {
         let panel = NSOpenPanel(); panel.allowedContentTypes = [.audio]
         if panel.runModal() == .OK, let url = panel.url { setSound(url) }
     }
-    func setSound(_ url: URL) { customSound = url; sound = "custom" }
+    func setSound(_ url: URL) {
+        do {
+            customSound = try SavedCensorSound(directory: supportDirectory, defaults: defaults).save(url)
+            sound = "custom"
+            error = nil
+        } catch { self.error = "Could not save the custom sound: \(error.localizedDescription)" }
+    }
 
     func export() {
         guard !busy, let document else { return }

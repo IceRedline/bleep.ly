@@ -95,7 +95,9 @@ final class WorkflowTests: XCTestCase {
         model.sound = "custom"
         XCTAssertNil(model.open(source, transcript: transcript, workflow: .fast))
         XCTAssertFalse(model.busy)
-        model.setSound(source.deletingLastPathComponent().appendingPathComponent("missing.wav"))
+        let invalidSound = source.deletingLastPathComponent().appendingPathComponent("invalid.wav")
+        try Data("not audio".utf8).write(to: invalidSound)
+        model.setSound(invalidSound)
         await model.open(source, transcript: transcript, workflow: .fast)?.value
         XCTAssertNotNil(model.error)
         XCTAssertNotNil(model.document)

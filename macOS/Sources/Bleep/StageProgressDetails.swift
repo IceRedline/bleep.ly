@@ -16,7 +16,7 @@ struct StageProgressDetails: View {
                     metric("Progress", value: "\(StageProgress.usesEstimates(stage) && fraction < 1 ? "≈" : "")\(Int(fraction * 100))%")
                     metric("Elapsed", value: clockText(elapsed))
                     if StageProgress.usesEstimates(stage) {
-                        metric("Remaining (est.)", value: remaining.map { "~" + clockText(ceil($0)) } ?? "—")
+                        metric("Remaining (est.)", value: StageProgress.remainingText(remaining))
                             .help("Estimated time left in this stage, based on recognition or export speed. Waiting for a progress update when unavailable.")
                     }
                 }
