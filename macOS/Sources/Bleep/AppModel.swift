@@ -36,7 +36,7 @@ final class AppModel: ObservableObject {
 
     static var support: URL {
         FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
-            .appendingPathComponent("bleep.ly", isDirectory: true)
+            .appendingPathComponent(WhisperKitExperiment.available ? "bleep.ly Lab" : "bleep.ly", isDirectory: true)
     }
     static var defaultRoot: String {
         Bundle.main.object(forInfoDictionaryKey: "BleepProjectRoot") as? String ?? FileManager.default.currentDirectoryPath
@@ -112,6 +112,11 @@ final class AppModel: ObservableObject {
                 let stream = defaults.integer(forKey: "audioStream")
                 // 0 requests automatic selection and reports ambiguous multi-track media.
                 if stream > 0 { request["audio_stream"] = stream - 1 }
+                if WhisperKitExperiment.enabled(defaults: defaults), transcript == nil {
+                    request["backend"] = "whisperkit"
+                    request["whisperkit_executable"] = WhisperKitExperiment.helper.path
+                    request["whisperkit_model_folder"] = root.appendingPathComponent(".cache/whisperkit/model").path
+                }
                 if let transcript { request["transcript"] = transcript.path }
                 let result = try await bridge.run(root: root, python: python, request: request, progress: updateProgress)
                 document = try JSONDecoder.bridge.decode(ReviewDocument.self, from: result)

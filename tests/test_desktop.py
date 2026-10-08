@@ -98,7 +98,9 @@ class DesktopTests(unittest.TestCase):
             second = analyze(request)
         engine.assert_called_once()
         self.assertTrue(first['words'][0]['profane'])
-        self.assertEqual(first, second)
+        self.assertEqual(first["words"], second["words"])
+        self.assertFalse(first["cache_hit"])
+        self.assertTrue(second["cache_hit"])
         self.assertAlmostEqual(first['words'][0]['mute_start'], 1.06)
 
     def test_json_protocol_and_video_stream_copy(self):
@@ -159,3 +161,25 @@ class DesktopTests(unittest.TestCase):
         self.assertGreater(middle['words'][0]['mute_start'], 1)
         self.assertEqual(full['words'][0]['mute_start'], 1)
         self.assertEqual(full['words'][0]['mute_end'], 2)
+
+    def test_whisperkit_selection_cache_bypass_and_shared_censoring(self):
+        request = dict(source=str(self.source), cache_dir=str(self.work / 'wk-cache'), backend='whisperkit',
+                       whisperkit_executable='/not-used-by-mock', whisperkit_model_folder='/not-used-by-mock')
+        with patch('censor.whisperkit_backend.prepare_assets') as assets, \
+             patch('censor.whisperkit_backend.cache_identity', return_value=('wk-key', {})), \
+             patch('censor.whisperkit_backend.WhisperKitBackend') as native, \
+             patch('censor.desktop.FasterWhisperBackend.transcribe', side_effect=AssertionError('fallback')), \
+             contextlib.redirect_stdout(io.StringIO()):
+            native.return_value.metrics = dict(load_seconds=1)
+            native.return_value.transcribe.return_value = [WordTimestamp('бля', 1, 1.3)]
+            first = analyze(request)
+            cached = analyze(request)
+            fresh = analyze({**request, 'bypass_cache': True})
+        self.assertEqual(native.return_value.transcribe.call_count, 2)
+        self.assertFalse(first['cache_hit'])
+        self.assertTrue(cached['cache_hit'])
+        self.assertFalse(fresh['cache_hit'])
+        self.assertEqual(first['engine'], 'whisperkit')
+        self.assertEqual(first['words'], self.document['words'])
+        self.assertEqual(first['words'], cached['words'])
+        self.assertTrue(all(call.kwargs['offline'] for call in assets.call_args_list))

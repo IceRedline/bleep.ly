@@ -45,15 +45,24 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 }
 
 struct SettingsView: View {
+    var whisperKitAvailable = WhisperKitExperiment.available
     @AppStorage("projectRoot") private var projectRoot = AppModel.defaultRoot
     @AppStorage("pythonPath") private var pythonPath = ""
     @AppStorage("backend") private var backend = "faster-whisper"
     @AppStorage("allowDownloads") private var allowDownloads = false
     @AppStorage("audioStream") private var audioStream = 0
+    @AppStorage("experimentalWhisperKit") private var experimentalWhisperKit = false
     @AppStorage("censorStyle") private var censorStyle = "middle"
 
     var body: some View {
         Form {
+            if whisperKitAvailable {
+                Section("Experimental · not a release feature") {
+                    Toggle("Use WhisperKit instead of the selected engine", isOn: $experimentalWhisperKit)
+                    Text("Local Core ML · large-v3-turbo. Applies to new files in both modes. Separate model download: about 1.7 GB; enable downloads below once. First launch may take a few minutes to prepare Core ML. Turn off to return to your selected CPU / MLX engine.")
+                        .font(.caption).foregroundStyle(.secondary)
+                }
+            }
             Section("Censoring") {
                 Picker("Mute interval", selection: $censorStyle) {
                     Text("Word middle (default)").tag("middle")
@@ -76,7 +85,7 @@ struct SettingsView: View {
                 Picker("Recognition", selection: $backend) {
                     Text("CPU · faster-whisper").tag("faster-whisper")
                     Text("Apple GPU · MLX").tag("mlx")
-                }
+                }.disabled(whisperKitAvailable && experimentalWhisperKit)
                 Toggle("Allow first-time model download", isOn: $allowDownloads)
                 Text("Russian speech · large-v3-turbo. Recognition runs on this Mac. With downloads off, the model must already be cached.")
                     .font(.caption).foregroundStyle(.secondary)

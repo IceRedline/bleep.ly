@@ -9,6 +9,7 @@ import os
 import signal
 import sys
 import tempfile
+import time
 from dataclasses import asdict, replace
 from pathlib import Path
 
@@ -51,6 +52,9 @@ def fingerprint(source):
 
 
 def analyze(request):
+    started = time.perf_counter()
+    cache_hit = False
+    backend = "reviewed-transcript"
     style = request.get("censor_style", "middle")
     if style not in {"middle", "full"}:
         raise CensorError("Choose middle or full word censoring.")
@@ -62,16 +66,28 @@ def analyze(request):
         words = read_transcript(Path(request["transcript"]), info.duration)
     else:
         backend = request.get("backend", "faster-whisper")
-        if backend not in {"mlx", "faster-whisper"}:
+        if backend not in {"mlx", "faster-whisper", "whisperkit"}:
             raise CensorError("Unknown speech backend.")
         model = request.get("model", "large-v3-turbo")
         compute = "float16" if backend == "mlx" else "int8"
         if backend == "mlx":
             model = resolve_model(model)
-        key, metadata = cache_key(source, model, "ru", compute, info.audio_index,
-                                  progress("Reading media", source.stat().st_size), backend=backend)
+        if backend == "whisperkit":
+            from .whisperkit_backend import WhisperKitBackend, prepare_assets, cache_identity
+            model_folder = Path(request["whisperkit_model_folder"]).resolve()
+            executable = Path(request["whisperkit_executable"]).resolve()
+            native_engine = WhisperKitBackend(executable, model_folder,
+                stage=lambda label: emit("progress", stage=label, fraction=0))
+            emit("progress", stage="Preparing WhisperKit model", fraction=0)
+            prepare_assets(model_folder, offline=request.get("offline", True))
+            key, metadata = cache_identity(source, model_folder, executable, info.audio_index,
+                                          progress("Reading media", source.stat().st_size))
+        else:
+            key, metadata = cache_key(source, model, "ru", compute, info.audio_index,
+                                      progress("Reading media", source.stat().st_size), backend=backend)
         cache = Path(request["cache_dir"]) / f"{key}.json"
-        words = load_cache(cache, info.duration)
+        words = None if request.get("bypass_cache", False) else load_cache(cache, info.duration)
+        cache_hit = words is not None
         if words is None:
             with tempfile.TemporaryDirectory(prefix="bleep-speech-") as folder:
                 audio = Path(folder) / "speech.wav"
@@ -80,9 +96,12 @@ def analyze(request):
                 engine = MLXWhisperBackend if backend == "mlx" else FasterWhisperBackend
                 # Some inference libraries print to stdout; keep the protocol clean.
                 with contextlib.redirect_stdout(sys.stderr):
-                    raw = engine(model, "ru", compute, request.get("offline", True)).transcribe(audio, callback)
+                    transcriber = native_engine if backend == "whisperkit" else engine(model, "ru", compute, request.get("offline", True))
+                    raw = transcriber.transcribe(audio, callback)
+                if backend == "whisperkit":
+                    metadata["native_metrics"] = native_engine.metrics
                 words = parse_words({"words": [asdict(w) for w in raw
-                                               if w.end > w.start and w.start < info.duration]}, info.duration)
+                                               if w.word.strip() and w.end > w.start and w.start < info.duration]}, info.duration)
                 if cache.resolve() == source:
                     raise CensorError("Cache collides with source.")
                 save_transcript(cache, words, metadata)
@@ -96,7 +115,8 @@ def analyze(request):
         items.append({**asdict(word), "mute_start": interval.start, "mute_end": interval.end})
     return {"source": str(source), "fingerprint": signature, "duration": info.duration,
             "has_video": info.video_index >= 0, "audio_stream": stream,
-            "audio_count": info.audio_count, "censor_style": style, "words": items}
+            "audio_count": info.audio_count, "censor_style": style, "words": items,
+            "engine": backend, "cache_hit": cache_hit, "analysis_seconds": time.perf_counter() - started}
 
 
 def reviewed_ranges(document, duration):

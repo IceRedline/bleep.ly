@@ -20,6 +20,9 @@ struct ReviewDocument: Codable, Equatable {
     var audioStream: Int?
     var audioCount: Int
     var words: [ReviewWord]
+    var engine: String?
+    var cacheHit: Bool?
+    var analysisSeconds: Double?
     var censorStyle: String? // Absent in reviews saved before this setting existed.
 
     var count: Int { words.filter(\.profane).count }

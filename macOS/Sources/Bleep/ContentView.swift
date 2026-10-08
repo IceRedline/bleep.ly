@@ -27,6 +27,10 @@ struct ContentView: View {
             RadialGradient(colors: [tint.opacity(0.20), .clear], center: .bottomTrailing, startRadius: 0, endRadius: 650)
             VStack(spacing: 0) {
                 header
+                if model.document?.engine == "whisperkit" && !model.busy {
+                    Label("WhisperKit · experimental result", systemImage: "flask")
+                        .font(.caption).foregroundStyle(.orange).padding(.bottom, 12)
+                }
                 if model.busy { processing }
                 else if let document = model.document {
                     if model.workflowMode == .fast { fastResult(document) }
@@ -52,6 +56,9 @@ struct ContentView: View {
             Image(systemName: "waveform").font(.title2.weight(.semibold)).foregroundStyle(.mint)
             Text("bleep.ly").font(.system(size: 24, weight: .bold, design: .rounded)).tracking(-0.7)
             Text("A little less explicit.").font(.callout).foregroundStyle(.secondary).padding(.leading, 12)
+            if WhisperKitExperiment.available {
+                Text("LAB").font(.caption2.bold()).foregroundStyle(.orange)
+            }
             Spacer()
             Picker("Workflow", selection: Binding(get: { model.workflowMode }, set: { model.selectMode($0) })) {
                 Text("Fast Mode").tag(WorkflowMode.fast)
