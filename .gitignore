@@ -49,3 +49,9 @@ htmlcov/
 ._*
 .idea/
 .vscode/
+
+# Native macOS build products and Xcode user state
+macOS/.build/
+macOS/.swiftpm/
+*.xcuserstate
+xcuserdata/
