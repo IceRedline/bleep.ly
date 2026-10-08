@@ -20,7 +20,7 @@ open 'build/bleep.ly Lab.app'
 в настройках Lab. После установки моделей распознавание работает offline.
 Первый запуск Core ML может занимать несколько минут; это подготовка модели.
 
-`⌘,` → `Experimental` → `Use WhisperKit instead of the selected engine`.
+`⌘,` → `Experimental` → `Use WhisperKit (experimental)`.
 Переключатель применяется к следующему открытому файлу в Fast и Advanced.
 Для оценки качества удобнее Advanced: сначала прослушать находки и пропуски,
 затем экспортировать. Выключение переключателя возвращает выбранный CPU/MLX.

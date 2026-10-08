@@ -58,8 +58,10 @@ struct SettingsView: View {
         Form {
             if whisperKitAvailable {
                 Section("Experimental · not a release feature") {
-                    Toggle("Use WhisperKit instead of the selected engine", isOn: $experimentalWhisperKit)
-                    Text("Local Core ML · large-v3-turbo. Applies to new files in both modes. Separate model download: about 1.7 GB; enable downloads below once. First launch may take a few minutes to prepare Core ML. Turn off to return to your selected CPU / MLX engine.")
+                    Toggle("Use WhisperKit (experimental)", isOn: $experimentalWhisperKit)
+                    Text("Core ML · less accurate in our test: 2–3/4 explicit words; MLX: 4/4.")
+                        .font(.caption).foregroundStyle(.orange)
+                    Text("Downloads an OpenAI Whisper model (~1.7 GB). First run may take a few minutes. Applies to new files.")
                         .font(.caption).foregroundStyle(.secondary)
                 }
             }
@@ -83,8 +85,8 @@ struct SettingsView: View {
                 Text("By default, uses .venv/bin/python in your project folder. FFmpeg must be installed.")
                     .font(.caption).foregroundStyle(.secondary)
                 Picker("Recognition", selection: $backend) {
-                    Text("CPU · faster-whisper").tag("faster-whisper")
-                    Text("Apple GPU · MLX").tag("mlx")
+                    Text("CPU · Classic processing").tag("faster-whisper")
+                    Text("MLX · GPU recognition").tag("mlx")
                 }.disabled(whisperKitAvailable && experimentalWhisperKit)
                 Toggle("Allow first-time model download", isOn: $allowDownloads)
                 Text("Russian speech · large-v3-turbo. Recognition runs on this Mac. With downloads off, the model must already be cached.")
