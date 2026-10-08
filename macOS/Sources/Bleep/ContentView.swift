@@ -113,28 +113,26 @@ struct ContentView: View {
                 guard let url = urls.first, url.isFileURL, urls.count == 1 else { return false }
                 model.open(url); return true
             } isTargeted: { dropTarget = $0 }
-            ZStack {
-                HStack(spacing: 32) {
-                    soundControls
+            HStack(spacing: 32) {
+                soundControls
+                ZStack(alignment: .leading) {
                     VStack(alignment: .leading, spacing: 6) {
                         Label("Saved next to your original", systemImage: "folder")
                         Text("Video stays video. Audio becomes WAV.\nExisting files are never overwritten.")
                             .font(.caption).foregroundStyle(.secondary)
                     }
+                    .opacity(model.workflowMode == .fast ? 1 : 0)
+                    .accessibilityHidden(model.workflowMode != .fast)
+                    VStack(alignment: .leading, spacing: 6) {
+                        Label("Review every word", systemImage: "waveform.path")
+                        Text("Choose your sound, then drop a file.\nCensored preview prepares automatically.")
+                            .font(.caption).foregroundStyle(.secondary)
+                    }
+                    .opacity(model.workflowMode == .advanced ? 1 : 0)
+                    .accessibilityHidden(model.workflowMode != .advanced)
                 }
-                .opacity(model.workflowMode == .fast ? 1 : 0)
-                .allowsHitTesting(model.workflowMode == .fast)
-                .accessibilityHidden(model.workflowMode != .fast)
-                HStack(spacing: 32) {
-                    Label("On-device recognition", systemImage: "lock.shield")
-                    Label("Review every word", systemImage: "waveform.path")
-                    Label("Original video quality", systemImage: "film")
-                }.font(.callout).foregroundStyle(.secondary)
-                .opacity(model.workflowMode == .advanced ? 1 : 0)
-                .allowsHitTesting(model.workflowMode == .advanced)
-                .accessibilityHidden(model.workflowMode != .advanced)
+                .animation(.easeInOut(duration: reduceMotion ? 0.1 : 0.2), value: model.workflowMode)
             }
-            .animation(.easeInOut(duration: reduceMotion ? 0.1 : 0.2), value: model.workflowMode)
             Button("Resume last review", action: model.restoreDraft).buttonStyle(.plain).foregroundStyle(.mint)
             Spacer(minLength: 10)
             Text("Made for the final cut.").font(.caption).foregroundStyle(.secondary)
@@ -188,7 +186,7 @@ struct ContentView: View {
                 VStack(spacing: 12) {
                     if document.hasVideo {
                         VideoPlayer(player: model.player).frame(minHeight: 150, maxHeight: .infinity)
-                            .overlay { if model.preparingPreview { previewPreparation } }
+                            .overlay(alignment: .topLeading) { if model.preparingPreview { previewPreparation.padding(8).allowsHitTesting(false) } }
                             .clipShape(RoundedRectangle(cornerRadius: 16))
                     } else {
                         VStack(spacing: 14) {
@@ -201,10 +199,10 @@ struct ContentView: View {
                     HStack {
                         Button(action: model.togglePlayback) {
                             Label(model.isPlaying ? "Pause" : "Play", systemImage: model.isPlaying ? "pause.fill" : "play.fill")
-                        }.buttonStyle(.borderless).disabled(model.preparingPreview)
+                        }.buttonStyle(.borderless).disabled(model.loadingPlayer)
                         Text(clockText(model.playhead)).monospacedDigit().font(.caption)
                         Spacer()
-                        Text("\(model.previewCensorship ? "Censored audio" : "Original audio") · Track \(model.selectedAudioTrack + 1)").font(.caption).foregroundStyle(.secondary)
+                        Text("\(model.playingCensoredPreview ? "Censored audio" : "Original audio") · Track \(model.selectedAudioTrack + 1)").font(.caption).foregroundStyle(.secondary)
                     }
                 }.frame(maxWidth: .infinity)
                 wordList(document).frame(width: 345)
@@ -368,7 +366,7 @@ struct ContentView: View {
                 if model.document != nil && model.workflowMode == .advanced {
                     Toggle("Preview with censorship", isOn: Binding(get: { model.previewCensorship }, set: { model.setPreviewCensorship($0) }))
                         .toggleStyle(.checkbox).font(.caption)
-                        .help("Hear the selected track with the current censor sound and reviewed intervals. Export is always censored.")
+                        .help("Original audio stays playable during preparation. Switch between prepared sounds from cache. Export is always censored.")
                 }
             }
             Picker("Censor sound", selection: $model.sound) {

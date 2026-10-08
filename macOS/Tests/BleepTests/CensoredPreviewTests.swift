@@ -84,8 +84,9 @@ final class CensoredPreviewTests: XCTestCase {
     }
 
     private func waitForPreview(_ model: AppModel) async throws {
-        for _ in 0..<200 where model.preparingPreview { try await Task.sleep(nanoseconds: 50_000_000) }
+        for _ in 0..<200 where model.preparingPreview || model.loadingPlayer { try await Task.sleep(nanoseconds: 50_000_000) }
         XCTAssertFalse(model.preparingPreview)
+        XCTAssertFalse(model.loadingPlayer)
         XCTAssertNil(model.error)
     }
 
@@ -93,7 +94,8 @@ final class CensoredPreviewTests: XCTestCase {
         let (model, source, folder) = try await fixture()
         defer { model.goHome() }
         let sourceBytes = try Data(contentsOf: source)
-        XCTAssertFalse(model.previewCensorship)
+        XCTAssertTrue(model.previewCensorship)
+        await model.setPreviewCensorship(false)?.value
         let original = try await audioURL(model)
         XCTAssertEqual(original.resolvingSymlinksInPath(), source.resolvingSymlinksInPath())
         XCTAssertGreaterThan(try amplitude(original, at: 1.1, frequency: 440), 0.08)
@@ -139,6 +141,14 @@ final class CensoredPreviewTests: XCTestCase {
         let silence = try await audioURL(model)
         XCTAssertLessThan(try amplitude(silence, at: 1.1, frequency: 440), 0.005)
         XCTAssertLessThan(try amplitude(silence, at: 1.1, frequency: 1000), 0.005)
+        // All three completed variants remain reusable without a new render.
+        for (mode, expected) in [("beep", beep), ("custom", custom), ("silence", silence)] {
+            model.sound = mode
+            XCTAssertFalse(model.preparingPreview, "Cached \(mode) must not start rendering")
+            try await waitForPreview(model)
+            let reusedMode = try await audioURL(model)
+            XCTAssertEqual(reusedMode, expected)
+        }
         model.toggle(word)
         try await waitForPreview(model)
         let unchecked = try await audioURL(model)
@@ -155,10 +165,12 @@ final class CensoredPreviewTests: XCTestCase {
         XCTAssertNil(model.exportURL)
         XCTAssertEqual(try Data(contentsOf: source), sourceBytes)
         model.goHome()
-        XCTAssertFalse(FileManager.default.fileExists(atPath: edited.path))
+        for url in [beep, custom, silence, unchecked, edited] {
+            XCTAssertFalse(FileManager.default.fileExists(atPath: url.path))
+        }
     }
 
-    func testTrackSelectionCancellationAndFailureNeverPlayOriginalWhileEnabled() async throws {
+    func testTrackSelectionCancellationAndFailureKeepOriginalPlayable() async throws {
         let (model, source, _) = try await fixture(tracks: 2)
         defer { model.goHome() }
         model.sound = "silence"
@@ -179,9 +191,10 @@ final class CensoredPreviewTests: XCTestCase {
         await model.setPreviewCensorship(true)?.value
         model.setSound(source)
         try FileManager.default.removeItem(at: XCTUnwrap(model.customSound))
-        for _ in 0..<100 where model.preparingPreview { try await Task.sleep(nanoseconds: 50_000_000) }
+        for _ in 0..<100 where model.preparingPreview || model.loadingPlayer { try await Task.sleep(nanoseconds: 50_000_000) }
         XCTAssertNotNil(model.error)
-        XCTAssertNil(model.player.currentItem)
+        XCTAssertNotNil(model.player.currentItem)
+        XCTAssertFalse(model.playingCensoredPreview)
         XCTAssertTrue(model.previewCensorship)
         model.goHome()
         XCTAssertNil(model.player.currentItem)
@@ -217,6 +230,12 @@ final class CensoredPreviewTests: XCTestCase {
         }
         XCTAssertTrue(FileManager.default.fileExists(atPath: marker.path), cancellable.error ?? "Worker did not start")
         XCTAssertTrue(cancellable.preparingPreview)
+        XCTAssertFalse(cancellable.loadingPlayer)
+        XCTAssertFalse(cancellable.playingCensoredPreview)
+        XCTAssertNotNil(cancellable.player.currentItem)
+        cancellable.togglePlayback()
+        try await Task.sleep(nanoseconds: 300_000_000)
+        XCTAssertGreaterThan(cancellable.playhead, 0.05, "Original playback must work during rendering")
         let start = Date()
         cancellable.goHome()
         await task.value

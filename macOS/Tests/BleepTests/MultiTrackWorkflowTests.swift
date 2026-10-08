@@ -62,6 +62,7 @@ final class MultiTrackWorkflowTests: XCTestCase {
         model.updateInterval(id: word.id, start: 2.05, end: 2.2)
         XCTAssertEqual(try XCTUnwrap(model.document?.words.first?.muteStart), 1.06, accuracy: 0.0001)
         XCTAssertEqual(model.visibleWords.first?.muteStart, 2.05)
+        for _ in 0..<100 where model.preparingPreview { try await Task.sleep(nanoseconds: 50_000_000) }
         model.audition(word)
         try await Task.sleep(nanoseconds: 1_200_000_000)
         XCTAssertFalse(model.isPlaying)
