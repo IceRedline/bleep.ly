@@ -51,6 +51,9 @@ def fingerprint(source):
 
 
 def analyze(request):
+    style = request.get("censor_style", "middle")
+    if style not in {"middle", "full"}:
+        raise CensorError("Choose middle or full word censoring.")
     source = Path(request["source"]).resolve()
     stream = request.get("audio_stream")
     info = media_info(source, stream, allow_audio=True)
@@ -88,11 +91,12 @@ def analyze(request):
         raise CensorError("Source changed during analysis. Open it again.")
     items = []
     for word in words:
-        interval = middle_ranges([replace(word, profane=True)], info.duration, MUTE_CAP)[0]
+        interval = (CensorRange(word.start, word.end) if style == "full" else
+                    middle_ranges([replace(word, profane=True)], info.duration, MUTE_CAP)[0])
         items.append({**asdict(word), "mute_start": interval.start, "mute_end": interval.end})
     return {"source": str(source), "fingerprint": signature, "duration": info.duration,
             "has_video": info.video_index >= 0, "audio_stream": stream,
-            "audio_count": info.audio_count, "words": items}
+            "audio_count": info.audio_count, "censor_style": style, "words": items}
 
 
 def reviewed_ranges(document, duration):

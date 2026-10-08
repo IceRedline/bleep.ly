@@ -20,6 +20,7 @@ struct ReviewDocument: Codable, Equatable {
     var audioStream: Int?
     var audioCount: Int
     var words: [ReviewWord]
+    var censorStyle: String? // Absent in reviews saved before this setting existed.
 
     var count: Int { words.filter(\.profane).count }
     var url: URL { URL(fileURLWithPath: source) }

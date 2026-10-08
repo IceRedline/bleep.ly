@@ -50,9 +50,18 @@ struct SettingsView: View {
     @AppStorage("backend") private var backend = "faster-whisper"
     @AppStorage("allowDownloads") private var allowDownloads = false
     @AppStorage("audioStream") private var audioStream = 0
+    @AppStorage("censorStyle") private var censorStyle = "middle"
 
     var body: some View {
         Form {
+            Section("Censoring") {
+                Picker("Mute interval", selection: $censorStyle) {
+                    Text("Word middle (default)").tag("middle")
+                    Text("Whole word").tag("full")
+                }
+                Text("Applies when opening media. Whole word mutes from word start to end. Existing reviewed intervals stay unchanged; the sound always plays once at its original speed.")
+                    .font(.caption).foregroundStyle(.secondary)
+            }
             Section("Local engine") {
                 HStack {
                     TextField("Project folder", text: $projectRoot)
@@ -81,6 +90,6 @@ struct SettingsView: View {
                     .font(.caption).foregroundStyle(.secondary)
             }
         }
-        .formStyle(.grouped).padding(16).frame(width: 590, height: 430)
+        .formStyle(.grouped).padding(16).frame(width: 590, height: 550)
     }
 }

@@ -131,3 +131,31 @@ class DesktopTests(unittest.TestCase):
         document = analyze(dict(source=str(source), transcript=str(reference)))
         expected = middle_ranges(read_transcript(reference, duration), duration, MUTE_CAP)
         self.assertEqual(reviewed_ranges(document, duration), expected)
+
+    def test_whole_word_setting_mutes_edges_without_sound_length_cap(self):
+        self.transcript.write_text(json.dumps({'words': [
+            dict(word='бля', start=1, end=2, profane=True)]}))
+        self.document = analyze(dict(source=str(self.source), transcript=str(self.transcript), censor_style='full'))
+        self.assertEqual(self.document['censor_style'], 'full')
+        self.assertEqual([(r.start, r.end) for r in reviewed_ranges(self.document, 3)], [(1, 2)])
+        output = self.render(sound='beep')
+        # The short beep ends naturally; speech stays muted for the whole word.
+        self.assertLess(self.amplitude(output, 1.02, 440), .001)
+        self.assertLess(self.amplitude(output, 1.8, 440), .001)
+        self.assertLess(self.amplitude(output, 1.8, 1000), .001)
+        self.assertGreater(self.amplitude(output, 2.1, 440), .1)
+        self.assertEqual(self.document['words'][0]['mute_end'], 2)
+
+    def test_censor_style_validation_and_cache_independence(self):
+        with self.assertRaises(CensorError):
+            analyze(dict(source=str(self.source), censor_style='invalid'))
+        with patch('censor.desktop.FasterWhisperBackend.transcribe',
+                   return_value=[WordTimestamp('бля', 1, 2)]) as engine, contextlib.redirect_stdout(io.StringIO()):
+            request = dict(source=str(self.source), cache_dir=str(self.work / 'cache'))
+            middle = analyze(request)
+            full = analyze({**request, 'censor_style': 'full'})
+        engine.assert_called_once()
+        self.assertEqual(middle['censor_style'], 'middle')
+        self.assertGreater(middle['words'][0]['mute_start'], 1)
+        self.assertEqual(full['words'][0]['mute_start'], 1)
+        self.assertEqual(full['words'][0]['mute_end'], 2)

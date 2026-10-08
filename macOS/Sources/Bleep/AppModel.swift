@@ -87,6 +87,7 @@ final class AppModel: ObservableObject {
                 var request: [String: Any] = ["operation": "analyze", "source": url.path,
                     "cache_dir": Self.support.appendingPathComponent("cache").path,
                     "backend": UserDefaults.standard.string(forKey: "backend") ?? "faster-whisper",
+                    "censor_style": UserDefaults.standard.string(forKey: "censorStyle") ?? "middle",
                     "offline": !UserDefaults.standard.bool(forKey: "allowDownloads")]
                 let stream = UserDefaults.standard.integer(forKey: "audioStream")
                 // -1 requests automatic selection and reports ambiguous multi-track media.
