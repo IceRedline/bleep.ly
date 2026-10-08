@@ -24,7 +24,7 @@ brew install ffmpeg
 .venv/bin/pip install -r requirements-mlx.txt
 ```
 
-The app defaults to the project's `.venv/bin/python`, CPU/faster-whisper, `large-v3-turbo`, and Russian speech. Choose **Apple GPU · MLX** in Settings to use the existing MLX implementation. No WhisperKit is involved. Model downloads are disabled by default; enable **Allow first-time model download** if your chosen engine's model is not cached. The app reuses the repository’s `.cache/huggingface` model cache (or an explicitly inherited `HF_HOME`). Recognition happens locally in both cases. No recording is uploaded.
+The app defaults to the project's `.venv/bin/python`, CPU/faster-whisper, `large-v3-turbo`, and Russian speech. Choose **Apple GPU · MLX** in Settings to use the existing MLX implementation. The separate Lab build adds WhisperKit to the same Engine picker; see [WhisperKit Lab](../experiments/README.md). Model downloads are disabled by default; enable **Allow first-time model download** if your chosen engine's model is not cached. The app reuses the repository’s `.cache/huggingface` model cache (or an explicitly inherited `HF_HOME`). Recognition happens locally in both cases. No recording is uploaded.
 
 ## Fast Mode and Advanced Mode
 
@@ -32,13 +32,13 @@ The header switches between **Fast Mode** (the initial default) and **Advanced**
 
 In **Fast Mode**, choose a censor sound if needed, then drop your media. Recognition and export run automatically without a review or save dialog. Video stays video (MOV/MP4/MKV source container, otherwise MKV); audio becomes WAV. The output is saved beside the source as `NAME_censored.ext`, then `NAME_censored_2.ext`, etc. Existing files are never overwritten. The completion screen offers playback, Finder, another file, or **Review in Advanced Mode**. If export fails (for example the source folder is read-only), the review remains available; retry or use **Save as…** without repeating recognition. Cancel stops the current operation. Automatic detection can miss words; use Advanced when you want to verify each interval.
 
-In **Advanced Mode**, analysis stops at the timeline for manual review. Switching modes does not rerun recognition or discard edits. Resuming a saved review or importing a reviewed transcript always opens Advanced. The steps below describe Advanced Mode.
+In **Advanced Mode**, analysis stops at the timeline for manual review. Switching modes does not rerun recognition or discard edits. On the welcome screen the drop target stays fixed while the controls below fade. Click the logo, Home, or ⌘⇧H to cancel any active operation and return to file selection; the autosaved review can be resumed. The colored window background continues behind the native traffic lights. Resuming a saved review or importing a reviewed transcript always opens Advanced. The steps below describe Advanced Mode.
 
 ## Workflow
 
 1. Drop a single video/audio file or choose **Open Media…** (⌘O).
-2. Follow actual stage progress. Model initialization has an indeterminate indicator until inference reports progress. Cancel stops the Python process group and FFmpeg children.
-3. Click a word or timeline marker to hear its original context (0.5 seconds before, 0.7 seconds after). The main player previews the original media, clearly labeled in the interface. The exported file is the processed preview; use **Play export** afterwards.
+2. Follow stage progress. Sparse recognition/export callbacks are supplemented by a labeled Estimated percentage and elapsed time; estimates never reach 100%. Model initialization remains indeterminate. Cancel stops the Python process group and FFmpeg children.
+3. Click a word or timeline marker to hear its original context (0.2 seconds before, 0.2 seconds after). The main player previews the original media, clearly labeled in the interface. The exported file is the processed preview; use **Play export** afterwards.
 4. Uncheck false positives; use **All words** to flag a missed transcript word. **Add interval** handles words absent from the transcript. The timing button edits exact mute boundaries in seconds. ⌘Z undoes up to 100 review edits.
 5. Pick **Beep**, **Silence**, or drop/choose custom audio. The full custom cue plays once at original speed. Speech resumes at the same approved mute endpoint, even while a cue tail is still playing. A cue is only cut by the end of the entire media, not by word length. Overlapping mute ranges form one interval with one cue.
 6. Choose **Audio Only** or **Video**, then **Export** (⌘E). Existing files are never overwritten; choose another filename. For a codec/container mismatch, try MOV or MKV. There is no silent fallback to video re-encoding.
@@ -51,7 +51,7 @@ Reviews autosave to `~/Library/Application Support/bleep.ly/last-review.json`; *
 
 **Import Reviewed Transcript…** reuses an existing word-level transcript for the currently opened source, with its manual flags preserved and no inference. This is also available after an analysis error. It derives the initial middle-word intervals using the approved cap. It does not modify the supplied transcript.
 
-Files with multiple audio tracks require an explicit track selection in Settings. Only that track is processed and exported as stereo. For audio-only sources the Video option is hidden. An empty/no-profanity review can still be exported.
+Files with multiple audio tracks are analyzed independently in both modes. Advanced shows a timeline row for each track; select a row or use the track picker to listen and edit that track. Video exports keep the processed audio tracks separate. Audio Only mixes them into one stereo WAV. Import Reviewed Transcript applies to the selected track when multiple tracks are present. For audio-only sources the Video option is hidden. An empty/no-profanity review can still be exported.
 
 ## Checks
 
