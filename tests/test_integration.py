@@ -40,7 +40,7 @@ class IntegrationTests(unittest.TestCase):
             {"word": "блядь", "start": 1.32, "end": 1.7, "profane": True}]}))
 
     def cli(self, *args):
-        result = subprocess.run([sys.executable, str(ROOT / "censor.py"), str(self.source), "--censor-style", "full", *map(str, args)],
+        result = subprocess.run([sys.executable, str(ROOT / "bleep.py"), str(self.source), "--censor-style", "full", *map(str, args)],
                                 capture_output=True, text=True)
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
         return result.stdout

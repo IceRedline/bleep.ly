@@ -1,1 +1,1 @@
-"""Auto Censor: local transcription, matching, rendering and FCPXML."""
+"""bleep.ly: local transcription, matching, rendering and FCPXML."""

@@ -1,4 +1,4 @@
-# Project workflow
+# bleep.ly project workflow
 
 - Use Git for version control in this project.
 - Make a separate local commit after each completed implementation change and its relevant checks. Do not push unless requested.

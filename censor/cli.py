@@ -35,7 +35,7 @@ def attenuation(value: str) -> float:
 
 
 def parser() -> argparse.ArgumentParser:
-    cli = argparse.ArgumentParser(description="Locally censor Russian profanity in video without re-encoding video.")
+    cli = argparse.ArgumentParser(description="bleep.ly — locally censor Russian profanity in video without re-encoding video.")
     cli.add_argument("input", type=Path, help="source video")
     cli.add_argument("--sound", type=Path, help="custom WAV/audio file (required for rendering)")
     cli.add_argument("--sound-others", type=Path, help="second cue for other speakers; --sound is your cue")
@@ -146,7 +146,7 @@ def execute(args: argparse.Namespace) -> None:
         raise CensorError("--speaker-segments requires --speaker-reference START END.")
     if args.sound_others and not (args.speaker_reference or args.from_transcript):
         raise CensorError("--sound-others requires --speaker-reference or a transcript with speaker labels.")
-    print(f"Auto Censor\n{'─' * 24}\nInput: {source}\nDuration: {timestamp(info.duration)}", flush=True)
+    print(f"bleep.ly\n{'─' * 24}\nInput: {source}\nDuration: {timestamp(info.duration)}", flush=True)
     if info.audio_count > 1:
         print("Note: output includes only the selected audio track (downmixed to stereo).")
     if args.transcribe_only and (args.output or args.fcpxml):
@@ -165,7 +165,7 @@ def execute(args: argparse.Namespace) -> None:
             sound_seconds = sound_duration(args.sound.resolve())
     if args.sound_others:
         sound_duration(args.sound_others.resolve())
-    with tempfile.TemporaryDirectory(prefix="auto-censor-") as folder:
+    with tempfile.TemporaryDirectory(prefix="bleep-ly-") as folder:
         work = Path(folder)
         metadata = {"source": str(source)}
         if args.from_transcript:

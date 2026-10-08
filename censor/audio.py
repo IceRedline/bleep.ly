@@ -91,7 +91,7 @@ def new_output(path: Path):
     if path.exists():
         raise CensorError(f"Output already exists: {path}. Choose another name.")
     path.parent.mkdir(parents=True, exist_ok=True)
-    with tempfile.TemporaryDirectory(prefix=".auto-censor-", dir=path.parent) as folder:
+    with tempfile.TemporaryDirectory(prefix=".bleep-ly-", dir=path.parent) as folder:
         staged = Path(folder) / path.name
         yield staged
         # Atomic no-clobber publication on the same filesystem.
