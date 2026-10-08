@@ -14,7 +14,7 @@ from dataclasses import asdict, replace
 from pathlib import Path
 
 from .audio import (RATE, bed_filter, filter_graph, new_output, prepare_sound)
-from .ffmpeg import extract_audio, input_args, media_info, require_tools, run, sound_duration
+from .ffmpeg import extract_audio, input_args, media_info, probe, require_tools, run, sound_duration
 from .mlx_backend import MLXWhisperBackend, resolve_model
 from .models import CensorRange
 from .profanity import ProfanityMatcher
@@ -34,7 +34,7 @@ def emit(event: str, **payload):
 
 
 def progress(stage, duration):
-    emit("progress", stage=stage, fraction=0)
+    emit("progress", stage=stage, fraction=0, duration=duration)
     last = -1
 
     def update(seconds):
@@ -42,7 +42,7 @@ def progress(stage, duration):
         percent = min(100, max(0, int(seconds / max(duration, .001) * 100)))
         if percent != last:
             last = percent
-            emit("progress", stage=stage, fraction=percent / 100)
+            emit("progress", stage=stage, fraction=percent / 100, duration=duration)
     return update
 
 
@@ -53,6 +53,40 @@ def fingerprint(source):
 
 def analyze(request):
     started = time.perf_counter()
+    source = Path(request["source"]).resolve()
+    if not source.is_file():
+        raise CensorError(f"Input does not exist: {source}")
+    signature = fingerprint(source)
+    streams = [s for s in probe(source)["streams"] if s["codec_type"] == "audio"]
+    selected = request.get("audio_stream")
+    indices = list(range(len(streams))) if selected is None else [selected]
+    if not indices:
+        raise CensorError("Input has no audio track.")
+    # A legacy unscoped transcript must never be copied onto unrelated audio.
+    if request.get("transcript") and len(indices) > 1:
+        raise CensorError("Select the audio track to receive this reviewed transcript.")
+    infos = [media_info(source, index, allow_audio=True) for index in indices]
+    duration = max(info.duration for info in infos)
+    documents = []
+    tracks = []
+    for position, index in enumerate(indices):
+        title = streams[index].get("tags", {}).get("title") or f"Track {index + 1}"
+        tracks.append(dict(index=index, title=title))
+        document = analyze_track({**request, "audio_stream": index, "_duration": duration,
+                                  "_track_label": f"Track {position + 1}/{len(indices)} · " if len(indices) > 1 else ""})
+        documents.append(document)
+    if fingerprint(source) != signature:
+        raise CensorError("Source changed during analysis. Open it again.")
+    result = documents[0]
+    result["words"] = [{**word, "audio_track": track["index"]}
+                       for track, document in zip(tracks, documents) for word in document["words"]]
+    result.update(tracks=tracks, audio_stream=selected, cache_hit=all(d["cache_hit"] for d in documents),
+                  analysis_seconds=time.perf_counter() - started)
+    return result
+
+
+def analyze_track(request):
+    started = time.perf_counter()
     cache_hit = False
     backend = "reviewed-transcript"
     style = request.get("censor_style", "middle")
@@ -61,6 +95,12 @@ def analyze(request):
     source = Path(request["source"]).resolve()
     stream = request.get("audio_stream")
     info = media_info(source, stream, allow_audio=True)
+    info = replace(info, duration=request.get("_duration", info.duration))
+    prefix = request.get("_track_label", "")
+    def report(label, fraction):
+        emit("progress", stage=prefix + label, fraction=fraction, duration=info.duration)
+    def tracking(label, length):
+        return progress(prefix + label, length)
     signature = fingerprint(source)
     if request.get("transcript"):
         words = read_transcript(Path(request["transcript"]), info.duration)
@@ -77,23 +117,23 @@ def analyze(request):
             model_folder = Path(request["whisperkit_model_folder"]).resolve()
             executable = Path(request["whisperkit_executable"]).resolve()
             native_engine = WhisperKitBackend(executable, model_folder,
-                stage=lambda label: emit("progress", stage=label, fraction=0))
-            emit("progress", stage="Preparing WhisperKit model", fraction=0)
+                stage=lambda label: report(label, 0))
+            report("Preparing WhisperKit model", 0)
             prepare_assets(model_folder, offline=request.get("offline", True),
-                           progress=lambda label, value: emit("progress", stage=label, fraction=value))
+                           progress=report)
             key, metadata = cache_identity(source, model_folder, executable, info.audio_index,
-                                          progress("Reading media", source.stat().st_size))
+                                          tracking("Reading media", source.stat().st_size))
         else:
             key, metadata = cache_key(source, model, "ru", compute, info.audio_index,
-                                      progress("Reading media", source.stat().st_size), backend=backend)
+                                      tracking("Reading media", source.stat().st_size), backend=backend)
         cache = Path(request["cache_dir"]) / f"{key}.json"
         words = None if request.get("bypass_cache", False) else load_cache(cache, info.duration)
         cache_hit = words is not None
         if words is None:
             with tempfile.TemporaryDirectory(prefix="bleep-speech-") as folder:
                 audio = Path(folder) / "speech.wav"
-                extract_audio(source, audio, info, progress("Preparing audio", info.duration))
-                callback = progress("Recognizing speech", info.duration)
+                extract_audio(source, audio, info, tracking("Preparing audio", info.duration))
+                callback = tracking("Recognizing speech", info.duration)
                 engine = MLXWhisperBackend if backend == "mlx" else FasterWhisperBackend
                 # Some inference libraries print to stdout; keep the protocol clean.
                 with contextlib.redirect_stdout(sys.stderr):
@@ -145,7 +185,14 @@ def export(request):
     document = request["document"]
     source = Path(document["source"]).resolve()
     output = Path(request["output"]).resolve()
-    info = media_info(source, document.get("audio_stream"), allow_audio=True)
+    tracks = document.get("tracks") or [{"index": document.get("audio_stream") or 0, "title": "Audio"}]
+    indices = [track["index"] for track in tracks]
+    if any(not isinstance(index, int) or isinstance(index, bool) for index in indices) or len(set(indices)) != len(indices):
+        raise CensorError("Invalid review audio tracks.")
+    infos = [media_info(source, index, allow_audio=True) for index in indices]
+    duration = max(info.duration for info in infos)
+    infos = [replace(info, duration=duration) for info in infos]
+    info = infos[0]
     if fingerprint(source) != document["fingerprint"]:
         raise CensorError("Source changed since analysis. Open it again before exporting.")
     kind = request["format"]
@@ -161,7 +208,11 @@ def export(request):
     custom = Path(request["custom_sound"]).resolve() if sound_type == "custom" else None
     if output in {source, custom} or output.exists():
         raise CensorError("Choose a new output name; existing files are never overwritten.")
-    ranges = reviewed_ranges(document, info.duration)
+    if any(word.get("audio_track", indices[0]) not in indices for word in document["words"]):
+        raise CensorError("A review word refers to an unknown audio track.")
+    track_ranges = [reviewed_ranges({"words": [w for w in document["words"]
+                      if w.get("audio_track", indices[0]) == index]}, duration) for index in indices]
+    ranges = [interval for values in track_ranges for interval in values]
     with tempfile.TemporaryDirectory(prefix="bleep-export-") as folder:
         work = Path(folder)
         cue = None
@@ -175,14 +226,33 @@ def export(request):
                      f"sine=frequency=1000:sample_rate={RATE}:duration={MUTE_CAP}", str(raw)])
                 prepare_sound(raw, cue, MUTE_CAP)
         graph = work / "mix.ffgraph"
-        graph.write_text(filter_graph(info, ranges, "mute", -30, sound_duration(cue)) if cue else
-                         f"[0:{info.audio_index}]{bed_filter(info, ranges, 'mute', -30)}[out]")
+        graphs = []
+        cue_tracks = [i for i, values in enumerate(track_ranges) if cue and values]
+        if cue_tracks:
+            graphs.append(f"[1:a:0]asplit={len(cue_tracks)}" + ''.join(f"[cue{i}]" for i in cue_tracks))
+        outputs = []
+        import re
+        for i, (track_info, values) in enumerate(zip(infos, track_ranges)):
+            track_graph = (filter_graph(track_info, values, "mute", -30, sound_duration(cue)) if cue and values else
+                           f"[0:{track_info.audio_index}]{bed_filter(track_info, values, 'mute', -30)}[out]")
+            track_graph = track_graph.replace('[1:a:0]', f'[cue{i}]')
+            track_graph = re.sub(r'\[(bed|out|s\d+|b\d+)\]', lambda m: f'[t{i}{m[1]}]', track_graph)
+            graphs.append(track_graph)
+            outputs.append(f'[t{i}out]')
+        if kind == 'audio' and len(outputs) > 1:
+            graphs.append(''.join(outputs) + f'amix=inputs={len(outputs)}:duration=longest:normalize=1[out]')
+            outputs = ['[out]']
+        graph.write_text(';\n'.join(graphs))
+        audio_maps = [arg for label in outputs for arg in ('-map', label)]
+        metadata = ([arg for i, index in enumerate(indices) for arg in
+                     (f'-map_metadata:s:a:{i}', f'0:s:a:{index}')]
+                    if kind == 'video' else [])
         with new_output(output) as staged:
             run(["ffmpeg", "-hide_banner", "-loglevel", "error", "-nostdin", "-n",
                  *input_args(source, info), *(["-i", str(cue)] if cue else []),
                  "-filter_complex_script", str(graph),
                  *(["-map", f"0:{info.video_index}", "-c:v", "copy"] if kind == "video" else []),
-                 "-map", "[out]", "-map_metadata", "0",
+                 *audio_maps, "-map_metadata", "0", *metadata,
                  *(["-c:a", "aac", "-b:a", "320k", "-avoid_negative_ts", "disabled"] if kind == "video"
                    else ["-c:a", "pcm_s24le", "-rf64", "auto"]),
                  "-ar", str(RATE), "-t", f"{info.duration:.9f}", str(staged)],
