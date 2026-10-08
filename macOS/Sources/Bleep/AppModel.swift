@@ -533,6 +533,8 @@ final class AppModel: ObservableObject {
     }
     func chooseSound() {
         let panel = NSOpenPanel(); panel.allowedContentTypes = [.audio]
+        panel.allowsMultipleSelection = false
+        panel.canChooseDirectories = false
         if panel.runModal() == .OK, let url = panel.url { setSound(url) }
     }
     func setSound(_ url: URL) {
