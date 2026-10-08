@@ -238,42 +238,39 @@ struct ContentView: View {
                 Text("Flagged").tag(false); Text("All words").tag(true)
             }.pickerStyle(.segmented)
             TextField("Search transcript", text: $model.search).textFieldStyle(.roundedBorder)
-            ScrollViewReader { proxy in
-                ScrollView {
-                    LazyVStack(spacing: 4) {
-                        if model.visibleWords.isEmpty {
-                            Text("Nothing here. Switch to All words or add a missed interval.")
-                                .font(.callout).foregroundStyle(.secondary).padding(18)
-                        }
-                        ForEach(model.visibleWords) { word in
-                            HStack(spacing: 9) {
-                                Button { model.audition(word) } label: {
-                                    HStack {
-                                        Image(systemName: "play.circle").foregroundStyle(.mint)
-                                        VStack(alignment: .leading, spacing: 3) {
-                                            Text(word.word).lineLimit(1)
-                                            Text("\(clockText(word.start)) · \(word.muteEnd - word.muteStart, specifier: "%.2f")s muted")
-                                                .font(.caption2).foregroundStyle(.secondary).monospacedDigit()
-                                        }
-                                        Spacer(minLength: 0)
-                                    }.contentShape(Rectangle())
-                                }.buttonStyle(.plain).help("Listen in context")
-                                Button { editingWord = word; showInterval = true } label: {
-                                    Image(systemName: "slider.horizontal.3").foregroundStyle(.secondary)
-                                }.buttonStyle(.borderless).help("Adjust mute timing")
-                                Toggle("Censor \(word.word)", isOn: Binding(get: { word.profane }, set: { _ in model.toggle(word) }))
-                                    .labelsHidden().toggleStyle(.checkbox)
-                            }.padding(10)
-                                .background(model.selected == word.id ? .mint.opacity(0.16) : .clear, in: RoundedRectangle(cornerRadius: 9))
-                                .id(word.id)
-                        }
+            ScrollView {
+                LazyVStack(spacing: SmoothReviewScroll.rowSpacing) {
+                    if model.visibleWords.isEmpty {
+                        Text("Nothing here. Switch to All words or add a missed interval.")
+                            .font(.callout).foregroundStyle(.secondary).padding(18)
                     }
-                }.onChange(of: model.selected) { _, id in
-                    guard let id, model.visibleWords.contains(where: { $0.id == id }) else { return }
-                    withAnimation(reduceMotion ? nil : .easeInOut(duration: 0.18)) {
-                        proxy.scrollTo(id, anchor: .center)
+                    ForEach(model.visibleWords) { word in
+                        HStack(spacing: 9) {
+                            Button { model.audition(word) } label: {
+                                HStack {
+                                    Image(systemName: "play.circle").foregroundStyle(.mint)
+                                    VStack(alignment: .leading, spacing: 3) {
+                                        Text(word.word).lineLimit(1)
+                                        Text("\(clockText(word.start)) · \(word.muteEnd - word.muteStart, specifier: "%.2f")s muted")
+                                            .font(.caption2).foregroundStyle(.secondary).monospacedDigit()
+                                    }
+                                    Spacer(minLength: 0)
+                                }.contentShape(Rectangle())
+                            }.buttonStyle(.plain).help("Listen in context")
+                            Button { editingWord = word; showInterval = true } label: {
+                                Image(systemName: "slider.horizontal.3").foregroundStyle(.secondary)
+                            }.buttonStyle(.borderless).help("Adjust mute timing")
+                            Toggle("Censor \(word.word)", isOn: Binding(get: { word.profane }, set: { _ in model.toggle(word) }))
+                                .labelsHidden().toggleStyle(.checkbox)
+                        }.padding(.horizontal, 10)
+                            .frame(height: SmoothReviewScroll.rowHeight)
+                            .background(model.selected == word.id ? .mint.opacity(0.16) : .clear, in: RoundedRectangle(cornerRadius: 9))
+                            .id(word.id)
                     }
                 }
+                .background(SmoothReviewScroll(selection: model.selected,
+                    index: model.visibleWords.firstIndex(where: { $0.id == model.selected }),
+                    reduceMotion: reduceMotion))
             }
         }.padding(14).background(.black.opacity(0.15), in: RoundedRectangle(cornerRadius: 16))
     }
