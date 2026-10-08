@@ -21,10 +21,12 @@ struct ContentView: View {
     }
     var body: some View {
         ZStack {
+            ZStack {
             Color(red: 0.035, green: 0.055, blue: 0.11)
             RadialGradient(colors: [tint.opacity(reduceTransparency ? 0.3 : 0.48), .clear],
                            center: .topLeading, startRadius: 30, endRadius: 950)
             RadialGradient(colors: [tint.opacity(0.20), .clear], center: .bottomTrailing, startRadius: 0, endRadius: 650)
+            }.ignoresSafeArea()
             VStack(spacing: 0) {
                 header
                 if model.document?.engine == "whisperkit" && !model.busy {
@@ -40,6 +42,7 @@ struct ContentView: View {
             }.padding(30)
         }
         .animation(reduceMotion ? nil : .easeInOut(duration: 0.65), value: tint)
+        .background(WindowChrome())
         .preferredColorScheme(.dark)
         .tint(.mint)
         .frame(minWidth: 880, minHeight: 690)
@@ -53,8 +56,16 @@ struct ContentView: View {
 
     private var header: some View {
         HStack(alignment: .center, spacing: 10) {
-            Image(systemName: "waveform").font(.title2.weight(.semibold)).foregroundStyle(.mint)
-            Text("bleep.ly").font(.system(size: 24, weight: .bold, design: .rounded)).tracking(-0.7)
+            Button(action: model.goHome) {
+                HStack(spacing: 10) {
+                    Image(systemName: "waveform").font(.title2.weight(.semibold)).foregroundStyle(.mint)
+                    Text("bleep.ly").font(.system(size: 24, weight: .bold, design: .rounded)).tracking(-0.7)
+                }
+            }.buttonStyle(.plain).help("Return home").accessibilityLabel("bleep.ly · Home")
+            if model.document != nil || model.busy {
+                Button(action: model.goHome) { Label("Home", systemImage: "house") }
+                    .buttonStyle(.borderless).help(model.busy ? "Cancel processing and return home" : "Return to file selection")
+            }
             Text("A little less explicit.").font(.callout).foregroundStyle(.secondary).padding(.leading, 12)
             if WhisperKitExperiment.available {
                 Text("LAB").font(.caption2.bold()).foregroundStyle(.orange)
@@ -95,11 +106,14 @@ struct ContentView: View {
             .frame(maxWidth: .infinity, minHeight: 370)
             .background(.white.opacity(dropTarget ? 0.09 : 0.025), in: RoundedRectangle(cornerRadius: 28))
             .overlay(RoundedRectangle(cornerRadius: 28).strokeBorder(dropTarget ? Color.mint : .white.opacity(0.17), style: StrokeStyle(lineWidth: 1.5, dash: [7, 7])))
+            .background(GeometryReader { geometry in
+                Color.clear.preference(key: DropZoneFrameKey.self, value: geometry.frame(in: .named("welcome")))
+            })
             .dropDestination(for: URL.self) { urls, _ in
                 guard let url = urls.first, url.isFileURL, urls.count == 1 else { return false }
                 model.open(url); return true
             } isTargeted: { dropTarget = $0 }
-            if model.workflowMode == .fast {
+            ZStack {
                 HStack(spacing: 32) {
                     soundControls
                     VStack(alignment: .leading, spacing: 6) {
@@ -108,17 +122,23 @@ struct ContentView: View {
                             .font(.caption).foregroundStyle(.secondary)
                     }
                 }
-            } else {
+                .opacity(model.workflowMode == .fast ? 1 : 0)
+                .allowsHitTesting(model.workflowMode == .fast)
+                .accessibilityHidden(model.workflowMode != .fast)
                 HStack(spacing: 32) {
                     Label("On-device recognition", systemImage: "lock.shield")
                     Label("Review every word", systemImage: "waveform.path")
                     Label("Original video quality", systemImage: "film")
                 }.font(.callout).foregroundStyle(.secondary)
+                .opacity(model.workflowMode == .advanced ? 1 : 0)
+                .allowsHitTesting(model.workflowMode == .advanced)
+                .accessibilityHidden(model.workflowMode != .advanced)
             }
+            .animation(.easeInOut(duration: reduceMotion ? 0.1 : 0.2), value: model.workflowMode)
             Button("Resume last review", action: model.restoreDraft).buttonStyle(.plain).foregroundStyle(.mint)
             Spacer(minLength: 10)
             Text("Made for the final cut.").font(.caption).foregroundStyle(.secondary)
-        }
+        }.coordinateSpace(name: "welcome")
     }
 
     private var processing: some View {
@@ -128,6 +148,7 @@ struct ContentView: View {
                 Circle().stroke(.white.opacity(0.08), lineWidth: 8)
                 Circle().trim(from: 0, to: max(0.015, model.fraction))
                     .stroke(.mint, style: StrokeStyle(lineWidth: 8, lineCap: .round)).rotationEffect(.degrees(-90))
+                    .animation(reduceMotion ? nil : .easeOut(duration: 0.2), value: model.fraction)
                 Image(systemName: model.phase == .exporting ? "arrow.up.doc" : "waveform")
                     .font(.system(size: 44, weight: .light)).foregroundStyle(.mint)
             }.frame(width: 140, height: 140)
@@ -139,8 +160,8 @@ struct ContentView: View {
             VStack(spacing: 8) {
                 Text(model.stage).font(.headline)
                 if model.fraction > 0 {
-                    Text("\(Int(model.fraction * 100))% of this stage").monospacedDigit().foregroundStyle(.secondary)
-                } else { ProgressView().controlSize(.small) }
+                    Text("\(model.progressIsEstimated ? "Estimated " : "")\(Int(model.fraction * 100))% · \(clockText(model.stageElapsed)) elapsed").monospacedDigit().foregroundStyle(.secondary)
+                } else { HStack { ProgressView().controlSize(.small); Text("\(clockText(model.stageElapsed)) elapsed").foregroundStyle(.secondary).monospacedDigit() } }
             }.frame(height: 48)
             Text(model.phase == .analyzing ? "Audio stays on your Mac. The first model load can take a moment." : "Your review and original media are kept intact.")
                 .font(.callout).foregroundStyle(.secondary)
@@ -183,7 +204,7 @@ struct ContentView: View {
                         }.buttonStyle(.borderless)
                         Text(clockText(model.playhead)).monospacedDigit().font(.caption)
                         Spacer()
-                        Text("Original audio preview").font(.caption).foregroundStyle(.secondary)
+                        Text("Original audio · Track \(model.selectedAudioTrack + 1)").font(.caption).foregroundStyle(.secondary)
                     }
                 }.frame(maxWidth: .infinity)
                 wordList(document).frame(width: 345)
@@ -209,6 +230,11 @@ struct ContentView: View {
                 Button { editingWord = nil; showInterval = true } label: { Image(systemName: "plus") }
                     .help("Add a missed interval")
                 Button(action: model.undo) { Image(systemName: "arrow.uturn.backward") }.disabled(!model.canUndo).help("Undo")
+            }
+            if document.audioTracks.count > 1 {
+                Picker("Audio track", selection: Binding(get: { model.selectedAudioTrack }, set: { model.selectAudioTrack($0) })) {
+                    ForEach(document.audioTracks) { track in Text(track.title).tag(track.index) }
+                }
             }
             Picker("Show", selection: $model.showAllWords) {
                 Text("Flagged").tag(false); Text("All words").tag(true)
@@ -257,7 +283,12 @@ struct ContentView: View {
                 Label("Selected intervals", systemImage: "rectangle.fill").font(.caption).foregroundStyle(.orange.opacity(0.9))
                 Button("Add interval") { editingWord = nil; showInterval = true }.buttonStyle(.borderless)
             }.foregroundStyle(.secondary)
-            GeometryReader { geo in
+            ForEach(document.audioTracks) { track in
+                HStack(spacing: 10) {
+                    Button { model.selectAudioTrack(track.index) } label: {
+                        Text(track.title).lineLimit(1).frame(width: 100, alignment: .leading)
+                    }.buttonStyle(.plain).foregroundStyle(model.selectedAudioTrack == track.index ? Color.mint : Color.secondary)
+                    GeometryReader { geo in
                 ZStack(alignment: .leading) {
                     RoundedRectangle(cornerRadius: 8).fill(.white.opacity(0.045))
                     Path { path in
@@ -267,7 +298,7 @@ struct ContentView: View {
                             path.addLine(to: CGPoint(x: x, y: 46))
                         }
                     }.stroke(.white.opacity(0.14), lineWidth: 1)
-                    ForEach(document.words.filter(\.profane)) { word in
+                    ForEach(document.words.filter { $0.profane && ($0.audioTrack ?? document.audioStream ?? 0) == track.index }) { word in
                         Button { model.audition(word) } label: {
                             RoundedRectangle(cornerRadius: 3)
                                 .fill(model.selected == word.id ? Color.mint : Color.orange.opacity(0.85))
@@ -280,7 +311,9 @@ struct ContentView: View {
                     Rectangle().fill(.white).frame(width: 1.5, height: 48)
                         .offset(x: geo.size.width * min(1, model.playhead / document.duration)).allowsHitTesting(false)
                 }
-            }.frame(height: 48)
+                    }.frame(height: 48)
+                }
+            }
             Slider(value: Binding(get: { min(document.duration, model.playhead) }, set: { model.seek($0) }), in: 0...document.duration)
                 .accessibilityLabel("Playback position")
             HStack { Text("0:00"); Spacer(); Text(clockText(document.duration)) }
@@ -348,7 +381,7 @@ struct ContentView: View {
                     Text("Audio Only").tag("audio")
                     if document.hasVideo { Text("Video").tag("video") }
                 }.labelsHidden().pickerStyle(.segmented).frame(width: 200)
-                Text(model.exportFormat == "video" ? "Original video · no re-encoding" : "WAV · 48 kHz · 24-bit stereo")
+                Text(model.exportFormat == "video" ? "Original video · no re-encoding" : "WAV · stereo mix of all tracks")
                     .font(.caption).foregroundStyle(.secondary)
             }
             Spacer(minLength: 0)

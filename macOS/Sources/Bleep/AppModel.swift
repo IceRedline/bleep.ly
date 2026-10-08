@@ -10,8 +10,13 @@ final class AppModel: ObservableObject {
     @Published private(set) var workflowMode: WorkflowMode
     @Published var document: ReviewDocument?
     @Published var selected: UUID?
+    @Published var selectedAudioTrack = 0
     @Published var stage = "Preparing"
     @Published var fraction = 0.0
+    @Published var progressIsEstimated = false
+    @Published var stageElapsed = 0.0
+    private var progressState = StageProgress()
+    private var progressTask: Task<Void, Never>?
     @Published var error: String?
     @Published var sourceName = ""
     @Published var sound = "beep"
@@ -33,6 +38,9 @@ final class AppModel: ObservableObject {
     private var previewGeneration = UUID()
     private var undoDocuments: [ReviewDocument] = []
     private var pendingSource: URL?
+    private var returnHomeAfterCancel = false
+    private var playerLoadTask: Task<Void, Never>?
+    private var playerGeneration = UUID()
 
     static var support: URL {
         FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
@@ -51,7 +59,7 @@ final class AppModel: ObservableObject {
         return path.isEmpty ? root.appendingPathComponent(".venv/bin/python") : URL(fileURLWithPath: path)
     }
     var visibleWords: [ReviewWord] {
-        (document?.words ?? []).filter { (showAllWords || $0.profane) &&
+        (document?.words ?? []).filter { ($0.audioTrack ?? document?.audioStream ?? 0) == selectedAudioTrack && (showAllWords || $0.profane) &&
             (search.isEmpty || $0.word.localizedCaseInsensitiveContains(search)) }
     }
 
@@ -79,7 +87,7 @@ final class AppModel: ObservableObject {
     }
 
     @discardableResult
-    func open(_ url: URL, transcript: URL? = nil, workflow: WorkflowMode? = nil) -> Task<Void, Never>? {
+    func open(_ url: URL, transcript: URL? = nil, workflow: WorkflowMode? = nil, replacingTrack: Int? = nil) -> Task<Void, Never>? {
         guard !busy else { return nil }
         let selectedMode = workflow ?? (transcript == nil ? workflowMode : .advanced)
         if selectedMode == .fast && sound == "custom" && customSound == nil {
@@ -87,6 +95,7 @@ final class AppModel: ObservableObject {
             return nil
         }
         selectMode(selectedMode)
+        let previousDocument = document
         let selectedSound = sound
         let selectedCustomSound = customSound
         // A new source deliberately starts a fresh review; the last draft stays on disk until success.
@@ -98,7 +107,12 @@ final class AppModel: ObservableObject {
         cancelling = false
         error = nil
         phase = .analyzing
+        beginProgressUpdates()
         return Task {
+            defer {
+                progressTask?.cancel(); progressTask = nil; progressIsEstimated = false; stageElapsed = 0
+                if returnHomeAfterCancel { returnHomeAfterCancel = false; startNewFile() }
+            }
             if cancelling {
                 phase = document == nil ? .ready : .review
                 cancelling = false
@@ -110,23 +124,31 @@ final class AppModel: ObservableObject {
                     "backend": WhisperKitExperiment.backend(defaults: defaults),
                     "censor_style": defaults.string(forKey: "censorStyle") ?? "middle",
                     "offline": !defaults.bool(forKey: "allowDownloads")]
-                let stream = defaults.integer(forKey: "audioStream")
-                // 0 requests automatic selection and reports ambiguous multi-track media.
-                if stream > 0 { request["audio_stream"] = stream - 1 }
+                if let replacingTrack { request["audio_stream"] = replacingTrack }
                 if request["backend"] as? String == "whisperkit", transcript == nil {
                     request["whisperkit_executable"] = WhisperKitExperiment.helper.path
                     request["whisperkit_model_folder"] = root.appendingPathComponent(".cache/whisperkit/model").path
                 }
                 if let transcript { request["transcript"] = transcript.path }
-                let result = try await bridge.run(root: root, python: python, request: request, progress: updateProgress)
-                document = try JSONDecoder.bridge.decode(ReviewDocument.self, from: result)
+                let result = try await bridge.run(root: root, python: python, request: request, progress: updateProgress, timing: { self.progressState.duration = $0 })
+                let analyzed = try JSONDecoder.bridge.decode(ReviewDocument.self, from: result)
+                if let replacingTrack, var previous = previousDocument, previous.source == analyzed.source {
+                    guard previous.fingerprint == analyzed.fingerprint else {
+                        throw BridgeFailure(message: "Source changed since analysis. Open it again before importing a track.")
+                    }
+                    let fallbackTrack = previous.audioStream ?? 0
+                    previous.words.removeAll { ($0.audioTrack ?? fallbackTrack) == replacingTrack }
+                    previous.words += analyzed.words
+                    document = previous
+                } else { document = analyzed }
+                selectedAudioTrack = replacingTrack ?? document?.audioTracks.first?.index ?? 0
                 undoDocuments = []
                 hasEdits = false
                 selected = document?.words.first(where: \.profane)?.id
                 exportFormat = document?.hasVideo == true ? "video" : "audio"
                 exportURL = nil
-                player.replaceCurrentItem(with: AVPlayerItem(url: url))
                 playhead = 0
+                preparePlayer()
                 saveDraft()
                 if selectedMode == .fast, let document {
                     let destination = document.automaticOutputURL()
@@ -151,20 +173,53 @@ final class AppModel: ObservableObject {
         defaults.set(mode.rawValue, forKey: "workflowMode")
     }
 
+    func goHome() {
+        if busy {
+            returnHomeAfterCancel = true
+            cancel()
+        } else {
+            startNewFile()
+        }
+    }
+
     func startNewFile() {
         guard !busy else { return }
         pause()
+        playerLoadTask?.cancel(); playerGeneration = UUID()
         player.replaceCurrentItem(with: nil)
+        selectedAudioTrack = 0
         document = nil; selected = nil; exportURL = nil; error = nil
         undoDocuments = []; pendingSource = nil; sourceName = ""
         search = ""; showAllWords = false; hasEdits = false
+        fraction = 0; stage = "Preparing"; playhead = 0
         phase = .ready
+    }
+
+    private func beginProgressUpdates() {
+        progressTask?.cancel()
+        progressState = StageProgress()
+        progressState.report(stage, fraction: 0, now: ProcessInfo.processInfo.systemUptime)
+        progressTask = Task { @MainActor [weak self] in
+            while !Task.isCancelled {
+                try? await Task.sleep(nanoseconds: 200_000_000)
+                guard !Task.isCancelled, let self, self.busy else { return }
+                let now = ProcessInfo.processInfo.systemUptime
+                self.stageElapsed = max(0, now - self.progressState.started)
+                guard !self.cancelling else { continue }
+                self.progressState.advance(now: now)
+                self.fraction = self.progressState.displayed
+                self.progressIsEstimated = self.progressState.estimated
+            }
+        }
     }
 
     func updateProgress(_ label: String, _ value: Double) {
         guard busy, !cancelling else { return }
+        progressState.report(label, fraction: value, now: ProcessInfo.processInfo.systemUptime)
         stage = label
-        fraction = value
+        stageElapsed = max(0, ProcessInfo.processInfo.systemUptime - progressState.started)
+        fraction = progressState.displayed
+        progressIsEstimated = progressState.estimated
     }
 
     func cancel() { cancelling = true; stage = "Cancelling…"; bridge.cancel() }
@@ -182,17 +237,76 @@ final class AppModel: ObservableObject {
             player.play(); isPlaying = true
         }
     }
+    @discardableResult
+    func selectAudioTrack(_ index: Int) -> Task<Void, Never>? {
+        guard document?.audioTracks.contains(where: { $0.index == index }) == true else { return nil }
+        pause(); selectedAudioTrack = index; selected = nil
+        return preparePlayer()
+    }
+
+    @discardableResult
+    private func preparePlayer() -> Task<Void, Never>? {
+        playerLoadTask?.cancel(); playerLoadTask = nil
+        let generation = UUID(); playerGeneration = generation
+        guard let document else { return nil }
+        if document.audioCount == 1 {
+            player.replaceCurrentItem(with: AVPlayerItem(url: document.url))
+            return nil
+        }
+        let index = selectedAudioTrack
+        let position = playhead
+        player.replaceCurrentItem(with: nil)
+        let task = Task { @MainActor in
+            do {
+                let asset = AVURLAsset(url: document.url)
+                let audio = try await asset.loadTracks(withMediaType: .audio)
+                let video = try await asset.loadTracks(withMediaType: .video)
+                guard audio.indices.contains(index) else { throw BridgeFailure(message: "Audio track is unavailable.") }
+                let composition = AVMutableComposition()
+                var origin = CMTime.zero
+                if let sourceVideo = video.first, document.hasVideo {
+                    let range = try await sourceVideo.load(.timeRange)
+                    origin = range.start
+                    let target = composition.addMutableTrack(withMediaType: .video, preferredTrackID: kCMPersistentTrackID_Invalid)
+                    try target?.insertTimeRange(range, of: sourceVideo, at: .zero)
+                    target?.preferredTransform = try await sourceVideo.load(.preferredTransform)
+                }
+                let sourceAudio = audio[index]
+                let range = try await sourceAudio.load(.timeRange)
+                let start = CMTimeMaximum(range.start, origin)
+                let end = CMTimeMinimum(range.end, origin + CMTime(seconds: document.duration, preferredTimescale: 600))
+                if end > start {
+                    let target = composition.addMutableTrack(withMediaType: .audio, preferredTrackID: kCMPersistentTrackID_Invalid)
+                    try target?.insertTimeRange(CMTimeRange(start: start, end: end), of: sourceAudio, at: start - origin)
+                }
+                guard !Task.isCancelled, playerGeneration == generation else { return }
+                player.replaceCurrentItem(with: AVPlayerItem(asset: composition))
+                await player.seek(to: CMTime(seconds: position, preferredTimescale: 600))
+            } catch {
+                if !Task.isCancelled && playerGeneration == generation { self.error = "Could not preview track: \(error.localizedDescription)" }
+            }
+        }
+        playerLoadTask = task
+        return task
+    }
+
     func audition(_ word: ReviewWord) {
         pause()
+        let track = word.audioTrack ?? document?.audioStream ?? 0
+        let loading = track != selectedAudioTrack ? selectAudioTrack(track) : playerLoadTask
         selected = word.id
-        auditionEnd = min(document?.duration ?? word.end, word.end + 0.7)
-        let token = UUID()
-        previewGeneration = token
-        player.seek(to: CMTime(seconds: max(0, word.start - 0.5), preferredTimescale: 600),
-                    toleranceBefore: .zero, toleranceAfter: .zero) { [weak self] finished in
-            Task { @MainActor in
-                guard let self, finished, self.previewGeneration == token else { return }
-                self.player.play(); self.isPlaying = true
+        let context = word.contextRange(duration: document?.duration ?? word.end)
+        auditionEnd = context.upperBound
+        let token = UUID(); previewGeneration = token
+        Task { @MainActor in
+            await loading?.value
+            guard previewGeneration == token else { return }
+            player.seek(to: CMTime(seconds: context.lowerBound, preferredTimescale: 600),
+                        toleranceBefore: .zero, toleranceAfter: .zero) { [weak self] finished in
+                Task { @MainActor in
+                    guard let self, finished, self.previewGeneration == token else { return }
+                    self.player.play(); self.isPlaying = true
+                }
             }
         }
     }
@@ -220,7 +334,7 @@ final class AppModel: ObservableObject {
     func addInterval(label: String, start: Double, end: Double) {
         guard document?.validateInterval(start: start, end: end) == true else { return }
         let word = ReviewWord(word: label.isEmpty ? "Manual interval" : label, start: start, end: end,
-                              profane: true, muteStart: start, muteEnd: end)
+                              profane: true, muteStart: start, muteEnd: end, audioTrack: selectedAudioTrack)
         edit { value in value.words.append(word); value.words.sort { $0.start < $1.start } }
         selected = word.id
     }
@@ -250,7 +364,8 @@ final class AppModel: ObservableObject {
             selectMode(.advanced)
             pause(); document = restored; undoDocuments = []; selected = nil
             sourceName = restored.url.lastPathComponent
-            player.replaceCurrentItem(with: AVPlayerItem(url: restored.url))
+            selectedAudioTrack = restored.audioTracks.first?.index ?? 0
+            preparePlayer()
             exportFormat = restored.hasVideo ? "video" : "audio"
             exportURL = nil; phase = .review
         } catch { self.error = error.localizedDescription }
@@ -261,7 +376,9 @@ final class AppModel: ObservableObject {
         }
         let panel = NSOpenPanel(); panel.allowedContentTypes = [.json]
         panel.message = "Import reviewed word timestamps for \(source.lastPathComponent)"
-        if panel.runModal() == .OK, let url = panel.url { open(source, transcript: url) }
+        if panel.runModal() == .OK, let url = panel.url {
+            open(source, transcript: url, replacingTrack: (document?.audioTracks.count ?? 0) > 1 ? selectedAudioTrack : nil)
+        }
     }
     func chooseSound() {
         let panel = NSOpenPanel(); panel.allowedContentTypes = [.audio]
@@ -297,7 +414,12 @@ final class AppModel: ObservableObject {
         error = nil; exportURL = nil
         // Set busy synchronously so two clicks cannot launch competing exports.
         pause(); phase = .exporting; cancelling = false
+        beginProgressUpdates()
         return Task {
+            defer {
+                progressTask?.cancel(); progressTask = nil; progressIsEstimated = false; stageElapsed = 0
+                if returnHomeAfterCancel { returnHomeAfterCancel = false; startNewFile() }
+            }
             if cancelling { phase = .review; cancelling = false; return }
             do {
                 try await render(document, to: output, format: format, sound: selectedSound, customSound: selectedCustomSound)
@@ -311,12 +433,13 @@ final class AppModel: ObservableObject {
 
     private func render(_ document: ReviewDocument, to destination: URL, format: String,
                         sound: String, customSound: URL?) async throws {
-        pause(); phase = .exporting; stage = "Preparing export"; fraction = 0
+        pause(); phase = .exporting
+        updateProgress("Preparing export", 0)
         var request: [String: Any] = ["operation": "export", "output": destination.path,
             "format": format, "sound": sound,
             "document": try JSONSerialization.jsonObject(with: JSONEncoder.bridge.encode(document))]
         if let customSound { request["custom_sound"] = customSound.path }
-        _ = try await bridge.run(root: root, python: python, request: request, progress: updateProgress)
+        _ = try await bridge.run(root: root, python: python, request: request, progress: updateProgress, timing: { self.progressState.duration = $0 })
         exportURL = destination; phase = .done
     }
 }

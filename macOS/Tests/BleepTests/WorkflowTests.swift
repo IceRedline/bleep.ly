@@ -122,4 +122,29 @@ final class WorkflowTests: XCTestCase {
         XCTAssertFalse(FileManager.default.fileExists(atPath: source.deletingLastPathComponent()
             .appendingPathComponent("audio_censored.wav").path))
     }
+    func testHomeCancelsAndReturnsToEmptyWelcome() async throws {
+        let (model, source, transcript, _) = try fixture()
+        let task = try XCTUnwrap(model.open(source, transcript: transcript, workflow: .fast))
+        model.goHome()
+        await task.value
+        XCTAssertEqual(model.phase, .ready)
+        XCTAssertNil(model.document)
+        XCTAssertNil(model.exportURL)
+        XCTAssertFalse(model.cancelling)
+        await model.open(source, transcript: transcript, workflow: .advanced)?.value
+        XCTAssertEqual(model.phase, .review)
+        model.goHome()
+        XCTAssertEqual(model.phase, .ready)
+        XCTAssertNil(model.document)
+        XCTAssertNil(model.player.currentItem)
+        model.restoreDraft()
+        XCTAssertEqual(model.phase, .review)
+        XCTAssertNotNil(model.document)
+        let export = try XCTUnwrap(model.beginExport())
+        model.goHome()
+        await export.value
+        XCTAssertEqual(model.phase, .ready)
+        XCTAssertNil(model.exportURL)
+    }
+
 }

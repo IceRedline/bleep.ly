@@ -15,6 +15,7 @@ struct BleepApp: App {
         .windowStyle(.hiddenTitleBar)
         .commands {
             CommandGroup(replacing: .newItem) {
+                Button("Home", action: model.goHome).keyboardShortcut("h", modifiers: [.command, .shift])
                 Button("Open Media…", action: model.chooseSource).keyboardShortcut("o").disabled(model.busy)
                 Button("Resume Last Review", action: model.restoreDraft).disabled(model.busy)
                 Button("Import Reviewed Transcript…", action: model.importTranscript).disabled(model.busy)
@@ -50,7 +51,6 @@ struct SettingsView: View {
     @AppStorage("pythonPath") private var pythonPath = ""
     @AppStorage("backend") private var backend = "faster-whisper"
     @AppStorage("allowDownloads") private var allowDownloads = false
-    @AppStorage("audioStream") private var audioStream = 0
     @AppStorage("censorStyle") private var censorStyle = "middle"
 
     var body: some View {
@@ -96,12 +96,8 @@ struct SettingsView: View {
                 Text("By default, uses .venv/bin/python in your project folder. FFmpeg must be installed.")
                     .font(.caption).foregroundStyle(.secondary)
             }
-            Section("Audio track") {
-                Picker("Track to process", selection: $audioStream) {
-                    Text("Automatic (single track)").tag(0)
-                    ForEach(1...16, id: \.self) { Text("Track \($0)").tag($0) }
-                }
-                Text("For media with multiple audio tracks, select one before opening. Only that track is exported, as stereo.")
+            Section("Audio tracks") {
+                Text("All audio tracks are processed separately. Advanced shows each track for review; Video export keeps them separate. Audio Only exports a stereo mix.")
                     .font(.caption).foregroundStyle(.secondary)
             }
         }
