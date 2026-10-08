@@ -67,6 +67,9 @@ final class MultiTrackWorkflowTests: XCTestCase {
         XCTAssertFalse(model.isPlaying)
         XCTAssertLessThan(model.playhead, 2.6)
         XCTAssertGreaterThanOrEqual(model.playhead, 2.4)
+        await model.setPreviewCensorship(true)?.value
+        XCTAssertNil(model.error)
+        XCTAssertTrue(model.previewCensorship)
         let host = NSHostingView(rootView: ContentView(model: model).frame(width: 880, height: 690))
         let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 880, height: 690),
                               styleMask: [.titled, .closable, .resizable], backing: .buffered, defer: false)

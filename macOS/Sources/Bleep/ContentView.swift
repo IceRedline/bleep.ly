@@ -188,21 +188,23 @@ struct ContentView: View {
                 VStack(spacing: 12) {
                     if document.hasVideo {
                         VideoPlayer(player: model.player).frame(minHeight: 150, maxHeight: .infinity)
+                            .overlay { if model.preparingPreview { previewPreparation } }
                             .clipShape(RoundedRectangle(cornerRadius: 16))
                     } else {
                         VStack(spacing: 14) {
                             Image(systemName: "waveform").font(.system(size: 48, weight: .ultraLight)).foregroundStyle(.mint)
-                            Text("Audio Only").foregroundStyle(.secondary)
+                            if model.preparingPreview { previewPreparation }
+                            else { Text("Audio Only").foregroundStyle(.secondary) }
                         }.frame(maxWidth: .infinity, maxHeight: .infinity)
                             .background(.black.opacity(0.2), in: RoundedRectangle(cornerRadius: 16))
                     }
                     HStack {
                         Button(action: model.togglePlayback) {
                             Label(model.isPlaying ? "Pause" : "Play", systemImage: model.isPlaying ? "pause.fill" : "play.fill")
-                        }.buttonStyle(.borderless)
+                        }.buttonStyle(.borderless).disabled(model.preparingPreview)
                         Text(clockText(model.playhead)).monospacedDigit().font(.caption)
                         Spacer()
-                        Text("Original audio · Track \(model.selectedAudioTrack + 1)").font(.caption).foregroundStyle(.secondary)
+                        Text("\(model.previewCensorship ? "Censored audio" : "Original audio") · Track \(model.selectedAudioTrack + 1)").font(.caption).foregroundStyle(.secondary)
                     }
                 }.frame(maxWidth: .infinity)
                 wordList(document).frame(width: 345)
@@ -352,9 +354,23 @@ struct ContentView: View {
         }.frame(maxWidth: .infinity)
     }
 
+    private var previewPreparation: some View {
+        VStack(spacing: 8) {
+            ProgressView().controlSize(.small)
+            Text(model.previewPreparation).font(.caption).monospacedDigit().multilineTextAlignment(.center)
+        }.padding(12).background(.black.opacity(0.75), in: RoundedRectangle(cornerRadius: 10))
+    }
+
     private var soundControls: some View {
         VStack(alignment: .leading, spacing: 8) {
-            Text("Censor sound").font(.caption).foregroundStyle(.secondary)
+            HStack(spacing: 12) {
+                Text("Censor sound").font(.caption).foregroundStyle(.secondary)
+                if model.document != nil && model.workflowMode == .advanced {
+                    Toggle("Preview with censorship", isOn: Binding(get: { model.previewCensorship }, set: { model.setPreviewCensorship($0) }))
+                        .toggleStyle(.checkbox).font(.caption)
+                        .help("Hear the selected track with the current censor sound and reviewed intervals. Export is always censored.")
+                }
+            }
             Picker("Censor sound", selection: $model.sound) {
                 Text("Beep").tag("beep"); Text("Silence").tag("silence"); Text("Custom").tag("custom")
             }.labelsHidden().pickerStyle(.segmented).frame(width: 250)

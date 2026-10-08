@@ -20,8 +20,12 @@ final class AppModel: ObservableObject {
     private var progressTask: Task<Void, Never>?
     @Published var error: String?
     @Published var sourceName = ""
-    @Published var sound = "beep"
-    @Published var customSound: URL?
+    @Published var sound = "beep" { didSet { if sound != oldValue { refreshCensoredPreview() } } }
+    @Published var customSound: URL? { didSet { if customSound != oldValue { refreshCensoredPreview() } } }
+    @Published private(set) var previewCensorship = false
+    @Published private(set) var preparingPreview = false
+    @Published private(set) var previewPreparation = "Preparing censored preview…"
+    private let censoredPreview = CensoredPreview()
     @Published var exportFormat = "audio"
     @Published var exportURL: URL?
     @Published var playhead = 0.0
@@ -71,7 +75,7 @@ final class AppModel: ObservableObject {
         self.workflowMode = WorkflowMode(rawValue: defaults.string(forKey: "workflowMode") ?? "") ?? .fast
         observer = player.addPeriodicTimeObserver(forInterval: CMTime(seconds: 0.04, preferredTimescale: 600), queue: .main) { [weak self] time in
             Task { @MainActor in
-                guard let self else { return }
+                guard let self, self.player.currentItem != nil else { return }
                 self.playhead = max(0, time.seconds.isFinite ? time.seconds : 0)
                 if let end = self.auditionEnd, self.playhead >= end { self.pause() }
                 self.isPlaying = self.player.rate != 0
@@ -101,6 +105,9 @@ final class AppModel: ObservableObject {
         let selectedCustomSound = customSound
         // A new source deliberately starts a fresh review; the last draft stays on disk until success.
         pause()
+        playerLoadTask?.cancel(); playerGeneration = UUID()
+        player.replaceCurrentItem(with: nil)
+        censoredPreview.clear(); preparingPreview = false
         pendingSource = url
         sourceName = url.lastPathComponent
         stage = "Reading media"
@@ -149,7 +156,7 @@ final class AppModel: ObservableObject {
                 exportFormat = document?.hasVideo == true ? "video" : "audio"
                 exportURL = nil
                 playhead = 0
-                preparePlayer()
+                if selectedMode == .advanced { preparePlayer() }
                 saveDraft()
                 if selectedMode == .fast, let document {
                     let destination = document.automaticOutputURL()
@@ -172,6 +179,10 @@ final class AppModel: ObservableObject {
         pause()
         workflowMode = mode
         defaults.set(mode.rawValue, forKey: "workflowMode")
+        if mode == .advanced && document != nil { preparePlayer() }
+        else if mode == .fast {
+            playerLoadTask?.cancel(); playerGeneration = UUID(); censoredPreview.cancel(); preparingPreview = false
+        }
     }
 
     func goHome() {
@@ -188,6 +199,7 @@ final class AppModel: ObservableObject {
         pause()
         playerLoadTask?.cancel(); playerGeneration = UUID()
         player.replaceCurrentItem(with: nil)
+        censoredPreview.clear(); preparingPreview = false
         selectedAudioTrack = 0
         document = nil; selected = nil; exportURL = nil; error = nil
         undoDocuments = []; pendingSource = nil; sourceName = ""
@@ -235,12 +247,31 @@ final class AppModel: ObservableObject {
         player.seek(to: CMTime(seconds: value, preferredTimescale: 600), toleranceBefore: .zero, toleranceAfter: .zero)
     }
     func togglePlayback() {
+        guard !preparingPreview, player.currentItem != nil else { return }
         if isPlaying { pause() } else {
             auditionEnd = nil
             if playhead >= (document?.duration ?? 0) - 0.05 { seek(0) }
             player.play(); isPlaying = true
         }
     }
+    @discardableResult
+    func setPreviewCensorship(_ enabled: Bool) -> Task<Void, Never>? {
+        guard !busy else { return nil }
+        if enabled && sound == "custom" && customSound == nil {
+            error = "Choose a custom censor sound first."
+            return nil
+        }
+        pause()
+        previewCensorship = enabled
+        return preparePlayer()
+    }
+
+    private func refreshCensoredPreview() {
+        guard previewCensorship, document != nil, workflowMode == .advanced, !busy else { return }
+        pause()
+        preparePlayer()
+    }
+
     @discardableResult
     func selectAudioTrack(_ index: Int) -> Task<Void, Never>? {
         guard document?.audioTracks.contains(where: { $0.index == index }) == true else { return nil }
@@ -251,17 +282,44 @@ final class AppModel: ObservableObject {
     @discardableResult
     private func preparePlayer() -> Task<Void, Never>? {
         playerLoadTask?.cancel(); playerLoadTask = nil
+        censoredPreview.cancel(); preparingPreview = false
         let generation = UUID(); playerGeneration = generation
         guard let document else { return nil }
-        if document.audioCount == 1 {
+        if document.audioCount == 1 && !previewCensorship {
+            let position = playhead
             player.replaceCurrentItem(with: AVPlayerItem(url: document.url))
-            return nil
+            let task = Task { @MainActor in
+                guard !Task.isCancelled, playerGeneration == generation else { return }
+                await player.seek(to: CMTime(seconds: position, preferredTimescale: 600), toleranceBefore: .zero, toleranceAfter: .zero)
+            }
+            playerLoadTask = task
+            return task
         }
         let index = selectedAudioTrack
         let position = playhead
+        let censored = previewCensorship
+        let selectedSound = sound
+        let cue = customSound
+        preparingPreview = censored
+        previewPreparation = "Preparing censored preview…"
         player.replaceCurrentItem(with: nil)
         let task = Task { @MainActor in
+            defer { if playerGeneration == generation { preparingPreview = false } }
             do {
+                var previewURL: URL?
+                if censored {
+                    // Coalesce rapid word edits and sound changes before starting FFmpeg.
+                    try await Task.sleep(nanoseconds: 150_000_000)
+                    guard selectedSound != "custom" || cue != nil else {
+                        throw BridgeFailure(message: "Choose a custom censor sound first.")
+                    }
+                    previewURL = try await censoredPreview.audio(document: document, track: index,
+                        sound: selectedSound, customSound: cue, root: root, python: python) { [weak self] _, fraction in
+                            guard let self, self.playerGeneration == generation else { return }
+                            self.previewPreparation = "Preparing censored preview · \(Int(fraction * 100))%"
+                        }
+                }
+                try Task.checkCancellation()
                 let asset = AVURLAsset(url: document.url)
                 let audio = try await asset.loadTracks(withMediaType: .audio)
                 let video = try await asset.loadTracks(withMediaType: .video)
@@ -275,19 +333,30 @@ final class AppModel: ObservableObject {
                     try target?.insertTimeRange(range, of: sourceVideo, at: .zero)
                     target?.preferredTransform = try await sourceVideo.load(.preferredTransform)
                 }
-                let sourceAudio = audio[index]
+                let audioAsset = previewURL.map { AVURLAsset(url: $0) } ?? asset
+                let sourceAudio: AVAssetTrack
+                if censored {
+                    let renderedTracks = try await audioAsset.loadTracks(withMediaType: .audio)
+                    guard let rendered = renderedTracks.first else { throw BridgeFailure(message: "Preview audio is unavailable.") }
+                    sourceAudio = rendered
+                } else { sourceAudio = audio[index] }
+                let audioOrigin = censored ? CMTime.zero : origin
                 let range = try await sourceAudio.load(.timeRange)
-                let start = CMTimeMaximum(range.start, origin)
-                let end = CMTimeMinimum(range.end, origin + CMTime(seconds: document.duration, preferredTimescale: 600))
+                let start = CMTimeMaximum(range.start, audioOrigin)
+                let end = CMTimeMinimum(range.end, audioOrigin + CMTime(seconds: document.duration, preferredTimescale: 600))
                 if end > start {
                     let target = composition.addMutableTrack(withMediaType: .audio, preferredTrackID: kCMPersistentTrackID_Invalid)
-                    try target?.insertTimeRange(CMTimeRange(start: start, end: end), of: sourceAudio, at: start - origin)
+                    try target?.insertTimeRange(CMTimeRange(start: start, end: end), of: sourceAudio, at: start - audioOrigin)
                 }
+                // AVAssetTrack alone does not keep its owning asset alive during insertion.
+                withExtendedLifetime(audioAsset) {}
                 guard !Task.isCancelled, playerGeneration == generation else { return }
                 player.replaceCurrentItem(with: AVPlayerItem(asset: composition))
                 await player.seek(to: CMTime(seconds: position, preferredTimescale: 600))
             } catch {
-                if !Task.isCancelled && playerGeneration == generation { self.error = "Could not preview track: \(error.localizedDescription)" }
+                if !Task.isCancelled && playerGeneration == generation {
+                    self.error = "Could not preview track: \(error.localizedDescription)"
+                }
             }
         }
         playerLoadTask = task
@@ -304,7 +373,7 @@ final class AppModel: ObservableObject {
         let token = UUID(); previewGeneration = token
         Task { @MainActor in
             await loading?.value
-            guard previewGeneration == token else { return }
+            guard previewGeneration == token, player.currentItem != nil else { return }
             player.seek(to: CMTime(seconds: context.lowerBound, preferredTimescale: 600),
                         toleranceBefore: .zero, toleranceAfter: .zero) { [weak self] finished in
                 Task { @MainActor in
@@ -325,6 +394,7 @@ final class AppModel: ObservableObject {
         exportURL = nil
         phase = .review
         saveDraft()
+        refreshCensoredPreview()
     }
     func toggle(_ word: ReviewWord) {
         edit { value in
@@ -334,6 +404,7 @@ final class AppModel: ObservableObject {
     func undo() {
         guard !busy, let previous = undoDocuments.popLast() else { return }
         document = previous; exportURL = nil; phase = .review; saveDraft()
+        refreshCensoredPreview()
     }
     func addInterval(label: String, start: Double, end: Double) {
         guard document?.validateInterval(start: start, end: end) == true else { return }
@@ -437,7 +508,9 @@ final class AppModel: ObservableObject {
 
     private func render(_ document: ReviewDocument, to destination: URL, format: String,
                         sound: String, customSound: URL?) async throws {
-        pause(); phase = .exporting
+        pause()
+        playerLoadTask?.cancel(); playerGeneration = UUID(); censoredPreview.cancel(); preparingPreview = false
+        phase = .exporting
         updateProgress("Preparing export", 0)
         var request: [String: Any] = ["operation": "export", "output": destination.path,
             "format": format, "sound": sound,

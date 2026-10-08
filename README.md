@@ -32,7 +32,7 @@ Enable **Allow first-time model download** in Settings if the selected model is 
 ## App workflow
 
 - **Fast Mode:** select Beep, Silence, or custom audio, then drop a file. Recognition and export run automatically. The result is saved beside the source as `NAME_censored.ext`; existing files receive a numbered alternative and are never overwritten.
-- **Advanced:** review detections on the timeline, uncheck false positives, flag other transcript words, add missing intervals, and adjust mute boundaries. `⌘Z` undoes review edits. **Listen in Context** plays the word with **0.2 seconds before and 0.2 seconds after**, clipped at the file boundaries.
+- **Advanced:** review detections on the timeline, uncheck false positives, flag other transcript words, add missing intervals, and adjust mute boundaries. `⌘Z` undoes review edits. **Listen in Context** plays the word with **0.2 seconds before and 0.2 seconds after**, clipped at the file boundaries. Enable **Preview with censorship** beside Censor sound to hear the current censoring in both Play and Listen in Context; leave it off to hear the original.
 - **Multiple audio tracks:** both modes analyze each track independently. Advanced shows separate timeline rows and a track selector for listening and editing. Video export preserves separate processed audio tracks.
 - **Home:** click the logo, the Home button, or press `⌘⇧H`. During processing this cancels the worker and returns to file selection. **Resume Last Review** restores the latest autosaved review.
 
@@ -107,6 +107,6 @@ Code lives in `censor/`, the SwiftUI app in `macOS/`, the experimental native he
 
 ## Limitations
 
-Recognition can miss words or place approximate boundaries, especially with music, overlapping voices, shouting, or fast speech. Review important material in Advanced and listen to the export. Muting affects the entire selected track, including music; this does not separate voices from a mixed recording. The in-app player previews original audio; **Play export** opens the processed result.
+Recognition can miss words or place approximate boundaries, especially with music, overlapping voices, shouting, or fast speech. Review important material in Advanced and listen to the export. Muting affects the entire selected track, including music; this does not separate voices from a mixed recording. The in-app player previews original audio by default. **Preview with censorship** prepares a temporary processed audio track using the export mixer and plays it with the original video; preparing long recordings can take time. Edits, track selection, and sound changes refresh the preview. The checkbox affects listening only; exports always apply the reviewed censoring. **Play export** opens the exported file.
 
-The app is not notarized or distributed with a bundled Python runtime. Waveform zoom and processed playback inside the review editor remain future work.
+The app is not notarized or distributed with a bundled Python runtime. Waveform zoom remains future work.
