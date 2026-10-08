@@ -97,12 +97,12 @@ def timecode_seconds(code: str, fps: Fraction) -> Fraction:
     return Fraction(count, 1) / fps
 
 
-def media_info(path: Path, audio_stream: int | None = None) -> MediaInfo:
+def media_info(path: Path, audio_stream: int | None = None, *, allow_audio: bool = False) -> MediaInfo:
     data = probe(path)
     video = next((s for s in data["streams"] if s["codec_type"] == "video"
                   and not s.get("disposition", {}).get("attached_pic")), None)
     audio = [s for s in data["streams"] if s["codec_type"] == "audio"]
-    if video is None:
+    if video is None and not allow_audio:
         raise CensorError("Input has no video stream.")
     if not audio:
         raise CensorError("Input has no audio track.")
@@ -112,6 +112,16 @@ def media_info(path: Path, audio_stream: int | None = None) -> MediaInfo:
     index = audio_stream if audio_stream is not None else 0
     if not 0 <= index < len(audio):
         raise CensorError(f"--audio-stream must be between 0 and {len(audio) - 1}.")
+    if video is None:
+        try:
+            track = audio[index]
+            duration = float(track.get("duration") or data["format"]["duration"])
+            start = float(track.get("start_time", data.get("format", {}).get("start_time", 0)))
+            if not math.isfinite(duration) or duration <= 0 or not math.isfinite(start):
+                raise ValueError
+        except (KeyError, ValueError) as exc:
+            raise CensorError("Cannot determine a finite audio duration.") from exc
+        return MediaInfo(duration, -1, track["index"], len(audio), 0, 0, Fraction(1), start)
     try:
         start = float(video.get("start_time", data.get("format", {}).get("start_time", 0)))
         duration = float(video.get("duration") or data["format"]["duration"])

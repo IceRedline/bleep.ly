@@ -1,0 +1,133 @@
+"""Desktop contract tests with real FFmpeg; inference stays offline."""
+import array
+import contextlib
+import io
+import json
+import math
+import shutil
+import subprocess
+import sys
+import tempfile
+import unittest
+from pathlib import Path
+from unittest.mock import patch
+
+from censor.desktop import MUTE_CAP, analyze, export, reviewed_ranges
+from censor.ffmpeg import media_info, probe, run
+from censor.models import WordTimestamp
+from censor.utils import CensorError
+
+
+@unittest.skipUnless(shutil.which('ffmpeg'), 'FFmpeg required')
+class DesktopTests(unittest.TestCase):
+    def setUp(self):
+        self.folder = tempfile.TemporaryDirectory()
+        self.addCleanup(self.folder.cleanup)
+        self.work = Path(self.folder.name)
+        self.source = self.work / 'аудио with spaces.wav'
+        run(['ffmpeg', '-v', 'error', '-f', 'lavfi', '-i',
+             'sine=frequency=440:sample_rate=48000:duration=3', str(self.source)])
+        self.transcript = self.work / 'review.json'
+        self.transcript.write_text(json.dumps({'words': [
+            dict(word='бля', start=1, end=1.3, profane=True)]}))
+        with contextlib.redirect_stdout(io.StringIO()):
+            self.document = analyze(dict(source=str(self.source), transcript=str(self.transcript)))
+
+    def render(self, **overrides):
+        request = dict(document=self.document, format='audio', sound='silence',
+                       output=str(self.work / 'result.wav'))
+        request.update(overrides)
+        with contextlib.redirect_stdout(io.StringIO()):
+            export(request)
+        return Path(request['output'])
+
+    def amplitude(self, path, start, frequency):
+        result = subprocess.run(['ffmpeg', '-v', 'error', '-i', str(path), '-ss', str(start),
+                                 '-t', '0.05', '-ac', '1', '-ar', '48000', '-f', 'f32le', '-'],
+                                capture_output=True, check=True)
+        samples = array.array('f', result.stdout)
+        return 2 * abs(sum(x * complex(math.cos(2*math.pi*frequency*i/48000),
+                                      math.sin(2*math.pi*frequency*i/48000))
+                           for i, x in enumerate(samples))) / len(samples)
+
+    def test_audio_probe_and_silence_export(self):
+        self.assertFalse(self.document['has_video'])
+        self.assertEqual(media_info(self.source, allow_audio=True).video_index, -1)
+        output = self.render()
+        self.assertEqual(probe(output)['streams'][0]['codec_name'], 'pcm_s24le')
+        self.assertLess(self.amplitude(output, 1.1, 440), .001)
+        self.assertGreater(self.amplitude(output, 1.3, 440), .1)
+
+    def test_cue_tail_does_not_extend_mute(self):
+        cue = self.work / 'long.wav'
+        run(['ffmpeg', '-v', 'error', '-f', 'lavfi', '-i',
+             'sine=frequency=1000:sample_rate=48000:duration=0.9', str(cue)])
+        before = reviewed_ranges(self.document, 3)
+        output = self.render(sound='custom', custom_sound=str(cue))
+        self.assertEqual(before, reviewed_ranges(self.document, 3))
+        self.assertGreater(self.amplitude(output, 1.5, 1000), .1)
+        self.assertGreater(self.amplitude(output, 1.5, 440), .1)
+        self.assertLess(self.amplitude(output, 2.1, 1000), .001)
+
+    def test_zero_findings_still_export_and_no_clobber(self):
+        self.document['words'][0]['profane'] = False
+        output = self.render(sound='beep')
+        self.assertGreater(self.amplitude(output, 1.1, 440), .1)
+        with self.assertRaises(CensorError):
+            self.render()
+        with self.assertRaises(CensorError):
+            self.render(output=str(self.source))
+
+    def test_invalid_ranges_changed_source_and_audio_video_rejected(self):
+        self.document['words'][0]['mute_end'] = float('nan')
+        with self.assertRaises(CensorError):
+            self.render()
+        self.document['words'][0]['mute_end'] = 1.24
+        with self.assertRaises(CensorError):
+            self.render(format='video', output=str(self.work / 'result.mov'))
+        self.document['fingerprint'] = 'stale'
+        with self.assertRaises(CensorError):
+            self.render()
+
+    def test_cache_reused_and_manual_flags_not_reclassified(self):
+        with patch('censor.desktop.FasterWhisperBackend.transcribe',
+                   return_value=[WordTimestamp('бля', 1, 1.3)]) as engine, \
+                contextlib.redirect_stdout(io.StringIO()):
+            request = dict(source=str(self.source), cache_dir=str(self.work / 'cache'))
+            first = analyze(request)
+            second = analyze(request)
+        engine.assert_called_once()
+        self.assertTrue(first['words'][0]['profane'])
+        self.assertEqual(first, second)
+        self.assertAlmostEqual(first['words'][0]['mute_start'], 1.06)
+
+    def test_json_protocol_and_video_stream_copy(self):
+        source = self.work / 'video.mov'
+        run(['ffmpeg', '-v', 'error', '-f', 'lavfi', '-i', 'color=s=160x90:r=25:d=3',
+             '-i', str(self.source), '-c:v', 'libx264', '-c:a', 'pcm_s16le', str(source)])
+        request = self.work / 'request.json'
+        request.write_text(json.dumps(dict(operation='analyze', source=str(source), transcript=str(self.transcript))))
+        result = subprocess.run([sys.executable, '-m', 'censor.desktop', str(request)],
+                                capture_output=True, text=True)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        events = [json.loads(line) for line in result.stdout.splitlines()]
+        self.assertEqual(events[-1]['event'], 'result')
+        document = events[-1]
+        output = self.render(document=document, format='video', sound='beep', output=str(self.work / 'out.mov'))
+        def digest(path):
+            return run(['ffmpeg', '-v', 'error', '-i', str(path), '-map', '0:v:0', '-c:v', 'copy',
+                        '-f', 'hash', '-hash', 'sha256', '-'])
+        self.assertEqual(digest(source), digest(output))
+
+    def test_approved_reference_mute_timing(self):
+        from censor.ranges import middle_ranges
+        from censor.transcription import read_transcript
+        root = Path(__file__).resolve().parents[1]
+        reference = root / 'input.reviewed.transcript.json'
+        if not reference.exists():
+            self.skipTest('Local approved reference is unavailable')
+        source = root / 'input.mov'
+        duration = media_info(source).duration
+        document = analyze(dict(source=str(source), transcript=str(reference)))
+        expected = middle_ranges(read_transcript(reference, duration), duration, MUTE_CAP)
+        self.assertEqual(reviewed_ranges(document, duration), expected)
