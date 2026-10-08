@@ -219,6 +219,14 @@ final class CensoredPreviewTests: XCTestCase {
     }
 
     func testHomeCancelsAnActivePreviewWorker() async throws {
+        try await checkActivePreviewCancellation(terminating: false)
+    }
+
+    func testTerminationCancelsPreviewWorkerAndClearsCache() async throws {
+        try await checkActivePreviewCancellation(terminating: true)
+    }
+
+    private func checkActivePreviewCancellation(terminating: Bool) async throws {
         let (model, _, folder) = try await fixture()
         defer { model.goHome() }
         let fakeRoot = folder.appendingPathComponent("worker")
@@ -255,11 +263,18 @@ final class CensoredPreviewTests: XCTestCase {
         try await Task.sleep(nanoseconds: 300_000_000)
         XCTAssertGreaterThan(cancellable.playhead, 0.05, "Original playback must work during rendering")
         let start = Date()
-        cancellable.goHome()
+        if terminating {
+            let cached = try await audioURL(model)
+            await model.stopPreviewForTermination()
+            XCTAssertFalse(FileManager.default.fileExists(atPath: cached.path))
+            await cancellable.stopPreviewForTermination()
+        } else { cancellable.goHome() }
         await task.value
         XCTAssertLessThan(Date().timeIntervalSince(start), 5)
-        XCTAssertEqual(cancellable.phase, .ready)
-        XCTAssertNil(cancellable.document)
+        if !terminating {
+            XCTAssertEqual(cancellable.phase, .ready)
+            XCTAssertNil(cancellable.document)
+        }
         XCTAssertNil(cancellable.player.currentItem)
         XCTAssertNil(cancellable.error)
         XCTAssertFalse(cancellable.preparingPreview)

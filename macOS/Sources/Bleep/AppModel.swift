@@ -216,6 +216,16 @@ final class AppModel: ObservableObject {
         }
     }
 
+    func stopPreviewForTermination() async {
+        let task = playerLoadTask
+        playerLoadTask = nil
+        task?.cancel(); playerGeneration = UUID()
+        pause(); player.replaceCurrentItem(with: nil)
+        censoredPreview.clear()
+        preparingPreview = false; loadingPlayer = false; playingCensoredPreview = false
+        await task?.value
+    }
+
     func startNewFile() {
         guard !busy else { return }
         pause()

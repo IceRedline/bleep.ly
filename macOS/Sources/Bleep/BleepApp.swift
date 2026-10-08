@@ -32,12 +32,13 @@ struct BleepApp: App {
 final class AppDelegate: NSObject, NSApplicationDelegate {
     weak var model: AppModel?
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
-        guard let model, model.busy else { return .terminateNow }
-        model.cancel()
+        guard let model else { return .terminateNow }
+        if model.busy { model.cancel() }
         Task { @MainActor in
             // Keep the bridge alive long enough to reap workers (and force-stop
             // native inference if it does not respond to the initial signal).
             while model.busy { try? await Task.sleep(nanoseconds: 50_000_000) }
+            await model.stopPreviewForTermination()
             sender.reply(toApplicationShouldTerminate: true)
         }
         return .terminateLater
