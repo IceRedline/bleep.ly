@@ -55,3 +55,9 @@ macOS/.build/
 macOS/.swiftpm/
 *.xcuserstate
 xcuserdata/
+
+# Optional WhisperKit experiment products (weights stay in .cache)
+experiments/WhisperKitRunner/.build/
+experiments/WhisperKitRunner/.swiftpm/
+*.mlmodelc/
+*.mlpackage/

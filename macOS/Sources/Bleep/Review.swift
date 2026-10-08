@@ -8,8 +8,21 @@ struct ReviewWord: Codable, Identifiable, Equatable {
     var profane: Bool
     var muteStart: Double
     var muteEnd: Double
+    var audioTrack: Int?
+    var trackIndex: Int { audioTrack ?? 0 }
 
-    enum CodingKeys: String, CodingKey { case word, start, end, profane, muteStart, muteEnd }
+    func contextRange(duration: Double) -> ClosedRange<Double> {
+        let start = min(duration, max(0, self.start - 0.2))
+        return start...max(start, min(duration, end + 0.2))
+    }
+
+    enum CodingKeys: String, CodingKey { case word, start, end, profane, muteStart, muteEnd, audioTrack }
+}
+
+struct ReviewTrack: Codable, Identifiable, Equatable {
+    var index: Int
+    var title: String
+    var id: Int { index }
 }
 
 struct ReviewDocument: Codable, Equatable {
@@ -20,6 +33,13 @@ struct ReviewDocument: Codable, Equatable {
     var audioStream: Int?
     var audioCount: Int
     var words: [ReviewWord]
+    var tracks: [ReviewTrack]?
+    var audioTracks: [ReviewTrack] {
+        tracks ?? [ReviewTrack(index: audioStream ?? 0, title: "Track \((audioStream ?? 0) + 1)")]
+    }
+    var engine: String?
+    var cacheHit: Bool?
+    var analysisSeconds: Double?
     var censorStyle: String? // Absent in reviews saved before this setting existed.
 
     var count: Int { words.filter(\.profane).count }

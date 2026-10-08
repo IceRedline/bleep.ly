@@ -21,12 +21,19 @@ struct ContentView: View {
     }
     var body: some View {
         ZStack {
+            ZStack {
             Color(red: 0.035, green: 0.055, blue: 0.11)
             RadialGradient(colors: [tint.opacity(reduceTransparency ? 0.3 : 0.48), .clear],
                            center: .topLeading, startRadius: 30, endRadius: 950)
             RadialGradient(colors: [tint.opacity(0.20), .clear], center: .bottomTrailing, startRadius: 0, endRadius: 650)
+            }.ignoresSafeArea()
+                .animation(reduceMotion ? nil : .easeInOut(duration: 0.65), value: tint)
             VStack(spacing: 0) {
                 header
+                if model.document?.engine == "whisperkit" && !model.busy {
+                    Label("WhisperKit · experimental result", systemImage: "flask")
+                        .font(.caption).foregroundStyle(.orange).padding(.bottom, 12)
+                }
                 if model.busy { processing }
                 else if let document = model.document {
                     if model.workflowMode == .fast { fastResult(document) }
@@ -35,7 +42,7 @@ struct ContentView: View {
                 else { welcome }
             }.padding(30)
         }
-        .animation(reduceMotion ? nil : .easeInOut(duration: 0.65), value: tint)
+        .background(WindowChrome())
         .preferredColorScheme(.dark)
         .tint(.mint)
         .frame(minWidth: 880, minHeight: 690)
@@ -49,9 +56,20 @@ struct ContentView: View {
 
     private var header: some View {
         HStack(alignment: .center, spacing: 10) {
-            Image(systemName: "waveform").font(.title2.weight(.semibold)).foregroundStyle(.mint)
-            Text("bleep.ly").font(.system(size: 24, weight: .bold, design: .rounded)).tracking(-0.7)
+            Button(action: model.goHome) {
+                HStack(spacing: 10) {
+                    Image(systemName: "waveform").font(.title2.weight(.semibold)).foregroundStyle(.mint)
+                    Text("bleep.ly").font(.system(size: 24, weight: .bold, design: .rounded)).tracking(-0.7)
+                }
+            }.buttonStyle(.plain).help("Return home").accessibilityLabel("bleep.ly · Home")
+            if model.document != nil || model.busy {
+                Button(action: model.goHome) { Label("Home", systemImage: "house") }
+                    .buttonStyle(.borderless).help(model.busy ? "Cancel processing and return home" : "Return to file selection")
+            }
             Text("A little less explicit.").font(.callout).foregroundStyle(.secondary).padding(.leading, 12)
+            if WhisperKitExperiment.available {
+                Text("LAB").font(.caption2.bold()).foregroundStyle(.orange)
+            }
             Spacer()
             Picker("Workflow", selection: Binding(get: { model.workflowMode }, set: { model.selectMode($0) })) {
                 Text("Fast Mode").tag(WorkflowMode.fast)
@@ -88,30 +106,37 @@ struct ContentView: View {
             .frame(maxWidth: .infinity, minHeight: 370)
             .background(.white.opacity(dropTarget ? 0.09 : 0.025), in: RoundedRectangle(cornerRadius: 28))
             .overlay(RoundedRectangle(cornerRadius: 28).strokeBorder(dropTarget ? Color.mint : .white.opacity(0.17), style: StrokeStyle(lineWidth: 1.5, dash: [7, 7])))
+            .background(GeometryReader { geometry in
+                Color.clear.preference(key: DropZoneFrameKey.self, value: geometry.frame(in: .named("welcome")))
+            })
             .dropDestination(for: URL.self) { urls, _ in
                 guard let url = urls.first, url.isFileURL, urls.count == 1 else { return false }
                 model.open(url); return true
             } isTargeted: { dropTarget = $0 }
-            if model.workflowMode == .fast {
-                HStack(spacing: 32) {
-                    soundControls
+            HStack(spacing: 32) {
+                soundControls
+                ZStack(alignment: .leading) {
                     VStack(alignment: .leading, spacing: 6) {
                         Label("Saved next to your original", systemImage: "folder")
                         Text("Video stays video. Audio becomes WAV.\nExisting files are never overwritten.")
-                            .font(.caption).foregroundStyle(.secondary)
+                            .font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
                     }
+                    .opacity(model.workflowMode == .fast ? 1 : 0)
+                    .accessibilityHidden(model.workflowMode != .fast)
+                    VStack(alignment: .leading, spacing: 6) {
+                        Label("Review every word", systemImage: "waveform.path")
+                        Text("Choose your sound, then drop a file.\nCensored preview prepares automatically.")
+                            .font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+                    }
+                    .opacity(model.workflowMode == .advanced ? 1 : 0)
+                    .accessibilityHidden(model.workflowMode != .advanced)
                 }
-            } else {
-                HStack(spacing: 32) {
-                    Label("On-device recognition", systemImage: "lock.shield")
-                    Label("Review every word", systemImage: "waveform.path")
-                    Label("Original video quality", systemImage: "film")
-                }.font(.callout).foregroundStyle(.secondary)
+                .animation(.easeInOut(duration: reduceMotion ? 0.1 : 0.2), value: model.workflowMode)
             }
             Button("Resume last review", action: model.restoreDraft).buttonStyle(.plain).foregroundStyle(.mint)
             Spacer(minLength: 10)
             Text("Made for the final cut.").font(.caption).foregroundStyle(.secondary)
-        }
+        }.coordinateSpace(name: "welcome")
     }
 
     private var processing: some View {
@@ -119,8 +144,9 @@ struct ContentView: View {
             Spacer()
             ZStack {
                 Circle().stroke(.white.opacity(0.08), lineWidth: 8)
-                Circle().trim(from: 0, to: max(0.015, model.fraction))
+                Circle().trim(from: 0, to: StageProgress.isReadingMedia(model.stage) ? 0 : max(0.015, model.fraction))
                     .stroke(.mint, style: StrokeStyle(lineWidth: 8, lineCap: .round)).rotationEffect(.degrees(-90))
+                    .animation(reduceMotion ? nil : .easeOut(duration: 0.2), value: model.fraction)
                 Image(systemName: model.phase == .exporting ? "arrow.up.doc" : "waveform")
                     .font(.system(size: 44, weight: .light)).foregroundStyle(.mint)
             }.frame(width: 140, height: 140)
@@ -131,10 +157,8 @@ struct ContentView: View {
             }
             VStack(spacing: 8) {
                 Text(model.stage).font(.headline)
-                if model.fraction > 0 {
-                    Text("\(Int(model.fraction * 100))% of this stage").monospacedDigit().foregroundStyle(.secondary)
-                } else { ProgressView().controlSize(.small) }
-            }.frame(height: 48)
+                StageProgressDetails(stage: model.stage, fraction: model.fraction, elapsed: model.stageElapsed, remaining: model.stageRemaining)
+            }.frame(height: 72)
             Text(model.phase == .analyzing ? "Audio stays on your Mac. The first model load can take a moment." : "Your review and original media are kept intact.")
                 .font(.callout).foregroundStyle(.secondary)
             Button("Cancel", action: model.cancel).disabled(model.cancelling)
@@ -162,21 +186,23 @@ struct ContentView: View {
                 VStack(spacing: 12) {
                     if document.hasVideo {
                         VideoPlayer(player: model.player).frame(minHeight: 150, maxHeight: .infinity)
+                            .overlay(alignment: .topLeading) { if model.preparingPreview { previewPreparation.padding(8).allowsHitTesting(false) } }
                             .clipShape(RoundedRectangle(cornerRadius: 16))
                     } else {
                         VStack(spacing: 14) {
                             Image(systemName: "waveform").font(.system(size: 48, weight: .ultraLight)).foregroundStyle(.mint)
-                            Text("Audio Only").foregroundStyle(.secondary)
+                            if model.preparingPreview { previewPreparation }
+                            else { Text("Audio Only").foregroundStyle(.secondary) }
                         }.frame(maxWidth: .infinity, maxHeight: .infinity)
                             .background(.black.opacity(0.2), in: RoundedRectangle(cornerRadius: 16))
                     }
                     HStack {
                         Button(action: model.togglePlayback) {
                             Label(model.isPlaying ? "Pause" : "Play", systemImage: model.isPlaying ? "pause.fill" : "play.fill")
-                        }.buttonStyle(.borderless)
+                        }.buttonStyle(.borderless).disabled(model.loadingPlayer)
                         Text(clockText(model.playhead)).monospacedDigit().font(.caption)
                         Spacer()
-                        Text("Original audio preview").font(.caption).foregroundStyle(.secondary)
+                        Text("\(model.playingCensoredPreview ? "Censored audio" : "Original audio") · Track \(model.selectedAudioTrack + 1)").font(.caption).foregroundStyle(.secondary)
                     }
                 }.frame(maxWidth: .infinity)
                 wordList(document).frame(width: 345)
@@ -203,41 +229,48 @@ struct ContentView: View {
                     .help("Add a missed interval")
                 Button(action: model.undo) { Image(systemName: "arrow.uturn.backward") }.disabled(!model.canUndo).help("Undo")
             }
+            if document.audioTracks.count > 1 {
+                Picker("Audio track", selection: Binding(get: { model.selectedAudioTrack }, set: { model.selectAudioTrack($0) })) {
+                    ForEach(document.audioTracks) { track in Text(track.title).tag(track.index) }
+                }
+            }
             Picker("Show", selection: $model.showAllWords) {
                 Text("Flagged").tag(false); Text("All words").tag(true)
             }.pickerStyle(.segmented)
             TextField("Search transcript", text: $model.search).textFieldStyle(.roundedBorder)
-            ScrollViewReader { proxy in
-                ScrollView {
-                    LazyVStack(spacing: 4) {
-                        if model.visibleWords.isEmpty {
-                            Text("Nothing here. Switch to All words or add a missed interval.")
-                                .font(.callout).foregroundStyle(.secondary).padding(18)
-                        }
-                        ForEach(model.visibleWords) { word in
-                            HStack(spacing: 9) {
-                                Button { model.audition(word) } label: {
-                                    HStack {
-                                        Image(systemName: "play.circle").foregroundStyle(.mint)
-                                        VStack(alignment: .leading, spacing: 3) {
-                                            Text(word.word).lineLimit(1)
-                                            Text("\(clockText(word.start)) · \(word.muteEnd - word.muteStart, specifier: "%.2f")s muted")
-                                                .font(.caption2).foregroundStyle(.secondary).monospacedDigit()
-                                        }
-                                        Spacer(minLength: 0)
-                                    }.contentShape(Rectangle())
-                                }.buttonStyle(.plain).help("Listen in context")
-                                Button { editingWord = word; showInterval = true } label: {
-                                    Image(systemName: "slider.horizontal.3").foregroundStyle(.secondary)
-                                }.buttonStyle(.borderless).help("Adjust mute timing")
-                                Toggle("Censor \(word.word)", isOn: Binding(get: { word.profane }, set: { _ in model.toggle(word) }))
-                                    .labelsHidden().toggleStyle(.checkbox)
-                            }.padding(10)
-                                .background(model.selected == word.id ? .white.opacity(0.1) : .clear, in: RoundedRectangle(cornerRadius: 9))
-                                .id(word.id)
-                        }
+            ScrollView {
+                LazyVStack(spacing: SmoothReviewScroll.rowSpacing) {
+                    if model.visibleWords.isEmpty {
+                        Text("Nothing here. Switch to All words or add a missed interval.")
+                            .font(.callout).foregroundStyle(.secondary).padding(18)
                     }
-                }.onChange(of: model.selected) { _, id in if let id { proxy.scrollTo(id, anchor: .center) } }
+                    ForEach(model.visibleWords) { word in
+                        HStack(spacing: 9) {
+                            Button { model.audition(word) } label: {
+                                HStack {
+                                    Image(systemName: "play.circle").foregroundStyle(.mint)
+                                    VStack(alignment: .leading, spacing: 3) {
+                                        Text(word.word).lineLimit(1)
+                                        Text("\(clockText(word.start)) · \(word.muteEnd - word.muteStart, specifier: "%.2f")s muted")
+                                            .font(.caption2).foregroundStyle(.secondary).monospacedDigit()
+                                    }
+                                    Spacer(minLength: 0)
+                                }.contentShape(Rectangle())
+                            }.buttonStyle(.plain).help("Listen in context")
+                            Button { editingWord = word; showInterval = true } label: {
+                                Image(systemName: "slider.horizontal.3").foregroundStyle(.secondary)
+                            }.buttonStyle(.borderless).help("Adjust mute timing")
+                            Toggle("Censor \(word.word)", isOn: Binding(get: { word.profane }, set: { _ in model.toggle(word) }))
+                                .labelsHidden().toggleStyle(.checkbox)
+                        }.padding(.horizontal, 10)
+                            .frame(height: SmoothReviewScroll.rowHeight)
+                            .background(model.selected == word.id ? .mint.opacity(0.16) : .clear, in: RoundedRectangle(cornerRadius: 9))
+                            .id(word.id)
+                    }
+                }
+                .background(SmoothReviewScroll(selection: model.selected,
+                    index: model.visibleWords.firstIndex(where: { $0.id == model.selected }),
+                    reduceMotion: reduceMotion))
             }
         }.padding(14).background(.black.opacity(0.15), in: RoundedRectangle(cornerRadius: 16))
     }
@@ -250,7 +283,12 @@ struct ContentView: View {
                 Label("Selected intervals", systemImage: "rectangle.fill").font(.caption).foregroundStyle(.orange.opacity(0.9))
                 Button("Add interval") { editingWord = nil; showInterval = true }.buttonStyle(.borderless)
             }.foregroundStyle(.secondary)
-            GeometryReader { geo in
+            ForEach(document.audioTracks) { track in
+                HStack(spacing: 10) {
+                    Button { model.selectAudioTrack(track.index) } label: {
+                        Text(track.title).lineLimit(1).frame(width: 100, alignment: .leading)
+                    }.buttonStyle(.plain).foregroundStyle(model.selectedAudioTrack == track.index ? Color.mint : Color.secondary)
+                    GeometryReader { geo in
                 ZStack(alignment: .leading) {
                     RoundedRectangle(cornerRadius: 8).fill(.white.opacity(0.045))
                     Path { path in
@@ -260,7 +298,7 @@ struct ContentView: View {
                             path.addLine(to: CGPoint(x: x, y: 46))
                         }
                     }.stroke(.white.opacity(0.14), lineWidth: 1)
-                    ForEach(document.words.filter(\.profane)) { word in
+                    ForEach(document.words.filter { $0.profane && ($0.audioTrack ?? document.audioStream ?? 0) == track.index }) { word in
                         Button { model.audition(word) } label: {
                             RoundedRectangle(cornerRadius: 3)
                                 .fill(model.selected == word.id ? Color.mint : Color.orange.opacity(0.85))
@@ -273,7 +311,9 @@ struct ContentView: View {
                     Rectangle().fill(.white).frame(width: 1.5, height: 48)
                         .offset(x: geo.size.width * min(1, model.playhead / document.duration)).allowsHitTesting(false)
                 }
-            }.frame(height: 48)
+                    }.frame(height: 48)
+                }
+            }
             Slider(value: Binding(get: { min(document.duration, model.playhead) }, set: { model.seek($0) }), in: 0...document.duration)
                 .accessibilityLabel("Playback position")
             HStack { Text("0:00"); Spacer(); Text(clockText(document.duration)) }
@@ -314,9 +354,23 @@ struct ContentView: View {
         }.frame(maxWidth: .infinity)
     }
 
+    private var previewPreparation: some View {
+        VStack(spacing: 8) {
+            ProgressView().controlSize(.small)
+            Text(model.previewPreparation).font(.caption).monospacedDigit().multilineTextAlignment(.center)
+        }.padding(12).background(.black.opacity(0.75), in: RoundedRectangle(cornerRadius: 10))
+    }
+
     private var soundControls: some View {
         VStack(alignment: .leading, spacing: 8) {
-            Text("Censor sound").font(.caption).foregroundStyle(.secondary)
+            HStack(spacing: 12) {
+                Text("Censor sound").font(.caption).foregroundStyle(.secondary)
+                if model.document != nil && model.workflowMode == .advanced {
+                    Toggle("Preview with censorship", isOn: Binding(get: { model.previewCensorship }, set: { model.setPreviewCensorship($0) }))
+                        .toggleStyle(.checkbox).font(.caption)
+                        .help("Original audio stays playable during preparation. Switch between prepared sounds from cache. Export is always censored.")
+                }
+            }
             Picker("Censor sound", selection: $model.sound) {
                 Text("Beep").tag("beep"); Text("Silence").tag("silence"); Text("Custom").tag("custom")
             }.labelsHidden().pickerStyle(.segmented).frame(width: 250)
@@ -341,7 +395,7 @@ struct ContentView: View {
                     Text("Audio Only").tag("audio")
                     if document.hasVideo { Text("Video").tag("video") }
                 }.labelsHidden().pickerStyle(.segmented).frame(width: 200)
-                Text(model.exportFormat == "video" ? "Original video · no re-encoding" : "WAV · 48 kHz · 24-bit stereo")
+                Text(model.exportFormat == "video" ? "Original video · no re-encoding" : "WAV · stereo mix of all tracks")
                     .font(.caption).foregroundStyle(.secondary)
             }
             Spacer(minLength: 0)

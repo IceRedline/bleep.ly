@@ -17,6 +17,7 @@ final class WorkflowTests: XCTestCase {
         addTeardownBlock { UserDefaults(suiteName: suite)?.removePersistentDomain(forName: suite) }
         defaults.set(root.path, forKey: "projectRoot")
         let model = AppModel(defaults: defaults, supportDirectory: folder.appendingPathComponent("support"))
+        addTeardownBlock { await MainActor.run { model.goHome() } }
         let source = folder.appendingPathComponent(video ? "видео.mov" : "audio.wav")
         let generator = Process()
         generator.executableURL = URL(fileURLWithPath: "/usr/bin/env")
@@ -30,6 +31,38 @@ final class WorkflowTests: XCTestCase {
         {"words":[{"word":"test","start":0.5,"end":1.5,"profane":true}]}
         """.utf8).write(to: transcript)
         return (model, source, transcript, defaults)
+    }
+
+    func testAdvancedAutomaticallyPreparesCensoredPreviewAfterAnalysis() async throws {
+        let (model, source, transcript, _) = try fixture(video: true)
+        XCTAssertTrue(model.previewCensorship)
+        await model.open(source, transcript: transcript, workflow: .advanced)?.value
+        XCTAssertEqual(model.phase, .review)
+        XCTAssertTrue(model.preparingPreview, "Preparation must start without toggling the checkbox")
+        for _ in 0..<100 where model.loadingPlayer { try await Task.sleep(nanoseconds: 10_000_000) }
+        XCTAssertTrue(model.preparingPreview)
+        XCTAssertFalse(model.playingCensoredPreview)
+        XCTAssertNotNil(model.player.currentItem)
+        model.seek(0.4)
+        try await Task.sleep(nanoseconds: 30_000_000)
+        model.togglePlayback()
+        for _ in 0..<200 where model.preparingPreview { try await Task.sleep(nanoseconds: 50_000_000) }
+        XCTAssertFalse(model.preparingPreview)
+        XCTAssertTrue(model.playingCensoredPreview)
+        XCTAssertTrue(model.isPlaying, "Background handoff must resume ongoing playback")
+        XCTAssertGreaterThanOrEqual(model.player.currentTime().seconds, 0.4)
+        model.pause()
+        XCTAssertNil(model.error)
+        let item = try XCTUnwrap(model.player.currentItem)
+        XCTAssertTrue(item.asset is AVComposition)
+        let tracks = try await item.asset.loadTracks(withMediaType: .audio)
+        let track = try XCTUnwrap(tracks.first as? AVCompositionTrack)
+        let preview = try XCTUnwrap(track.segments.first(where: { !$0.isEmpty })?.sourceURL)
+        XCTAssertEqual(preview.lastPathComponent, "censored.wav")
+        XCTAssertNotEqual(preview.resolvingSymlinksInPath(), source.resolvingSymlinksInPath())
+        await model.setPreviewCensorship(false)?.value
+        XCTAssertFalse(model.previewCensorship)
+        XCTAssertEqual((model.player.currentItem?.asset as? AVURLAsset)?.url.resolvingSymlinksInPath(), source.resolvingSymlinksInPath())
     }
 
     func testFastVideoExportsAutomaticallyAndAvoidsExistingFiles() async throws {
@@ -47,6 +80,7 @@ final class WorkflowTests: XCTestCase {
         await task.value
         XCTAssertNil(model.error)
         XCTAssertEqual(model.phase, .done)
+        XCTAssertFalse(model.preparingPreview, "Fast exports directly without a redundant preview render")
         let result = try XCTUnwrap(model.exportURL)
         XCTAssertEqual(result.lastPathComponent, "видео_censored_2.mov")
         XCTAssertTrue(FileManager.default.fileExists(atPath: result.path))
@@ -95,7 +129,9 @@ final class WorkflowTests: XCTestCase {
         model.sound = "custom"
         XCTAssertNil(model.open(source, transcript: transcript, workflow: .fast))
         XCTAssertFalse(model.busy)
-        model.setSound(source.deletingLastPathComponent().appendingPathComponent("missing.wav"))
+        let invalidSound = source.deletingLastPathComponent().appendingPathComponent("invalid.wav")
+        try Data("not audio".utf8).write(to: invalidSound)
+        model.setSound(invalidSound)
         await model.open(source, transcript: transcript, workflow: .fast)?.value
         XCTAssertNotNil(model.error)
         XCTAssertNotNil(model.document)
@@ -122,4 +158,29 @@ final class WorkflowTests: XCTestCase {
         XCTAssertFalse(FileManager.default.fileExists(atPath: source.deletingLastPathComponent()
             .appendingPathComponent("audio_censored.wav").path))
     }
+    func testHomeCancelsAndReturnsToEmptyWelcome() async throws {
+        let (model, source, transcript, _) = try fixture()
+        let task = try XCTUnwrap(model.open(source, transcript: transcript, workflow: .fast))
+        model.goHome()
+        await task.value
+        XCTAssertEqual(model.phase, .ready)
+        XCTAssertNil(model.document)
+        XCTAssertNil(model.exportURL)
+        XCTAssertFalse(model.cancelling)
+        await model.open(source, transcript: transcript, workflow: .advanced)?.value
+        XCTAssertEqual(model.phase, .review)
+        model.goHome()
+        XCTAssertEqual(model.phase, .ready)
+        XCTAssertNil(model.document)
+        XCTAssertNil(model.player.currentItem)
+        model.restoreDraft()
+        XCTAssertEqual(model.phase, .review)
+        XCTAssertNotNil(model.document)
+        let export = try XCTUnwrap(model.beginExport())
+        model.goHome()
+        await export.value
+        XCTAssertEqual(model.phase, .ready)
+        XCTAssertNil(model.exportURL)
+    }
+
 }

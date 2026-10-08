@@ -37,7 +37,7 @@ def run(args: list[str], progress: Callable[[float], None] | None = None) -> str
 
 def run_with_progress(args: list[str], progress: Callable[[float], None]) -> str:
     """Read FFmpeg's output timestamps while keeping error output off the bar."""
-    command = [args[0], "-progress", "pipe:1", "-nostats", *args[1:]]
+    command = [args[0], "-progress", "pipe:1", "-stats_period", "0.1", "-nostats", *args[1:]]
     LOG.debug("%s", shlex.join(command))
     with tempfile.TemporaryFile() as errors:
         try:

@@ -21,7 +21,8 @@ final class PythonBridge {
     }
 
     func run(root: URL, python: URL, request: [String: Any],
-             progress: @escaping @MainActor (String, Double) -> Void) async throws -> Data {
+             progress: @escaping @MainActor (String, Double) -> Void,
+             timing: @escaping @MainActor (Double) -> Void = { _ in }) async throws -> Data {
         guard process == nil else { throw BridgeFailure(message: "Another operation is still running.") }
         guard FileManager.default.fileExists(atPath: root.appendingPathComponent("censor/desktop.py").path) else {
             throw BridgeFailure(message: "Choose the bleep.ly project folder in Settings.")
@@ -71,7 +72,11 @@ final class PythonBridge {
                     case "progress":
                         let stage = object["stage"] as? String ?? "Processing"
                         let fraction = object["fraction"] as? Double ?? 0
-                        Task { @MainActor in progress(stage, min(1, max(0, fraction))) }
+                        let duration = object["duration"] as? Double ?? 0
+                        Task { @MainActor in
+                            timing(duration)
+                            progress(stage, min(1, max(0, fraction)))
+                        }
                     case "result": result = line
                     case "error": failure = object["message"] as? String
                     default: break
