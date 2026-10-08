@@ -264,11 +264,16 @@ struct ContentView: View {
                                 Toggle("Censor \(word.word)", isOn: Binding(get: { word.profane }, set: { _ in model.toggle(word) }))
                                     .labelsHidden().toggleStyle(.checkbox)
                             }.padding(10)
-                                .background(model.selected == word.id ? .white.opacity(0.1) : .clear, in: RoundedRectangle(cornerRadius: 9))
+                                .background(model.selected == word.id ? .mint.opacity(0.16) : .clear, in: RoundedRectangle(cornerRadius: 9))
                                 .id(word.id)
                         }
                     }
-                }.onChange(of: model.selected) { _, id in if let id { proxy.scrollTo(id, anchor: .center) } }
+                }.onChange(of: model.selected) { _, id in
+                    guard let id, model.visibleWords.contains(where: { $0.id == id }) else { return }
+                    withAnimation(reduceMotion ? nil : .easeInOut(duration: 0.18)) {
+                        proxy.scrollTo(id, anchor: .center)
+                    }
+                }
             }
         }.padding(14).background(.black.opacity(0.15), in: RoundedRectangle(cornerRadius: 16))
     }

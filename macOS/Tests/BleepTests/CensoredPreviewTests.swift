@@ -200,6 +200,24 @@ final class CensoredPreviewTests: XCTestCase {
         XCTAssertNil(model.player.currentItem)
         XCTAssertFalse(model.preparingPreview)
     }
+    func testPlayerAutomaticallyFollowsWordsAndRetainsAuditionSelection() async throws {
+        let (model, _, _) = try await fixture()
+        defer { model.goHome() }
+        let word = try XCTUnwrap(model.document?.words.first)
+        model.seek(0.8)
+        XCTAssertNil(model.selected)
+        model.togglePlayback()
+        for _ in 0..<100 where model.selected != word.id { try await Task.sleep(nanoseconds: 20_000_000) }
+        XCTAssertEqual(model.selected, word.id)
+        model.pause()
+        XCTAssertEqual(model.selected, word.id)
+        model.seek(0)
+        XCTAssertNil(model.selected)
+        model.audition(word)
+        try await Task.sleep(nanoseconds: 100_000_000)
+        XCTAssertEqual(model.selected, word.id, "Pre-roll must not select the previous word during audition")
+    }
+
     func testHomeCancelsAnActivePreviewWorker() async throws {
         let (model, _, folder) = try await fixture()
         defer { model.goHome() }

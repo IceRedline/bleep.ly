@@ -8,9 +8,10 @@ final class AppModel: ObservableObject {
     enum Phase: String { case ready, analyzing, review, exporting, done }
     @Published var phase: Phase = .ready
     @Published private(set) var workflowMode: WorkflowMode
-    @Published var document: ReviewDocument?
+    @Published var document: ReviewDocument? { didSet { rebuildPlaybackWords() } }
     @Published var selected: UUID?
-    @Published var selectedAudioTrack = 0
+    @Published var selectedAudioTrack = 0 { didSet { rebuildPlaybackWords() } }
+    private var playbackWords: [ReviewWord] = []
     @Published var stage = "Preparing"
     @Published var fraction = 0.0
     @Published var progressIsEstimated = false
@@ -96,6 +97,7 @@ final class AppModel: ObservableObject {
             Task { @MainActor in
                 guard let self, self.player.currentItem != nil else { return }
                 self.playhead = max(0, time.seconds.isFinite ? time.seconds : 0)
+                if self.player.rate != 0 { self.followPlayback(at: self.playhead) }
                 if let end = self.auditionEnd, self.playhead >= end { self.pause() }
                 self.isPlaying = self.player.rate != 0
             }
@@ -259,12 +261,33 @@ final class AppModel: ObservableObject {
         progressIsEstimated = progressState.estimated
     }
 
+    private func rebuildPlaybackWords() {
+        playbackWords = (document?.words ?? []).filter {
+            $0.profane && ($0.audioTrack ?? document?.audioStream ?? 0) == selectedAudioTrack
+        }.sorted { $0.muteStart < $1.muteStart }
+    }
+
+    /// Keep the latest heard censor interval selected, including between words.
+    /// Binary search avoids walking a long transcript on every player tick.
+    func followPlayback(at seconds: Double) {
+        guard auditionEnd == nil, seconds.isFinite else { return }
+        var lower = 0, upper = playbackWords.count
+        while lower < upper {
+            let middle = (lower + upper) / 2
+            if playbackWords[middle].muteStart <= seconds { lower = middle + 1 }
+            else { upper = middle }
+        }
+        let id = lower > 0 ? playbackWords[lower - 1].id : nil
+        if selected != id { selected = id }
+    }
+
     func cancel() { cancelling = true; stage = "Cancelling…"; bridge.cancel() }
     func pause() { previewGeneration = UUID(); player.pause(); isPlaying = false; auditionEnd = nil }
     func seek(_ seconds: Double) {
         pause()
         let value = min(document?.duration ?? 0, max(0, seconds))
         playhead = value
+        followPlayback(at: value)
         player.seek(to: CMTime(seconds: value, preferredTimescale: 600), toleranceBefore: .zero, toleranceAfter: .zero)
     }
     func togglePlayback() {
