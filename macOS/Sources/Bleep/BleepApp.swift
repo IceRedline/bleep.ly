@@ -51,19 +51,30 @@ struct SettingsView: View {
     @AppStorage("backend") private var backend = "faster-whisper"
     @AppStorage("allowDownloads") private var allowDownloads = false
     @AppStorage("audioStream") private var audioStream = 0
-    @AppStorage("experimentalWhisperKit") private var experimentalWhisperKit = false
     @AppStorage("censorStyle") private var censorStyle = "middle"
 
     var body: some View {
         Form {
-            if whisperKitAvailable {
-                Section("Experimental · not a release feature") {
-                    Toggle("Use WhisperKit (experimental)", isOn: $experimentalWhisperKit)
+            Section("Recognition") {
+                Picker("Engine", selection: $backend) {
+                    Text("CPU · Classic processing").tag("faster-whisper")
+                    Text("MLX · GPU recognition").tag("mlx")
+                    if whisperKitAvailable {
+                        Text("WhisperKit · Experimental").tag("whisperkit")
+                    }
+                }
+                if backend == "whisperkit" && whisperKitAvailable {
                     Text("Core ML · less accurate in our test: 2–3/4 explicit words; MLX: 4/4.")
                         .font(.caption).foregroundStyle(.orange)
-                    Text("Downloads an OpenAI Whisper model (~1.7 GB). First run may take a few minutes. Applies to new files.")
+                    Text("Downloads an OpenAI Whisper model (~1.7 GB). First run may take a few minutes.")
+                        .font(.caption).foregroundStyle(.secondary)
+                } else {
+                    Text(backend == "mlx" ? "Speech recognition on the Apple GPU." : "Classic speech recognition on the CPU.")
                         .font(.caption).foregroundStyle(.secondary)
                 }
+                Toggle("Allow first-time model download", isOn: $allowDownloads)
+                Text("Runs locally. Applies to new files. With downloads off, the selected model must already be cached.")
+                    .font(.caption).foregroundStyle(.secondary)
             }
             Section("Censoring") {
                 Picker("Mute interval", selection: $censorStyle) {
@@ -73,7 +84,7 @@ struct SettingsView: View {
                 Text("Applies when opening media. Whole word mutes from word start to end. Existing reviewed intervals stay unchanged; the sound always plays once at its original speed.")
                     .font(.caption).foregroundStyle(.secondary)
             }
-            Section("Local engine") {
+            Section("Local setup") {
                 HStack {
                     TextField("Project folder", text: $projectRoot)
                     Button("Choose…") {
@@ -83,13 +94,6 @@ struct SettingsView: View {
                 }
                 TextField("Python executable (optional)", text: $pythonPath)
                 Text("By default, uses .venv/bin/python in your project folder. FFmpeg must be installed.")
-                    .font(.caption).foregroundStyle(.secondary)
-                Picker("Recognition", selection: $backend) {
-                    Text("CPU · Classic processing").tag("faster-whisper")
-                    Text("MLX · GPU recognition").tag("mlx")
-                }.disabled(whisperKitAvailable && experimentalWhisperKit)
-                Toggle("Allow first-time model download", isOn: $allowDownloads)
-                Text("Russian speech · large-v3-turbo. Recognition runs on this Mac. With downloads off, the model must already be cached.")
                     .font(.caption).foregroundStyle(.secondary)
             }
             Section("Audio track") {
@@ -102,5 +106,6 @@ struct SettingsView: View {
             }
         }
         .formStyle(.grouped).padding(16).frame(width: 590, height: 550)
+        .onAppear { WhisperKitExperiment.migratePreferences(defaults: .standard, available: whisperKitAvailable) }
     }
 }

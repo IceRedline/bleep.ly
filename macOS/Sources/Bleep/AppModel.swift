@@ -56,6 +56,7 @@ final class AppModel: ObservableObject {
     }
 
     init(defaults: UserDefaults = .standard, supportDirectory: URL? = nil) {
+        WhisperKitExperiment.migratePreferences(defaults: defaults)
         self.defaults = defaults
         self.supportDirectory = supportDirectory ?? Self.support
         self.workflowMode = WorkflowMode(rawValue: defaults.string(forKey: "workflowMode") ?? "") ?? .fast
@@ -106,14 +107,13 @@ final class AppModel: ObservableObject {
             do {
                 var request: [String: Any] = ["operation": "analyze", "source": url.path,
                     "cache_dir": supportDirectory.appendingPathComponent("cache").path,
-                    "backend": defaults.string(forKey: "backend") ?? "faster-whisper",
+                    "backend": WhisperKitExperiment.backend(defaults: defaults),
                     "censor_style": defaults.string(forKey: "censorStyle") ?? "middle",
                     "offline": !defaults.bool(forKey: "allowDownloads")]
                 let stream = defaults.integer(forKey: "audioStream")
                 // 0 requests automatic selection and reports ambiguous multi-track media.
                 if stream > 0 { request["audio_stream"] = stream - 1 }
-                if WhisperKitExperiment.enabled(defaults: defaults), transcript == nil {
-                    request["backend"] = "whisperkit"
+                if request["backend"] as? String == "whisperkit", transcript == nil {
                     request["whisperkit_executable"] = WhisperKitExperiment.helper.path
                     request["whisperkit_model_folder"] = root.appendingPathComponent(".cache/whisperkit/model").path
                 }

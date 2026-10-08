@@ -3,16 +3,46 @@ import SwiftUI
 @testable import Bleep
 
 final class WhisperKitExperimentTests: XCTestCase {
-    func testOptInRequiresLabBuildAndUserPreference() throws {
+    private func preferences() throws -> UserDefaults {
         let suite = "WhisperKitTests-\(UUID().uuidString)"
         let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
-        defer { defaults.removePersistentDomain(forName: suite) }
-        XCTAssertFalse(WhisperKitExperiment.enabled(defaults: defaults, available: true))
+        addTeardownBlock { defaults.removePersistentDomain(forName: suite) }
+        return defaults
+    }
+
+    func testSingleChoiceSelectsExactlyOneEngine() throws {
+        let defaults = try preferences()
+        XCTAssertEqual(WhisperKitExperiment.backend(defaults: defaults, available: true), "faster-whisper")
+        for backend in ["whisperkit", "mlx", "faster-whisper"] {
+            defaults.set(backend, forKey: "backend")
+            XCTAssertEqual(WhisperKitExperiment.backend(defaults: defaults, available: true), backend)
+        }
+        defaults.set("unknown", forKey: "backend")
+        XCTAssertEqual(WhisperKitExperiment.backend(defaults: defaults, available: true), "faster-whisper")
+    }
+
+    func testLegacyToggleMigratesOnceAndDoesNotOverrideLaterSelection() throws {
+        let defaults = try preferences()
+        defaults.set("mlx", forKey: "backend")
         defaults.set(true, forKey: "experimentalWhisperKit")
-        XCTAssertFalse(WhisperKitExperiment.enabled(defaults: defaults, available: false))
-        XCTAssertTrue(WhisperKitExperiment.enabled(defaults: defaults, available: true))
-        defaults.set(false, forKey: "experimentalWhisperKit")
-        XCTAssertFalse(WhisperKitExperiment.enabled(defaults: defaults, available: true))
+        WhisperKitExperiment.migratePreferences(defaults: defaults, available: true)
+        XCTAssertEqual(defaults.string(forKey: "backend"), "whisperkit")
+        XCTAssertNil(defaults.object(forKey: "experimentalWhisperKit"))
+        defaults.set("mlx", forKey: "backend")
+        WhisperKitExperiment.migratePreferences(defaults: defaults, available: true)
+        XCTAssertEqual(defaults.string(forKey: "backend"), "mlx")
+    }
+
+    func testReleaseCannotSelectWhisperKitThroughStalePreferences() throws {
+        let defaults = try preferences()
+        defaults.set("mlx", forKey: "backend")
+        defaults.set(true, forKey: "experimentalWhisperKit")
+        WhisperKitExperiment.migratePreferences(defaults: defaults, available: false)
+        XCTAssertEqual(defaults.string(forKey: "backend"), "mlx")
+        defaults.set("whisperkit", forKey: "backend")
+        XCTAssertEqual(WhisperKitExperiment.backend(defaults: defaults, available: false), "faster-whisper")
+        WhisperKitExperiment.migratePreferences(defaults: defaults, available: false)
+        XCTAssertEqual(defaults.string(forKey: "backend"), "faster-whisper")
     }
 
     func testReviewRetainsRecognitionProvenance() throws {
