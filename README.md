@@ -1,4 +1,4 @@
-# Auto Censor
+# bleep.ly
 
 Локальный CLI для запикивания русской ненормативной лексики в готовом видео.
 Распознаёт слова через **faster-whisper** (CPU) или **mlx-whisper** (Apple GPU), глушит исходный звук и накладывает ваш
@@ -11,21 +11,37 @@
 faster-whisper 1.2.1, CTranslate2 4.8.2, ONNX Runtime 1.23.2, macOS ARM64.
 
 ```bash
+git clone https://github.com/IceRedline/bleep.ly.git
+cd bleep.ly
 brew install ffmpeg python@3.11
 python3.11 -m venv .venv
 source .venv/bin/activate
 pip install -r requirements.txt
-python3 censor.py --help
+python3 bleep.py --help
 ```
 
 Если `python3` уже версии 3.11 или новее, можно использовать `python3 -m venv .venv`.
-В этой рабочей папке `.venv` уже создана, зависимости установлены.
+Медиафайлы и звуки не входят в репозиторий: добавьте своё видео и звук для запикивания.
 
 ## Быстрый запуск
 
+Из папки проекта после активации `.venv`:
+
 ```bash
-python3 censor.py input.mov --sound beep.wav
+export HF_HOME="$PWD/.cache/huggingface"
+python3 bleep.py input.mov --sound beep.wav
 ```
+
+Используйте этот же `HF_HOME` при последующих запусках, чтобы находить скачанные
+модели. Если они уже скачаны, добавьте `--offline`. Для прежней рабочей папки:
+
+```bash
+HF_HOME="$PWD/.cache/huggingface" .venv/bin/python bleep.py "IMG_2124.MOV" \
+  --sound "beep_trimmed.wav" --output "new.mov" --offline
+```
+
+`censor.py` остаётся совместимым входом для старых команд. Основная команда
+проекта теперь `bleep.py`; пакет Python `censor` сохраняет совместимость импортов.
 
 Результат — `input_censored.mov` и `input.transcript.json` рядом с исходником.
 Исходное видео не изменяется. Существующие видео, FCPXML и WAV-папки не перезаписываются.
@@ -33,7 +49,7 @@ python3 censor.py input.mov --sound beep.wav
 Это сохраняет ранее внесённые вручную исправления.
 
 ```bash
-python3 censor.py input.mov \
+python3 bleep.py input.mov \
   --sound censor.wav \
   --output output.mov \
   --language ru \
@@ -62,9 +78,9 @@ Enter оставляет CPU/int8. Выбор GPU включает MLX/float16.
 После загрузки можно работать без сети:
 
 ```bash
-python3 censor.py input.mov --sound beep.wav --offline
+python3 bleep.py input.mov --sound beep.wav --offline
 # Можно передать готовую локальную модель формата CTranslate2:
-python3 censor.py input.mov --sound beep.wav --model /path/to/local/model --offline
+python3 bleep.py input.mov --sound beep.wav --model /path/to/local/model --offline
 ```
 
 faster-whisper использует CTranslate2, который поддерживает Apple ARM64 CPU,
@@ -79,7 +95,7 @@ faster-whisper использует CTranslate2, который поддержи
 
 ```bash
 pip install -r requirements-mlx.txt
-python3 censor.py input.mov --sound beep_trimmed.wav --backend mlx
+python3 bleep.py input.mov --sound beep_trimmed.wav --backend mlx
 ```
 
 Первый запуск скачивает отдельные MLX-веса (около 1.6 GB); веса CTranslate2
@@ -87,7 +103,7 @@ python3 censor.py input.mov --sound beep_trimmed.wav --backend mlx
 локальном кэше этой рабочей папки, используйте:
 
 ```bash
-HF_HOME="$PWD/.cache/huggingface" python3 censor.py input.mov \
+HF_HOME="$PWD/.cache/huggingface" python3 bleep.py input.mov \
   --sound beep_trimmed.wav --backend mlx --offline
 ```
 
@@ -111,7 +127,7 @@ HF_HOME="$PWD/.cache/huggingface" python3 censor.py input.mov \
 и компиляцию. Скорость следует сравнивать после установки и загрузки весов.
 Без `--backend` в терминале показывается меню; в автоматическом запуске используется CPU.
 
-Локальная проверка на M3 Pro: первые 120 секунд `стрим.m4v` распознаны за
+Локальная проверка на M3 Pro: 120-секундный фрагмент распознан за
 30.24 s на faster-whisper CPU/int8 и 9.92 s на MLX GPU/float16 — примерно в 3 раза
 быстрее. Время включает загрузку уже скачанной модели и VAD, но не скачивание
 и не рендер. На этом фрагменте найдено 22 и 23 совпадения соответственно;
@@ -130,7 +146,7 @@ segmentation 3.0 и 3D-Speaker ERes2Net через sherpa-onnx (CPU).
 Это отдельный этап; выбор MLX в меню ускоряет именно Whisper.
 Голоса не извлекаются в отдельные дорожки: при заглушении по-прежнему глушится общий микс.
 
-В текущей рабочей папке зависимости и модели уже установлены. На новом компьютере:
+Установите дополнительные зависимости и скачайте модели:
 
 ```bash
 pip install -r requirements-speakers.txt
@@ -147,14 +163,14 @@ curl -fL https://github.com/k2-fsa/sherpa-onnx/releases/download/speaker-recongi
 Пока для каждого нового видео нужен свой фрагмент; постоянный профиль голоса между
 разными видео не создаётся. Внешние аудиообразцы пока не используются.
 
-Пример для этой записи, без повторного распознавания слов:
+Пример с уже распознанным видео, где 24–52 секунды — образец вашего голоса:
 
 ```bash
-python3 censor.py 'стрим.m4v' \
-  --from-transcript 'стрим.transcript.json' \
+python3 bleep.py 'input.mov' \
+  --from-transcript 'input.transcript.json' \
   --speaker-reference 24 52 --num-speakers 4 \
-  --sound beep_trimmed.wav --sound-others 'Звук Win 11 remove.wav' \
-  --output 'стрим_two_sounds.mov'
+  --sound beep_trimmed.wav --sound-others 'others.wav' \
+  --output 'two_sounds.mov'
 ```
 
 С `--speaker-reference` сохраняется новый JSON с полями `speaker: "me"`,
@@ -170,9 +186,9 @@ python3 censor.py 'стрим.m4v' \
 сохранить ручные метки. `profane` и временные границы редактируются как раньше.
 
 ```bash
-python3 censor.py 'стрим.m4v' --from-transcript 'стрим.speakers.transcript.json' \
-  --sound beep_trimmed.wav --sound-others 'Звук Win 11 remove.wav' \
-  --output 'стрим_two_sounds_reviewed.mov'
+python3 bleep.py 'input.mov' --from-transcript 'input.speakers.transcript.json' \
+  --sound beep_trimmed.wav --sound-others 'others.wav' \
+  --output 'two_sounds_reviewed.mov'
 ```
 
 Сочетание `--speaker-reference ... --transcribe-only` сохраняет разметку без рендера.
@@ -183,23 +199,10 @@ FCPXML также поддерживает два звука и полную д�
 это список объектов `{ "start": 0.0, "end": 2.0, "speaker": 0 }` в таймлайне этого же видео.
 Для моделей в другой папке укажите `--speaker-model-dir`.
 
-Предыдущая модель WeSpeaker ResNet34-LM смешивала голос владельца с чужими
-репликами на `стрим.m4v`, в том числе около 16:05, 17:53 и 18:13.
-Образец 24–52 s целиком в одном кластере не доказывает, что остальные реплики
-этого кластера принадлежат тому же человеку. Для этой записи выбран 3D-Speaker
-ERes2Net. Старые размеченные JSON не исправляются автоматически: нужно заново
-выполнить `--speaker-reference`, не передавая старый `--speaker-segments`.
-Кэш разметки зависит от содержимого модели и обновляется при её замене.
 Разметка остаётся автоматической: крики, шум и похожие голоса могут ошибочно
 попасть в один кластер; число 4 не гарантирует правильное разделение.
-
-В повторном полном прогоне 3D-Speaker исправил все три указанные пользователем
-ошибки: слова на 964.55, 1072.38 и 1092.40 s получили `others`; ругательства
-в образце 24–52 s сохранили `me`. Разметка заняла около 2:53. Новые метки:
-207 `me`, 62 `others`, 60 `unknown`. Результат сохранён отдельно как
-`стрим_two_sounds_v2.mov`, разметка — `стрим.speakers_v2.transcript.json`.
-Эта проверка подтверждает исправление конкретных примеров, но не точность
-всех остальных реплик. Для 60 спорных мест по-прежнему используется первый звук.
+При смене модели заново выполните `--speaker-reference` без старого
+`--speaker-segments`. Существующие JSON автоматически не исправляются.
 
 [Документация sherpa-onnx](https://k2-fsa.github.io/sherpa/onnx/speaker-diarization/index.html),
 [модели голосов](https://github.com/k2-fsa/sherpa-onnx/releases/tag/speaker-recongition-models).
@@ -227,10 +230,10 @@ Whisper сообщает прогресс после готовых сегмен
 
 ```bash
 # Только показать найденные слова и суммарную длительность:
-python3 censor.py input.mov --dry-run
+python3 bleep.py input.mov --dry-run
 
 # Сохранить JSON и кэш без рендера и без censor sound:
-python3 censor.py input.mov --transcribe-only
+python3 bleep.py input.mov --transcribe-only
 ```
 
 `--dry-run` читает существующий кэш, но не пишет JSON, кэш транскрипции или медиарезультаты.
@@ -255,7 +258,7 @@ JSON содержит объект `words`, а также необязатель
 `0 <= start < end <= duration`, `profane` строго `true`/`false`.
 
 ```bash
-python3 censor.py input.mov \
+python3 bleep.py input.mov \
   --from-transcript input.transcript.json \
   --sound beep.wav --output reviewed.mov
 ```
@@ -315,21 +318,10 @@ Whisper и словарь при этом не запускаются: ваши 
 Исходное аудио сохраняет задержку относительно видео, короткая аудиодорожка
 дополняется тишиной. Выходной звук сводится в stereo.
 
-Выбранный пользователем эталон интервалов заглушения — `input_censored_reviewed.mov`.
-В текущей версии эти интервалы сохранены, но звук доигрывает целиком поверх
-возобновившейся речи. Запуск с исправленными timestamps и звуком без тихого хвоста:
-
-```bash
-python3 censor.py input.mov --from-transcript input.reviewed.transcript.json \
-  --sound beep_trimmed.wav --censor-style middle --output reviewed_again.mov
-```
-
-Эти исходные медиа и JSON хранятся локально и не включены в Git.
-
 Если в файле несколько аудиопотоков, выбор обязателен:
 
 ```bash
-python3 censor.py input.mov --audio-stream 0 --sound beep.wav
+python3 bleep.py input.mov --audio-stream 0 --sound beep.wav
 ```
 
 Индекс считается только среди аудиопотоков, начиная с нуля. Результат содержит
@@ -343,14 +335,14 @@ python3 censor.py input.mov --audio-stream 0 --sound beep.wav
 
 ```bash
 # Только FCPXML + вспомогательные WAV, без нового видео:
-python3 censor.py input.mov --sound beep.wav --fcpxml censor.fcpxml
+python3 bleep.py input.mov --sound beep.wav --fcpxml censor.fcpxml
 
 # Из проверенного JSON, с приглушением вместо тишины:
-python3 censor.py input.mov --from-transcript input.transcript.json \
+python3 bleep.py input.mov --from-transcript input.transcript.json \
   --sound beep.wav --mode duck --fcpxml reviewed.fcpxml
 
 # Одновременно видео и FCPXML:
-python3 censor.py input.mov --sound beep.wav \
+python3 bleep.py input.mov --sound beep.wav \
   --output output.mov --fcpxml censor.fcpxml
 ```
 
@@ -430,7 +422,8 @@ Whisper timestamps — оценка, а не гарантированная фо
 
 ```text
 .
-├── censor.py
+├── bleep.py          # основной CLI
+├── censor.py         # совместимость со старыми командами
 ├── requirements.txt
 ├── requirements-mlx.txt
 ├── requirements-speakers.txt
@@ -465,7 +458,7 @@ Whisper timestamps — оценка, а не гарантированная фо
 
 ```bash
 python3 -m unittest discover -v
-python3 censor.py --help
+python3 bleep.py --help
 ```
 
 Unit-тесты используют стандартный `unittest`. Интеграционные тесты автоматически
@@ -473,21 +466,6 @@ Unit-тесты используют стандартный `unittest`. Инте
 Они проверяют идентичность сжатого видеопотока, спектр готового аудио, mute/duck,
 fades, длительность beep, смещение аудио, multiple streams, кэш, ручные флаги и
 отсутствие файлов при dry run. Для тестов не скачиваются Whisper-модели.
-
-Проверка реализации: **58 тестов прошли**, включая выбор двух звуков и их хвосты,
-неоднозначные голоса, меню выбора, MLX, независимые кэши,
-350 интервалов заглушения, прогресс, ETA и обработку ошибок,
-проверку однократного полного
-проигрывания в исходном темпе, возвращения речи под хвостом beep без увеличения
-заглушения и отдельных FCPXML lanes для перекрывающихся звуков.
-Дополнительно выполнен настоящий
-полный прогон с Whisper `tiny` на русской речи, синтезированной локально через
-macOS Milena: найдены два ругательства, созданы MOV и FCPXML, подтверждено
-совпадение SHA-256 сжатого видеопотока, повторный запуск использовал кэш.
-Демонстрационные результаты находятся в `.cache/smoke/`; они не нужны для работы.
-`large-v3-turbo` поддерживается установленным backend и оставлена по умолчанию,
-но её веса для этой проверки не скачивались. Качество этой модели на реальном
-пользовательском монтаже здесь не измерялось.
 
 Для отдельной валидации XML скачайте DTD с сайта Apple:
 
@@ -497,3 +475,13 @@ xmllint --noout --dtdvalid /path/to/FCPXMLv1_10.dtd censor.fcpxml
 
 Распознавание использует [документированный API faster-whisper](https://github.com/SYSTRAN/faster-whisper)
 с `word_timestamps=True`, `vad_filter=True`, `beam_size=5`.
+
+## Репозиторий и локальные файлы
+
+Репозиторий: [IceRedline/bleep.ly](https://github.com/IceRedline/bleep.ly).
+
+В Git хранятся код, тесты, словарь и документация. `.gitignore` исключает
+исходные и готовые видео, аудиофайлы, транскрипции, FCPXML и его медиа,
+веса моделей, кэш, виртуальные окружения, логи и локальные секреты.
+Расширения медиа исключаются и в верхнем регистре, например `.MOV`.
+Не добавляйте такие файлы через `git add -f`.
