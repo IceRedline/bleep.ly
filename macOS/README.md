@@ -49,10 +49,10 @@ Files with multiple audio tracks require an explicit track selection in Settings
 .venv/bin/python -m unittest discover -s tests -q
 CLANG_MODULE_CACHE_PATH="$PWD/.cache/clang" \
 SWIFTPM_MODULECACHE_OVERRIDE="$PWD/.cache/clang" \
-swift test --disable-sandbox --package-path macOS --scratch-path .cache/swift-build
+swift test --disable-sandbox --package-path macOS --scratch-path .cache/swift-build -c release
 ```
 
-The Python integration tests cover audio inputs, silence, cue tails, no-clobber exports, zero findings, edited intervals, cache reuse, the JSON protocol, and video stream identity. When the local approved reference is available its mute intervals are compared exactly. Swift tests cover protocol decoding/encoding, manual-interval validation, real Swift → Python → WAV export, cancellation of a worker group, and native view rendering for visual review.
+The Python integration tests cover audio inputs, silence, cue tails, no-clobber exports, zero findings, edited intervals, cache reuse, the JSON protocol, and video stream identity. When the local approved reference is available its mute intervals are compared exactly. Swift tests cover protocol decoding/encoding, manual-interval validation, real Swift → Python → WAV export, cancellation of a worker group, and native view rendering for visual review. Video regression tests load a generated MOV, check seeking and screen transitions, and verify that the standalone executable links AVKit (the XCTest host can otherwise mask a missing framework). Run these tests from a local macOS session with access to native media decoding services.
 
 ## Structure
 
