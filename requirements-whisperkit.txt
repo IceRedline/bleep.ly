@@ -1,2 +1,2 @@
-# Optional Lab download support; this version's public hook reports HTTP and Xet bytes.
+# WhisperKit model download support; this version's public hook reports HTTP and Xet bytes.
 huggingface-hub>=1.33,<2

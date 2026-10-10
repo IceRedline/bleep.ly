@@ -67,9 +67,6 @@ struct ContentView: View {
                     .buttonStyle(.borderless).help(model.busy ? "Cancel processing and return home" : "Return to file selection")
             }
             Text("A little less explicit.").font(.callout).foregroundStyle(.secondary).padding(.leading, 12)
-            if WhisperKitExperiment.available {
-                Text("LAB").font(.caption2.bold()).foregroundStyle(.orange)
-            }
             Spacer()
             Picker("Workflow", selection: Binding(get: { model.workflowMode }, set: { model.selectMode($0) })) {
                 Text("Fast Mode").tag(WorkflowMode.fast)

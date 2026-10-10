@@ -47,7 +47,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 }
 
 struct SettingsView: View {
-    var whisperKitAvailable = WhisperKitExperiment.available
     @AppStorage("projectRoot") private var projectRoot = AppModel.defaultRoot
     @AppStorage("pythonPath") private var pythonPath = ""
     @AppStorage("backend") private var backend = "faster-whisper"
@@ -60,11 +59,9 @@ struct SettingsView: View {
                 Picker("Engine", selection: $backend) {
                     Text("CPU · Classic processing").tag("faster-whisper")
                     Text("MLX · GPU recognition").tag("mlx")
-                    if whisperKitAvailable {
-                        Text("WhisperKit · Experimental").tag("whisperkit")
-                    }
+                    Text("WhisperKit · Experimental").tag("whisperkit")
                 }
-                if backend == "whisperkit" && whisperKitAvailable {
+                if backend == "whisperkit" {
                     Text("Core ML · less accurate in our test: 2–3/4 explicit words; MLX: 4/4.")
                         .font(.caption).foregroundStyle(.orange)
                     Text("Downloads an OpenAI Whisper model (~1.7 GB). First run may take a few minutes.")
@@ -103,6 +100,6 @@ struct SettingsView: View {
             }
         }
         .formStyle(.grouped).padding(16).frame(width: 590, height: 550)
-        .onAppear { WhisperKitExperiment.migratePreferences(defaults: .standard, available: whisperKitAvailable) }
+        .onAppear { WhisperKitExperiment.migratePreferences(defaults: .standard) }
     }
 }

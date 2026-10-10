@@ -12,37 +12,32 @@ final class WhisperKitExperimentTests: XCTestCase {
 
     func testSingleChoiceSelectsExactlyOneEngine() throws {
         let defaults = try preferences()
-        XCTAssertEqual(WhisperKitExperiment.backend(defaults: defaults, available: true), "faster-whisper")
+        XCTAssertEqual(WhisperKitExperiment.backend(defaults: defaults), "faster-whisper")
         for backend in ["whisperkit", "mlx", "faster-whisper"] {
             defaults.set(backend, forKey: "backend")
-            XCTAssertEqual(WhisperKitExperiment.backend(defaults: defaults, available: true), backend)
+            XCTAssertEqual(WhisperKitExperiment.backend(defaults: defaults), backend)
         }
         defaults.set("unknown", forKey: "backend")
-        XCTAssertEqual(WhisperKitExperiment.backend(defaults: defaults, available: true), "faster-whisper")
+        XCTAssertEqual(WhisperKitExperiment.backend(defaults: defaults), "faster-whisper")
     }
 
     func testLegacyToggleMigratesOnceAndDoesNotOverrideLaterSelection() throws {
         let defaults = try preferences()
         defaults.set("mlx", forKey: "backend")
         defaults.set(true, forKey: "experimentalWhisperKit")
-        WhisperKitExperiment.migratePreferences(defaults: defaults, available: true)
+        WhisperKitExperiment.migratePreferences(defaults: defaults)
         XCTAssertEqual(defaults.string(forKey: "backend"), "whisperkit")
         XCTAssertNil(defaults.object(forKey: "experimentalWhisperKit"))
         defaults.set("mlx", forKey: "backend")
-        WhisperKitExperiment.migratePreferences(defaults: defaults, available: true)
+        WhisperKitExperiment.migratePreferences(defaults: defaults)
         XCTAssertEqual(defaults.string(forKey: "backend"), "mlx")
     }
 
-    func testReleaseCannotSelectWhisperKitThroughStalePreferences() throws {
+    func testWhisperKitIsAvailableWithoutALabBundleFlag() throws {
         let defaults = try preferences()
-        defaults.set("mlx", forKey: "backend")
-        defaults.set(true, forKey: "experimentalWhisperKit")
-        WhisperKitExperiment.migratePreferences(defaults: defaults, available: false)
-        XCTAssertEqual(defaults.string(forKey: "backend"), "mlx")
         defaults.set("whisperkit", forKey: "backend")
-        XCTAssertEqual(WhisperKitExperiment.backend(defaults: defaults, available: false), "faster-whisper")
-        WhisperKitExperiment.migratePreferences(defaults: defaults, available: false)
-        XCTAssertEqual(defaults.string(forKey: "backend"), "faster-whisper")
+        WhisperKitExperiment.migratePreferences(defaults: defaults)
+        XCTAssertEqual(WhisperKitExperiment.backend(defaults: defaults), "whisperkit")
     }
 
     func testReviewRetainsRecognitionProvenance() throws {
@@ -57,12 +52,12 @@ final class WhisperKitExperimentTests: XCTestCase {
         XCTAssertEqual(restored.analysisSeconds, 4.5)
     }
     @MainActor
-    func testRenderLabSettingsForVisualReview() throws {
+    func testRenderUnifiedSettingsForVisualReview() throws {
         let root = URL(fileURLWithPath: #filePath).deletingLastPathComponent()
             .deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
-        let output = root.appendingPathComponent(".cache/macos-previews/lab-settings.png")
+        let output = root.appendingPathComponent(".cache/macos-previews/settings.png")
         try FileManager.default.createDirectory(at: output.deletingLastPathComponent(), withIntermediateDirectories: true)
-        let view = NSHostingView(rootView: SettingsView(whisperKitAvailable: true).environment(\.colorScheme, .dark))
+        let view = NSHostingView(rootView: SettingsView().environment(\.colorScheme, .dark))
         let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 590, height: 550),
                               styleMask: [.borderless], backing: .buffered, defer: false)
         window.appearance = NSAppearance(named: .darkAqua)

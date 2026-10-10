@@ -1,24 +1,23 @@
-# WhisperKit Lab
+# WhisperKit: экспериментальный движок
 
-Локальный эксперимент, выключенный по умолчанию. Обычная сборка не содержит
-WhisperKit SDK или helper и не позволяет включить его сохранённым preference.
-Lab имеет отдельные bundle identifier, настройки, черновик и кэш расшифровок.
+WhisperKit входит в единственное приложение **bleep.ly**, рядом с CPU и MLX.
+Отдельной Lab-сборки больше нет; движок остаётся экспериментальным и выбирается вручную.
 
 ## Запуск
 
 Из корня проекта (существующие `.venv`, FFmpeg и Swift toolchain обязательны):
 
 ```sh
-bash scripts/build-macos.sh --whisperkit
+bash scripts/build-macos.sh
 .venv/bin/python -m pip install -r requirements-whisperkit.txt
 .venv/bin/python scripts/prepare-whisperkit.py
-open 'build/bleep.ly Lab.app'
+open 'build/bleep.ly.app'
 ```
 
 Первичная сборка скачивает Swift-зависимости. Шаг prepare-whisperkit явно скачивает около
 1.7 GB весов и токенизатора в `.cache/whisperkit/model`; записи никуда не отправляются.
-Вместо второго шага можно один раз разрешить `Allow first-time model download`
-в настройках Lab. После установки моделей распознавание работает offline.
+Вместо запуска prepare-whisperkit можно один раз разрешить `Allow first-time model download`
+в настройках приложения. После установки моделей распознавание работает offline.
 Во время первой загрузки приложение показывает полученные и общие MB,
 затем установку модели и отдельный этап подготовки Core ML.
 Первый запуск Core ML может занимать несколько минут; это подготовка модели.
@@ -30,7 +29,7 @@ open 'build/bleep.ly Lab.app'
 Старый включённый переключатель Lab автоматически переносится в этот выбор.
 Импорт проверенной расшифровки всегда сохраняет её ручные флаги и интервалы.
 
-Обычная сборка: `bash scripts/build-macos.sh`. Обе сборки используют `icon.PNG`;
+Единственная сборка: `bash scripts/build-macos.sh`. Приложение использует `icon.PNG`;
 скрипт создаёт macOS `.icns` со всеми размерами, исходный PNG не меняется.
 
 ## Что сравниваем
@@ -72,7 +71,7 @@ Swift helper запускается из Python отдельным процес�
 HF_HOME="$PWD/.cache/huggingface" HF_HUB_DISABLE_TELEMETRY=1 \
   .venv/bin/python -m censor.benchmark input.mov \
   --reference input.reviewed.transcript.json \
-  --helper 'build/bleep.ly Lab.app/Contents/Helpers/BleepWhisperKit' \
+  --helper 'build/bleep.ly.app/Contents/Helpers/BleepWhisperKit' \
   --output .cache/comparison-new --repeats 3
 ```
 

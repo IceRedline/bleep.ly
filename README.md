@@ -50,20 +50,22 @@ One **Engine** picker selects the backend for the next file:
 
 | Engine | Processing | Availability |
 | --- | --- | --- |
-| CPU · faster-whisper | Conventional CPU recognition, int8 | Standard app and Lab |
+| CPU · faster-whisper | Conventional CPU recognition, int8 | Included |
 | Apple GPU · MLX | Metal GPU recognition, float16 | Apple Silicon; optional Python dependencies |
-| WhisperKit · Experimental | Native Swift framework running converted Whisper weights through Core ML | Separate Lab build only |
+| WhisperKit · Experimental | Native Swift framework running converted Whisper weights through Core ML | Included; experimental |
 
 All three use the Whisper large-v3-turbo family with different runtime/decoding configurations and separate caches. WhisperKit is an Argmax framework; its model is **not an Apple speech model** and must also be downloaded. It is not Apple's Speech framework. Native execution does not guarantee higher accuracy or model download availability.
 
-On the initial 19.93-second local reference, MLX found 4/4 reviewed occurrences in three runs; CPU found 3/4; WhisperKit found 2/4, 3/4, and 3/4. This small sample is insufficient for a general quality ranking. WhisperKit remains experimental. See the [Lab setup and reproducible benchmark](experiments/README.md).
+On the initial 19.93-second local reference, MLX found 4/4 reviewed occurrences in three runs; CPU found 3/4; WhisperKit found 2/4, 3/4, and 3/4. This small sample is insufficient for a general quality ranking. WhisperKit remains experimental. See the [WhisperKit setup and reproducible benchmark](experiments/README.md).
 
 ```sh
 .venv/bin/pip install -r requirements-whisperkit.txt
-bash scripts/build-macos.sh --whisperkit --open
+bash scripts/build-macos.sh --open
 ```
 
-Lab has independent settings, drafts, and transcript caches. Choose WhisperKit in its Engine picker and allow the initial download, or prepare the weights with `scripts/prepare-whisperkit.py`. The first Core ML preparation can take several minutes.
+There is one app, **bleep.ly**, with CPU, MLX, and WhisperKit in the same Engine picker. The build always bundles the native WhisperKit helper; model weights are still downloaded only when requested. Choose WhisperKit and allow the initial download, or prepare the weights with `scripts/prepare-whisperkit.py`. The first Core ML preparation can take several minutes.
+
+Upgrading removes the generated `build/bleep.ly Lab.app` after building the replacement. On first launch, the standard app imports missing settings, the saved custom sound, and the last review from Lab without overwriting existing standard-app data. Original Lab data stays intact; model caches already live in the shared repository.
 
 ## Exports
 

@@ -61,7 +61,7 @@ final class AppModel: ObservableObject {
 
     static var support: URL {
         FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
-            .appendingPathComponent(WhisperKitExperiment.available ? "bleep.ly Lab" : "bleep.ly", isDirectory: true)
+            .appendingPathComponent("bleep.ly", isDirectory: true)
     }
     static var defaultRoot: String {
         Bundle.main.object(forInfoDictionaryKey: "BleepProjectRoot") as? String ?? FileManager.default.currentDirectoryPath
@@ -81,6 +81,14 @@ final class AppModel: ObservableObject {
     }
 
     init(defaults: UserDefaults = .standard, supportDirectory: URL? = nil) {
+        var migrationError: String?
+        if defaults === UserDefaults.standard, supportDirectory == nil,
+           let legacy = UserDefaults(suiteName: "ly.bleep.desktop.lab") {
+            do {
+                try LegacyLabMigration.migrate(defaults: defaults, directory: Self.support,
+                    legacyDefaults: legacy, legacyDirectory: Self.support.deletingLastPathComponent().appendingPathComponent("bleep.ly Lab"))
+            } catch { migrationError = "Could not import Lab data: \(error.localizedDescription)" }
+        }
         WhisperKitExperiment.migratePreferences(defaults: defaults)
         self.defaults = defaults
         self.supportDirectory = supportDirectory ?? Self.support
@@ -93,6 +101,7 @@ final class AppModel: ObservableObject {
             defaults.set("beep", forKey: "censorSound")
             self.error = "The saved custom sound is unavailable. Choose it again."
         }
+        if let migrationError { self.error = migrationError }
         observer = player.addPeriodicTimeObserver(forInterval: CMTime(seconds: 0.04, preferredTimescale: 600), queue: .main) { [weak self] time in
             Task { @MainActor in
                 guard let self, self.player.currentItem != nil else { return }
