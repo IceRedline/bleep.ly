@@ -53,7 +53,7 @@ out.mkdir(exist_ok=True)
 dmgbuild.build_dmg(str(out/f'bleep.ly-{args.version}-arm64.dmg'), f'bleep.ly {args.version}', settings={
     # Tens of thousands of runtime files need more HFS+ metadata space than
     # dmgbuild's default estimate (which can silently truncate a ditto copy).
-    'format': 'ULFO', 'filesystem': 'HFS+', 'size': '4g',
+    'format': 'UDZO', 'filesystem': 'HFS+', 'size': '4g',
     'files': [str(app)], 'symlinks': {'Applications': '/Applications'},
     'background': str(background), 'badge_icon': str(app/'Contents/Resources/AppIcon.icns'),
     'window_rect': ((180,180),(720,480)), 'default_view': 'icon-view',

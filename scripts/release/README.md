@@ -70,10 +70,6 @@ outer app. Python executables allow JIT and unsigned executable memory for Numba
 library validation stays enabled. Use the same Developer ID for all code.
 
 ```sh
-ditto -c -k --keepParent build/release/bleep.ly.app build/release/bleep.ly-notary.zip
-xcrun notarytool submit build/release/bleep.ly-notary.zip --keychain-profile bleep-ly-notary --wait
-xcrun stapler staple build/release/bleep.ly.app
-xcrun stapler validate build/release/bleep.ly.app
 .cache/dmg-tools/bin/python scripts/release/build-dmg.py --version 0.1.0
 codesign --sign 'Developer ID Application: YOUR NAME (TEAM_ID)' --timestamp dist/bleep.ly-0.1.0-arm64.dmg
 xcrun notarytool submit dist/bleep.ly-0.1.0-arm64.dmg --keychain-profile bleep-ly-notary --wait
@@ -82,6 +78,12 @@ xcrun stapler validate dist/bleep.ly-0.1.0-arm64.dmg
 spctl --assess --type open --context context:primary-signature --verbose=2 dist/bleep.ly-0.1.0-arm64.dmg
 ```
 
-Never rebuild or alter a signed/notarized app after stapling. Generate SHA256SUMS
+Apple's [distribution workflow](https://developer.apple.com/documentation/xcode/packaging-mac-software-for-distribution)
+notarizes the outermost container: submitting the signed DMG also produces tickets
+for the signed app and its nested code. Staple the distribution DMG directly.
+The image uses Apple's recommended UDZO format. If S3 Transfer Acceleration is
+slow on the current network, pass `--no-s3-acceleration` to `notarytool submit`.
+
+Never rebuild or alter a signed/notarized app after submission. Generate SHA256SUMS
 only after the final DMG is stapled. Review the notarization log, verify the
 mounted image and Finder layout, then publish the matching tag and release.
