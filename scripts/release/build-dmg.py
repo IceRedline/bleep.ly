@@ -11,7 +11,7 @@ import dmgbuild
 
 ROOT = Path(__file__).resolve().parents[2]
 parser = argparse.ArgumentParser()
-parser.add_argument('--version', default='0.1.0')
+parser.add_argument('--version', default='0.1.1')
 parser.add_argument('--background-only', action='store_true')
 args = parser.parse_args()
 folder = ROOT/'build/release'
@@ -50,6 +50,8 @@ info = plistlib.loads((app/'Contents/Info.plist').read_bytes())
 assert info['CFBundleShortVersionString'] == args.version
 out = ROOT/'dist'
 out.mkdir(exist_ok=True)
+if (out/f'bleep.ly-{args.version}-arm64.dmg').exists():
+    parser.error('DMG already exists; preserve the previous signed image before rebuilding')
 dmgbuild.build_dmg(str(out/f'bleep.ly-{args.version}-arm64.dmg'), f'bleep.ly {args.version}', settings={
     # Tens of thousands of runtime files need more HFS+ metadata space than
     # dmgbuild's default estimate (which can silently truncate a ditto copy).

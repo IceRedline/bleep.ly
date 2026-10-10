@@ -1,9 +1,16 @@
 # macOS release
 
-The first binary release is **0.1.0, Apple Silicon**. The packaged MLX 0.32.3
-library requires **macOS 26.2 or later**. The source app targets macOS 14; that does
-not lower a binary dependency's deployment target. `bundle-macos.py` inspects all
-Mach-O files and derives the actual minimum system version.
+Release **0.1.1** supports **Apple Silicon, macOS 15.0 or later**. MLX stays at
+0.32.3, but uses the official Sequoia wheels pinned by URL and SHA-256 in
+`requirements-mlx-macos15.lock`. A version-only pip pin on a Tahoe build host
+selects different wheels requiring macOS 26.2, which caused the 0.1.0 restriction.
+The bundler overlays the compatible wheels in both embedded runtimes without
+changing developer environments. `bundle-macos.py` inspects every Mach-O and
+fails for missing deployment metadata or a target newer than macOS 15.0.
+
+CI installs both complete release lockfiles on macOS 15, audits their binaries,
+and checks backend imports and MLX CPU execution. Hosted VMs lack a Metal GPU;
+local release smoke tests additionally exercise Metal, MPS and real inference.
 
 The app contains two relocatable CPython 3.11.15 runtimes, the Python engine,
 word lists, FFmpeg/FFprobe 8.1.2, and the WhisperKit helper. Separate core and GPU
@@ -36,11 +43,14 @@ xcrun notarytool store-credentials bleep-ly-notary --apple-id YOUR_APPLE_ID --te
 
 Commit source changes before bundling so `runtime.json` identifies the source.
 Run Python and Swift tests as documented in the project README, then:
+Preserve the previous signed app before rebuilding (for example, rename
+`build/release` to `build/release-0.1.0`). The bundler and DMG builder refuse to
+overwrite existing release artifacts.
 
 ```sh
 bash scripts/build-macos.sh
 bash scripts/release/build-ffmpeg.sh
-python3 scripts/release/bundle-macos.py --version 0.1.0
+python3 scripts/release/bundle-macos.py --version 0.1.1
 python3 scripts/release/sign-macos.py --identity 'Developer ID Application: YOUR NAME (TEAM_ID)' build/release/bleep.ly.app
 python3 scripts/release/smoke-test.py build/release/bleep.ly.app
 ```
@@ -70,12 +80,12 @@ outer app. Python executables allow JIT and unsigned executable memory for Numba
 library validation stays enabled. Use the same Developer ID for all code.
 
 ```sh
-.cache/dmg-tools/bin/python scripts/release/build-dmg.py --version 0.1.0
-codesign --sign 'Developer ID Application: YOUR NAME (TEAM_ID)' --timestamp dist/bleep.ly-0.1.0-arm64.dmg
-xcrun notarytool submit dist/bleep.ly-0.1.0-arm64.dmg --keychain-profile bleep-ly-notary --wait
-xcrun stapler staple dist/bleep.ly-0.1.0-arm64.dmg
-xcrun stapler validate dist/bleep.ly-0.1.0-arm64.dmg
-spctl --assess --type open --context context:primary-signature --verbose=2 dist/bleep.ly-0.1.0-arm64.dmg
+.cache/dmg-tools/bin/python scripts/release/build-dmg.py --version 0.1.1
+codesign --sign 'Developer ID Application: YOUR NAME (TEAM_ID)' --timestamp dist/bleep.ly-0.1.1-arm64.dmg
+xcrun notarytool submit dist/bleep.ly-0.1.1-arm64.dmg --keychain-profile bleep-ly-notary --wait
+xcrun stapler staple dist/bleep.ly-0.1.1-arm64.dmg
+xcrun stapler validate dist/bleep.ly-0.1.1-arm64.dmg
+spctl --assess --type open --context context:primary-signature --verbose=2 dist/bleep.ly-0.1.1-arm64.dmg
 ```
 
 Apple's [distribution workflow](https://developer.apple.com/documentation/xcode/packaging-mac-software-for-distribution)

@@ -8,9 +8,12 @@ from pathlib import Path
 import plistlib
 import shutil
 import subprocess
+import sys
+import tempfile
 
 ROOT = Path(__file__).resolve().parents[2]
 MAGIC = {b'\xcf\xfa\xed\xfe', b'\xce\xfa\xed\xfe', b'\xfe\xed\xfa\xcf', b'\xca\xfe\xba\xbe', b'\xbe\xba\xfe\xca'}
+SUPPORTED_MACOS = (15, 0)
 
 
 def macho_files(folder):
@@ -35,7 +38,7 @@ def audit(app):
             if library.startswith('/') and not library.startswith(('/usr/lib/', '/System/Library/')):
                 raise RuntimeError(f'External library in {path}: {library}')
         versions = []
-        build = subprocess.run(['vtool', '-show-build', str(path)], capture_output=True, text=True).stdout
+        build = subprocess.check_output(['xcrun', 'vtool', '-show-build', str(path)], text=True)
         command = ''
         for line in build.splitlines():
             if line.strip().startswith('cmd '):
@@ -43,7 +46,13 @@ def audit(app):
             if line.strip().startswith('minos ') or (command == 'LC_VERSION_MIN_MACOSX' and line.strip().startswith('version ')):
                 value = line.split()[-1]
                 versions.append(tuple(int(n) for n in value.split('.')[:2]))
-        return max(versions, default=(0, 0))
+        if not versions:
+            raise RuntimeError(f'Missing macOS deployment target: {path}')
+        required = max(versions)
+        if required > SUPPORTED_MACOS:
+            raise RuntimeError(f'{path} requires macOS {".".join(map(str, required))}; '
+                               'release must support macOS 15.0')
+        return required
     with concurrent.futures.ThreadPoolExecutor(max_workers=8) as pool:
         minimum = max([minimum, *pool.map(inspect, files)])
     for link in app.rglob('*'):
@@ -54,7 +63,7 @@ def audit(app):
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument('--version', default='0.1.0')
+    parser.add_argument('--version', default='0.1.1')
     parser.add_argument('--python', type=Path, default=ROOT/'.cache/release-python/cpython-3.11.15-macos-aarch64-none')
     parser.add_argument('--audit-only', type=Path)
     args = parser.parse_args()
@@ -65,7 +74,7 @@ def main():
     app = ROOT/'build/release/bleep.ly.app'
     app.parent.mkdir(parents=True, exist_ok=True)
     if app.exists():
-        shutil.rmtree(app)
+        parser.error(f'{app} already exists; move the previous signed build aside before rebuilding')
     shutil.copytree(ROOT/'build/bleep.ly.app', app)
     engine = app/'Contents/Resources/Engine'
     engine.mkdir()
@@ -117,6 +126,18 @@ print(json.dumps(files))
                         metadata.unlink()
                 elif '/Users/' in metadata.read_text():
                     raise RuntimeError(f'Local-only Python search path: {metadata}')
+    # A version-only pin selects the macOS 26.2 MLX wheel on a Tahoe build host.
+    # Overlay the hash-locked macOS 15 wheels without modifying developer environments.
+    with tempfile.TemporaryDirectory(prefix='bleep-release-mlx-') as temporary:
+        subprocess.run([sys.executable, '-m', 'pip', 'install', '--no-deps', '--no-compile',
+                        '--require-hashes', '--only-binary=:all:', '--target', temporary,
+                        '-r', str(ROOT/'scripts/release/requirements-mlx-macos15.lock')], check=True)
+        for name in ['Python', 'PythonGPU']:
+            site = app/'Contents/Resources/Runtime'/name/'lib/python3.11/site-packages'
+            for pattern in ['mlx', 'mlx-*.dist-info', 'mlx_metal-*.dist-info']:
+                for old in site.glob(pattern):
+                    shutil.rmtree(old)
+            shutil.copytree(temporary, site, dirs_exist_ok=True)
     for name in ['ffmpeg', 'ffprobe']:
         shutil.copy2(ROOT/'.cache/release-ffmpeg/bin'/name, app/'Contents/Helpers'/name)
     licenses = app/'Contents/Resources/ThirdParty'
@@ -124,7 +145,7 @@ print(json.dumps(files))
     for name in ['COPYING.LGPLv2.1', 'LICENSE.md']:
         shutil.copy2(ROOT/'.cache/ffmpeg-8.1.2'/name, licenses/f'FFmpeg-{name}')
     shutil.copy2(args.python/'lib/python3.11/LICENSE.txt', licenses/'Python-LICENSE.txt')
-    for lock in ['core', 'gpu']:
+    for lock in ['core', 'gpu', 'mlx-macos15']:
         shutil.copy2(ROOT/f'scripts/release/requirements-{lock}.lock', licenses)
     (licenses/'README.txt').write_text(
         'Python distribution: https://github.com/astral-sh/python-build-standalone\n'
@@ -143,7 +164,7 @@ print(json.dumps(files))
     info_path = app/'Contents/Info.plist'
     info = plistlib.loads(info_path.read_bytes())
     info.pop('BleepProjectRoot', None)
-    info.update(CFBundleShortVersionString=args.version, CFBundleVersion='6', LSMinimumSystemVersion=minimum)
+    info.update(CFBundleShortVersionString=args.version, CFBundleVersion='7', LSMinimumSystemVersion=minimum)
     info_path.write_bytes(plistlib.dumps(info))
     print(json.dumps(dict(app=str(app), native_files=len(files), **manifest), indent=2))
 
