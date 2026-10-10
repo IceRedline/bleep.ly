@@ -1,4 +1,4 @@
-"""Opt-in subprocess backend. The regular app never builds or selects this SDK."""
+"""Experimental subprocess backend included in the desktop app."""
 import hashlib
 import io
 import json
@@ -146,7 +146,7 @@ class WhisperKitBackend:
         self.stage = stage or (lambda _: None)
         self.metrics = {}
         if not executable.is_file() or not os.access(executable, os.X_OK):
-            raise CensorError('WhisperKit helper is missing. Build with scripts/build-macos.sh --whisperkit.')
+            raise CensorError('WhisperKit helper is missing. Build with scripts/build-macos.sh.')
 
     def transcribe(self, audio, progress):
         with tempfile.TemporaryDirectory(prefix='bleep-whisperkit-') as folder:

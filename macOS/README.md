@@ -24,7 +24,7 @@ brew install ffmpeg
 .venv/bin/pip install -r requirements-mlx.txt
 ```
 
-The app defaults to the project's `.venv/bin/python`, CPU/faster-whisper, `large-v3-turbo`, and Russian speech. Choose **Apple GPU · MLX** in Settings to use the existing MLX implementation. The separate Lab build adds WhisperKit to the same Engine picker; see [WhisperKit Lab](../experiments/README.md). Model downloads are disabled by default; enable **Allow first-time model download** if your chosen engine's model is not cached. The app reuses the repository’s `.cache/huggingface` model cache (or an explicitly inherited `HF_HOME`). Recognition happens locally in both cases. No recording is uploaded.
+The app defaults to the project's `.venv/bin/python`, CPU/faster-whisper, `large-v3-turbo`, and Russian speech. Choose **Apple GPU · MLX** in Settings to use the existing MLX implementation. The same app includes **WhisperKit · Experimental** in the Engine picker; see [WhisperKit setup](../experiments/README.md). Model downloads are disabled by default; enable **Allow first-time model download** if your chosen engine's model is not cached. The app reuses the repository’s `.cache/huggingface` model cache (or an explicitly inherited `HF_HOME`). Recognition happens locally with all three engines. No recording is uploaded.
 
 ## Fast Mode and Advanced Mode
 
@@ -72,3 +72,5 @@ The Python integration tests cover audio inputs, silence, cue tails, no-clobber 
 - `../censor/desktop.py`: version 1 JSON request/event protocol, using the existing recognition, profanity matching, and mixing functions.
 
 FCPXML/JSON export, a packaged Python runtime, and waveform zoom are left for subsequent versions. The CLI's existing FCPXML features remain available independently.
+
+There is no separate Lab app. The unified build uses `ly.bleep.desktop` and the regular app support directory. On first launch it copies missing settings, the saved custom cue, and the last review from the former Lab app; existing regular-app data and the original Lab files are preserved.
