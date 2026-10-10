@@ -5,6 +5,7 @@ third-party diagnostics go to stderr. Requests and sessions belong to the app.
 """
 import contextlib
 import json
+import logging
 import os
 import signal
 import sys
@@ -22,6 +23,7 @@ from .ranges import middle_ranges
 from .transcription import (FasterWhisperBackend, cache_key, classify, load_cache,
                             parse_words, read_transcript, save_transcript)
 from .utils import CensorError, finite_number
+from .experimental_gpu import BACKENDS as GPU_BACKENDS, ExperimentalGPUBackend
 
 # Approved beep_trimmed.wav timing, independent of the subsequently selected cue.
 MUTE_CAP = 0.383021
@@ -87,7 +89,11 @@ def analyze(request):
 
 def analyze_track(request):
     started = time.perf_counter()
+    language = request.get("language", "ru")
+    if language not in {"ru", "en"}:
+        raise CensorError("Choose Russian or English for the media language.")
     cache_hit = False
+    recognition_seconds = None
     backend = "reviewed-transcript"
     style = request.get("censor_style", "middle")
     if style not in {"middle", "full"}:
@@ -105,26 +111,41 @@ def analyze_track(request):
     if request.get("transcript"):
         words = read_transcript(Path(request["transcript"]), info.duration)
     else:
+        try:
+            matcher = ProfanityMatcher.from_request(language, request.get("word_lists"))
+        except ValueError as exc:
+            raise CensorError(f"Invalid word lists: {exc}") from exc
         backend = request.get("backend", "faster-whisper")
-        if backend not in {"mlx", "faster-whisper", "whisperkit"}:
+        if backend not in {"mlx", "faster-whisper", "whisperkit"} | GPU_BACKENDS:
             raise CensorError("Unknown speech backend.")
         model = request.get("model", "large-v3-turbo")
         compute = "float16" if backend == "mlx" else "int8"
         if backend == "mlx":
             model = resolve_model(model)
-        if backend == "whisperkit":
+        if backend in GPU_BACKENDS:
+            from .experimental_gpu import MODELS, prepare, cache_identity as gpu_cache_identity
+            if model not in MODELS or MODELS[model][0] != backend:
+                raise CensorError("Selected experimental model does not match its GPU backend.")
+            if model == "gigaam-v3" and language != "ru":
+                raise CensorError("GigaAM v3 supports Russian only. Choose Whisper for English.")
+            report("Preparing experimental model", 0)
+            assets = prepare(model, offline=request.get("offline", True))
+            native_engine = ExperimentalGPUBackend(model, assets, language=language)
+            key, metadata = gpu_cache_identity(source, model, info.audio_index,
+                                               tracking("Reading media", source.stat().st_size), language=language)
+        elif backend == "whisperkit":
             from .whisperkit_backend import WhisperKitBackend, prepare_assets, cache_identity
             model_folder = Path(request["whisperkit_model_folder"]).resolve()
             executable = Path(request["whisperkit_executable"]).resolve()
             native_engine = WhisperKitBackend(executable, model_folder,
-                stage=lambda label: report(label, 0))
+                stage=lambda label: report(label, 0), language=language)
             report("Preparing WhisperKit model", 0)
             prepare_assets(model_folder, offline=request.get("offline", True),
                            progress=report)
             key, metadata = cache_identity(source, model_folder, executable, info.audio_index,
-                                          tracking("Reading media", source.stat().st_size))
+                                          tracking("Reading media", source.stat().st_size), language=language)
         else:
-            key, metadata = cache_key(source, model, "ru", compute, info.audio_index,
+            key, metadata = cache_key(source, model, language, compute, info.audio_index,
                                       tracking("Reading media", source.stat().st_size), backend=backend)
         cache = Path(request["cache_dir"]) / f"{key}.json"
         words = None if request.get("bypass_cache", False) else load_cache(cache, info.duration)
@@ -134,11 +155,18 @@ def analyze_track(request):
                 audio = Path(folder) / "speech.wav"
                 extract_audio(source, audio, info, tracking("Preparing audio", info.duration))
                 callback = tracking("Recognizing speech", info.duration)
+                protocol_output = sys.stdout
+                def inference_progress(seconds):
+                    # Library stdout is redirected, but app progress must stay on the protocol pipe.
+                    with contextlib.redirect_stdout(protocol_output):
+                        callback(seconds)
                 engine = MLXWhisperBackend if backend == "mlx" else FasterWhisperBackend
                 # Some inference libraries print to stdout; keep the protocol clean.
                 with contextlib.redirect_stdout(sys.stderr):
-                    transcriber = native_engine if backend == "whisperkit" else engine(model, "ru", compute, request.get("offline", True))
-                    raw = transcriber.transcribe(audio, callback)
+                    transcriber = native_engine if backend == "whisperkit" or backend in GPU_BACKENDS else engine(model, language, compute, request.get("offline", True))
+                    recognition_started = time.perf_counter()
+                    raw = transcriber.transcribe(audio, inference_progress)
+                    recognition_seconds = time.perf_counter() - recognition_started
                 if backend == "whisperkit":
                     metadata["native_metrics"] = native_engine.metrics
                 words = parse_words({"words": [asdict(w) for w in raw
@@ -146,9 +174,23 @@ def analyze_track(request):
                 if cache.resolve() == source:
                     raise CensorError("Cache collides with source.")
                 save_transcript(cache, words, metadata)
-        words = classify(words, ProfanityMatcher.from_file(Path(__file__).resolve().parents[1] / "profanity.txt"))
+        words = classify(words, matcher)
     if fingerprint(source) != signature:
         raise CensorError("Source changed during analysis. Open it again.")
+    if backend != "reviewed-transcript":
+        from .recognition_history import record_run
+        try:
+            # Preserve the cache's full identity/metrics even when no inference ran.
+            cached_metadata = json.loads(cache.read_text())["metadata"]
+            record_run(request.get("history_dir", Path(request["cache_dir"]).parent / "recognition-history"),
+                       metadata={**cached_metadata, "detection_language": language,
+                                 "profanity_rules": matcher.rules, "matcher_sha256": matcher.identity()},
+                       words=[asdict(word) for word in words],
+                       cache_path=cache, source=source, duration=info.duration,
+                       analysis_seconds=time.perf_counter() - started,
+                       recognition_seconds=recognition_seconds, cache_hit=cache_hit)
+        except (OSError, ValueError, KeyError, TypeError):
+            logging.getLogger(__name__).exception("Could not save recognition history; analysis remains available")
     items = []
     for word in words:
         interval = (CensorRange(word.start, word.end) if style == "full" else
@@ -157,7 +199,7 @@ def analyze_track(request):
     return {"source": str(source), "fingerprint": signature, "duration": info.duration,
             "has_video": info.video_index >= 0, "audio_stream": stream,
             "audio_count": info.audio_count, "censor_style": style, "words": items,
-            "engine": backend, "cache_hit": cache_hit, "analysis_seconds": time.perf_counter() - started}
+            "language": language, "engine": backend, "cache_hit": cache_hit, "analysis_seconds": time.perf_counter() - started}
 
 
 def reviewed_ranges(document, duration):

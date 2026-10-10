@@ -106,12 +106,13 @@ class WhisperKitTests(unittest.TestCase):
         helper = self.helper('''import json, sys
 from pathlib import Path
 request = json.loads(Path(sys.argv[1]).read_text())
+assert request['language'] == 'en'
 print(json.dumps(dict(event='stage', stage='loading')))
 print(json.dumps(dict(event='progress', seconds=1.2)))
 Path(request['output']).write_text(json.dumps(dict(words=[dict(word='бля',start=1,end=1.2)], load_seconds=3)))
 ''')
         stages, progress = [], []
-        backend = WhisperKitBackend(helper, self.work, stages.append)
+        backend = WhisperKitBackend(helper, self.work, stages.append, language="en")
         self.assertEqual(backend.transcribe(self.work / 'audio.wav', progress.append), [WordTimestamp('бля', 1, 1.2)])
         self.assertEqual(stages, ['loading'])
         self.assertEqual(progress, [1.2])
@@ -128,6 +129,7 @@ Path(request['output']).write_text(json.dumps(dict(words=[dict(word='бля',sta
         helper = self.helper('pass\n')
         first, metadata = cache_identity(source, self.work, helper, 1)
         self.assertEqual(metadata['backend'], 'whisperkit')
+        self.assertNotEqual(first, cache_identity(source, self.work, helper, 1, language='en')[0])
         self.assertEqual(first, cache_identity(source, self.work, helper, 1)[0])
         self.assertNotEqual(first, cache_identity(source, self.work, helper, 2)[0])
         self.helper('print(1)\n')

@@ -8,6 +8,7 @@ final class AppModel: ObservableObject {
     enum Phase: String { case ready, analyzing, review, exporting, done }
     @Published var phase: Phase = .ready
     @Published private(set) var workflowMode: WorkflowMode
+    @Published private(set) var videoLanguage: VideoLanguage
     @Published var document: ReviewDocument? { didSet { rebuildPlaybackWords() } }
     @Published var selected: UUID?
     @Published var selectedAudioTrack = 0 { didSet { rebuildPlaybackWords() } }
@@ -91,6 +92,7 @@ final class AppModel: ObservableObject {
         }
         WhisperKitExperiment.migratePreferences(defaults: defaults)
         self.defaults = defaults
+        self.videoLanguage = VideoLanguage.selected(defaults: defaults)
         self.supportDirectory = supportDirectory ?? Self.support
         self.workflowMode = WorkflowMode(rawValue: defaults.string(forKey: "workflowMode") ?? "") ?? .fast
         self.customSound = SavedCensorSound(directory: self.supportDirectory, defaults: defaults).url
@@ -121,6 +123,22 @@ final class AppModel: ObservableObject {
         if panel.runModal() == .OK, let url = panel.url { open(url) }
     }
 
+    func selectLanguage(_ language: VideoLanguage) {
+        guard !busy, language != videoLanguage else { return }
+        videoLanguage = language
+        defaults.set(language.rawValue, forKey: "videoLanguage")
+        let currentBackend = WhisperKitExperiment.backend(defaults: defaults)
+        #if arch(arm64)
+        let recommended: RecognitionModel = language == .russian ? .gigaAM : .turbo
+        let backend = language == .russian || currentBackend != "faster-whisper" ? "mlx" : "faster-whisper"
+        #else
+        let recommended: RecognitionModel = language == .russian ? .largeV3 : .turbo
+        let backend = "faster-whisper"
+        #endif
+        defaults.set(backend, forKey: "backend")
+        defaults.set(recommended.rawValue, forKey: "recognitionModel")
+    }
+
     @discardableResult
     func open(_ url: URL, transcript: URL? = nil, workflow: WorkflowMode? = nil, replacingTrack: Int? = nil) -> Task<Void, Never>? {
         guard !busy else { return nil }
@@ -133,6 +151,14 @@ final class AppModel: ObservableObject {
         let previousDocument = document
         let selectedSound = sound
         let selectedCustomSound = customSound
+        let selectedBackend = WhisperKitExperiment.backend(defaults: defaults)
+        let selectedLanguage = VideoLanguage.selected(defaults: defaults)
+        let selectedWordLists = WordListPreferences.request(selectedLanguage, defaults: defaults)
+        let selectedRecognitionModel = RecognitionModel.requested(defaults: defaults, backend: selectedBackend)
+        let recognitionBackend = RecognitionModel.engine(model: selectedRecognitionModel, selected: selectedBackend)
+        let experimental = transcript == nil && recognitionBackend != selectedBackend
+        let recognitionPython = experimental && (defaults.string(forKey: "pythonPath") ?? "").isEmpty
+            ? root.appendingPathComponent(".cache/asr-env/bin/python") : python
         // A new source deliberately starts a fresh review; the last draft stays on disk until success.
         pause()
         playerLoadTask?.cancel(); playerGeneration = UUID()
@@ -160,7 +186,11 @@ final class AppModel: ObservableObject {
             do {
                 var request: [String: Any] = ["operation": "analyze", "source": url.path,
                     "cache_dir": supportDirectory.appendingPathComponent("cache").path,
-                    "backend": WhisperKitExperiment.backend(defaults: defaults),
+                    "history_dir": root.appendingPathComponent("тесты bleep.ly/recognition-history").path,
+                    "backend": recognitionBackend,
+                    "model": selectedRecognitionModel,
+                    "language": selectedLanguage.rawValue,
+                    "word_lists": selectedWordLists,
                     "censor_style": defaults.string(forKey: "censorStyle") ?? "middle",
                     "offline": !defaults.bool(forKey: "allowDownloads")]
                 if let replacingTrack { request["audio_stream"] = replacingTrack }
@@ -169,7 +199,10 @@ final class AppModel: ObservableObject {
                     request["whisperkit_model_folder"] = root.appendingPathComponent(".cache/whisperkit/model").path
                 }
                 if let transcript { request["transcript"] = transcript.path }
-                let result = try await bridge.run(root: root, python: python, request: request, progress: updateProgress, timing: { self.progressState.duration = $0 })
+                if experimental && !FileManager.default.isExecutableFile(atPath: recognitionPython.path) {
+                    throw BridgeFailure(message: "Install experimental GPU models with: bash scripts/setup-experimental-gpu.sh")
+                }
+                let result = try await bridge.run(root: root, python: recognitionPython, request: request, progress: updateProgress, timing: { self.progressState.duration = $0 })
                 let analyzed = try JSONDecoder.bridge.decode(ReviewDocument.self, from: result)
                 if let replacingTrack, var previous = previousDocument, previous.source == analyzed.source {
                     guard previous.fingerprint == analyzed.fingerprint else {

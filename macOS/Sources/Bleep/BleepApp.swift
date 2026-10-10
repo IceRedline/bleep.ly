@@ -50,31 +50,53 @@ struct SettingsView: View {
     @AppStorage("projectRoot") private var projectRoot = AppModel.defaultRoot
     @AppStorage("pythonPath") private var pythonPath = ""
     @AppStorage("backend") private var backend = "faster-whisper"
+    @AppStorage("recognitionModel") private var recognitionModel = RecognitionModel.largeV3.rawValue
     @AppStorage("allowDownloads") private var allowDownloads = false
     @AppStorage("censorStyle") private var censorStyle = "middle"
+    @AppStorage("videoLanguage") private var videoLanguage = "ru"
+    @State private var showWordLists = false
 
     var body: some View {
         Form {
             Section("Recognition") {
                 Picker("Engine", selection: $backend) {
                     Text("CPU · Classic processing").tag("faster-whisper")
-                    Text("MLX · GPU recognition").tag("mlx")
+                    Text("Apple GPU · MLX / MPS").tag("mlx")
                     Text("WhisperKit · Experimental").tag("whisperkit")
                 }
                 if backend == "whisperkit" {
                     Text("Core ML · less accurate in our test: 2–3/4 explicit words; MLX: 4/4.")
                         .font(.caption).foregroundStyle(.orange)
-                    Text("Downloads an OpenAI Whisper model (~1.7 GB). First run may take a few minutes.")
+                    Text("Uses Large v3 Turbo (~1.7 GB download). First run may take a few minutes.")
                         .font(.caption).foregroundStyle(.secondary)
                 } else {
-                    Text(backend == "mlx" ? "Speech recognition on the Apple GPU." : "Classic speech recognition on the CPU.")
+                    Text(backend == "mlx" ? "Faster · GPU recognition" : "Classic · CPU recognition")
                         .font(.caption).foregroundStyle(.secondary)
+                    Picker("Model · testing", selection: $recognitionModel) {
+                        ForEach(RecognitionModel.choices(backend: backend, language: VideoLanguage(rawValue: videoLanguage) ?? .russian), id: \.rawValue) { model in
+                            Text(model.title).tag(model.rawValue)
+                        }
+                    }
+                    Text("Applies to the next file; each model has its own cache. GigaAM uses Apple GPU.")
+                        .font(.caption).foregroundStyle(.secondary)
+                    if videoLanguage == "en" {
+                        Text("English selected on Home. GigaAM v3 is available for Russian only.")
+                            .font(.caption).foregroundStyle(.secondary)
+                    }
                 }
                 Toggle("Allow first-time model download", isOn: $allowDownloads)
                 Text("Runs locally. Applies to new files. With downloads off, the selected model must already be cached.")
                     .font(.caption).foregroundStyle(.secondary)
             }
+            .onChange(of: backend) { _, value in
+                if !RecognitionModel.choices(backend: value, language: VideoLanguage(rawValue: videoLanguage) ?? .russian).contains(where: { $0.rawValue == recognitionModel }), value != "whisperkit" {
+                    recognitionModel = RecognitionModel.largeV3.rawValue
+                }
+            }
             Section("Censoring") {
+                Button("Edit word lists…") { showWordLists = true }
+                Text("Customize censored words and exceptions for Russian and English.")
+                    .font(.caption).foregroundStyle(.secondary)
                 Picker("Mute interval", selection: $censorStyle) {
                     Text("Word middle (default)").tag("middle")
                     Text("Whole word").tag("full")
@@ -101,5 +123,8 @@ struct SettingsView: View {
         }
         .formStyle(.grouped).padding(16).frame(width: 590, height: 550)
         .onAppear { WhisperKitExperiment.migratePreferences(defaults: .standard) }
+        .sheet(isPresented: $showWordLists) {
+            WordListEditor(root: URL(fileURLWithPath: projectRoot), language: VideoLanguage(rawValue: videoLanguage) ?? .russian)
+        }
     }
 }

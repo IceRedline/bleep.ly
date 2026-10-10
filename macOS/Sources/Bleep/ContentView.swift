@@ -9,6 +9,8 @@ struct ContentView: View {
     @State private var dropTarget = false
     @State private var showInterval = false
     @State private var editingWord: ReviewWord?
+    @AppStorage("backend") private var backend = "faster-whisper"
+    @AppStorage("recognitionModel") private var recognitionModel = RecognitionModel.largeV3.rawValue
 
     private var tint: Color {
         switch model.phase {
@@ -84,9 +86,9 @@ struct ContentView: View {
     private var welcome: some View {
         VStack(spacing: 24) {
             Spacer(minLength: 10)
-            VStack(spacing: 26) {
+            VStack(spacing: 18) {
                 ZStack {
-                    Circle().fill(.white.opacity(0.045)).frame(width: 112, height: 112)
+                    Circle().fill(.white.opacity(0.045)).frame(width: 88, height: 88)
                     Image(systemName: dropTarget ? "arrow.down.circle.fill" : "waveform.badge.plus")
                         .font(.system(size: 43, weight: .light)).foregroundStyle(.mint)
                 }
@@ -96,10 +98,22 @@ struct ContentView: View {
                     Text(model.workflowMode == .fast ? "Drop it. Get a clean file. That’s it." : "Listen, adjust, then export your clean cut.")
                         .font(.system(size: 16)).foregroundStyle(.secondary)
                 }
+                VStack(spacing: 8) {
+                    Picker("Video language", selection: Binding(get: { model.videoLanguage }, set: model.selectLanguage)) {
+                        ForEach(VideoLanguage.allCases, id: \.rawValue) { language in
+                            Text(language.title).tag(language)
+                        }
+                    }.pickerStyle(.menu).fixedSize()
+                    Text("\(backend == "whisperkit" ? "WhisperKit · Large v3 Turbo" : (RecognitionModel(rawValue: recognitionModel) ?? .largeV3).title) · \(model.videoLanguage == .english ? "English detection" : "Russian detection")")
+                        .font(.caption).foregroundStyle(.secondary)
+                    Text("You can change the model in Settings.")
+                        .font(.caption).foregroundStyle(.secondary)
+                }
                 Button("Choose a file…", action: model.chooseSource)
                     .buttonStyle(.borderedProminent).controlSize(.large)
                 Text("MOV, MP4, WAV, MP3 and more").font(.caption).foregroundStyle(.secondary)
             }
+            .padding(.vertical, 20)
             .frame(maxWidth: .infinity, minHeight: 370)
             .background(.white.opacity(dropTarget ? 0.09 : 0.025), in: RoundedRectangle(cornerRadius: 28))
             .overlay(RoundedRectangle(cornerRadius: 28).strokeBorder(dropTarget ? Color.mint : .white.opacity(0.17), style: StrokeStyle(lineWidth: 1.5, dash: [7, 7])))

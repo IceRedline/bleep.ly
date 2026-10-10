@@ -2,7 +2,7 @@
 
 # bleep.ly
 
-Local speech recognition and profanity censoring for Russian video and audio. A native **macOS app** wraps the Python engine with drag and drop, a review timeline, and clean audio/video export. Your recordings stay on your Mac.
+Local speech recognition and profanity censoring for Russian video and audio, with experimental English support in the desktop app. A native **macOS app** wraps the Python engine with drag and drop, a review timeline, and clean audio/video export. Your recordings stay on your Mac.
 
 **Contents:** [Setup](#setup) · [App workflow](#app-workflow) · [Recognition](#recognition) · [Exports](#exports) · [CLI](#cli) · [Checks](#checks) · [Limitations](#limitations)
 
@@ -31,6 +31,22 @@ Enable **Allow first-time model download** in Settings if the selected model is 
 
 ## App workflow
 
+Choose **Video language → Русский / English** on the home screen before opening media.
+The saved choice controls recognition and the profanity dictionary. Changing to Russian
+selects GigaAM v3 on Apple GPU; changing to English selects Whisper Large v3 Turbo (keeping
+CPU if already selected, otherwise using Apple GPU). Intel Macs use Whisper on CPU.
+The subtitle shows the selected model and language. You can override it in Settings until the next language
+change; relaunching or selecting the same language keeps your manual choice. GigaAM
+is our current Russian default based on the local trial, not a proven accuracy winner.
+Settings hides GigaAM for English. Downloads still
+require **Allow first-time model download**. English detection uses an experimental
+word list (`profanity.en.txt`); review contextual false positives and missed words.
+There is no automatic language detection or mixed-language censorship mode. Parakeet
+itself auto-detects speech language; the selected language controls its profanity list.
+Language is recorded in reviews and recognition history, and English/Russian runs use
+separate caches. Existing Russian benchmark caches remain reusable (WhisperKit helper
+changes still invalidate its cache). Changing language applies to the next file.
+
 - **Fast Mode:** select Beep, Silence, or custom audio, then drop a file. Recognition and export run automatically. The result is saved beside the source as `NAME_censored.ext`; existing files receive a numbered alternative and are never overwritten.
 - **Advanced:** review detections on the timeline, uncheck false positives, flag other transcript words, add missing intervals, and adjust mute boundaries. `⌘Z` undoes review edits. **Listen in Context** plays the word with **0.2 seconds before and 0.2 seconds after**, clipped at the file boundaries. **Choose Beep, Silence, or Custom before dropping media.** Preview with censorship is enabled by default and prepares automatically after analysis. The original stays playable during preparation; the player switches to censored audio at the current position when ready. Both Play and Listen in Context use it; turn the checkbox off to hear the original. During playback, Review Words highlights and scrolls to each censored word on the selected track, keeping the last heard word highlighted between intervals.
 - **Multiple audio tracks:** both modes analyze each track independently. Advanced shows separate timeline rows and a track selector for listening and editing. Video export preserves separate processed audio tracks.
@@ -39,6 +55,17 @@ Enable **Allow first-time model download** in Settings if the selected model is 
 The drop target stays in place when switching modes; controls below it fade. The window background extends behind the native traffic lights and changes color with the processing stage.
 
 Reading media uses a simple activity indicator without percentages. Other stage progress uses worker reports where available. Sparse recognition/export updates are supplemented by an approximate percentage (≈). Three compact columns show progress, elapsed time, and estimated time remaining in the current stage. Remaining time is calculated from smoothed real worker throughput and shown in coarse steps (for example, ~2 min, ~1.5 min, ~1 min), with hysteresis to avoid flicker near boundaries; a dash appears until measurements are available or when an old estimate expires. Interpolated percentages never complete a stage. WhisperKit's initial download shows received/total MB, followed by installation and Core ML preparation.
+
+**Settings → Censoring → Edit word lists…** edits the full censor list and a
+**Never censor** list separately for Russian and English. Lists accept one word per
+line, optional trailing `*` for prefix matching, and `#` comments. Known Russian
+censor stems retain their morphological families; exceptions match exact words or
+explicit prefixes and take priority. Empty censor lists disable automatic flags.
+Save validates both language drafts before persisting; Cancel discards edits, and
+Reset restores the selected language's defaults in the draft until Save. Changes
+apply when opening a file again, including cached recognition. Imported/saved
+reviews keep their manual flags. Recognition history records the effective rules
+and their hash, so comparisons made with different lists remain distinguishable.
 
 In Settings, choose **Word middle** (default) or **Whole word**. The choice applies to newly analyzed/imported media. Existing reviews and manual edits keep their timing. The selected sound mode is remembered across launches. Custom audio is copied into the app’s support folder, so moving or deleting the original cue does not lose it. A custom sound plays **once, in full, at its original speed**; speech resumes at the approved mute endpoint underneath any remaining sound tail. The cue never extends the mute interval. The end of the media still limits the output.
 
@@ -54,9 +81,19 @@ One **Engine** picker selects the backend for the next file:
 | Apple GPU · MLX | Metal GPU recognition, float16 | Apple Silicon; optional Python dependencies |
 | WhisperKit · Experimental | Native Swift framework running converted Whisper weights through Core ML | Included; experimental |
 
-All three use the Whisper large-v3-turbo family with different runtime/decoding configurations and separate caches. WhisperKit is an Argmax framework; its model is **not an Apple speech model** and must also be downloaded. It is not Apple's Speech framework. Native execution does not guarantee higher accuracy or model download availability.
+CPU and MLX now offer a temporary **Model · testing** picker: **Large v3** (default, full model) or **Large v3 Turbo**. The choice applies to the next opened file and uses a separate recognition cache. WhisperKit currently keeps its pinned Large v3 Turbo weights. WhisperKit is an Argmax framework; its model is **not an Apple speech model** and must also be downloaded. It is not Apple's Speech framework. Native execution does not guarantee higher accuracy or model download availability.
 
-On the initial 19.93-second local reference, MLX found 4/4 reviewed occurrences in three runs; CPU found 3/4; WhisperKit found 2/4, 3/4, and 3/4. This small sample is insufficient for a general quality ranking. WhisperKit remains experimental. See the [WhisperKit setup and reproducible benchmark](experiments/README.md).
+The **Apple GPU · MLX / MPS** option also offers experimental **Parakeet v3**,
+**Parakeet Ultra**, **Qwen3-ASR 1.7B**, and **GigaAM v3 RNNT**. Install their separate
+runtime with `bash scripts/setup-experimental-gpu.sh`. The app selects
+`.cache/asr-env/bin/python` automatically for these models unless a custom Python
+executable is configured. The standard Whisper runtime remains in `.venv`.
+Model weights download on first use only when downloads are enabled. The new
+choices are GPU-only; unavailable GPU support produces an error without CPU
+fallback. See [GPU comparison](experiments/gpu-models.md) for pinned weights,
+timestamps, and the full-file benchmark command.
+
+On the initial 19.93-second local reference using Turbo, MLX found 4/4 reviewed occurrences in three runs; CPU found 3/4; WhisperKit found 2/4, 3/4, and 3/4. This small sample is insufficient for a general quality ranking. WhisperKit remains experimental. See the [WhisperKit setup and reproducible benchmark](experiments/README.md).
 
 ```sh
 .venv/bin/pip install -r requirements-whisperkit.txt
@@ -95,6 +132,33 @@ The CLI keeps its explicit single-audio-track workflow (`--audio-stream 0` for a
 The [CLI guide](docs/cli.md) covers reviewed JSON, word matching, mute/duck timing, speaker-specific sounds, FCPXML, cache behavior, and limitations.
 
 ## Checks
+
+Each successful app recognition now records one history row per audio track in
+`тесты bleep.ly/recognition-history/runs.csv` inside the selected project folder.
+It includes the exact model, engine/device, total and flagged word counts, source
+hash, track index, elapsed analysis/inference time, and cache-hit status. A cache
+hit has no inference time. WhisperKit uses automatic Core ML device selection;
+it is not labelled as a GPU-only run. Counts measure flagged ASR tokens, not
+verified profanity recall. JSON snapshots preserve all words and cache metadata;
+each snapshot also has a word-level CSV. Repeated runs remain separate even if
+they replace the same recognition cache. The matcher hash identifies which
+dictionary/code produced the count. History is local and excluded from Git.
+
+Import existing caches (safe to repeat; changed cache contents create another record):
+
+```sh
+.venv/bin/python scripts/import-recognition-history.py \
+  --output 'тесты bleep.ly/recognition-history' \
+  "$HOME/Library/Application Support/bleep.ly/cache" \
+  "$HOME/Library/Application Support/bleep.ly Lab/cache"
+```
+
+Optional `--source /path/to/video` attaches the filename and duration only to
+caches with the same SHA-256. Imported records are labelled `cache_import` and
+reclassified with the current matcher. Old run time, cache-hit status, and
+inference duration are unknown and left blank; cache modification time is a
+separate column. This cannot recover runs already overwritten before logging
+was enabled. Logging failures go to the worker log without discarding results.
 
 ```sh
 .venv/bin/python -m unittest discover -s tests -q

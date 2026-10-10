@@ -1,6 +1,7 @@
 """Desktop contract tests with real FFmpeg; inference stays offline."""
 import array
 import contextlib
+import csv
 import io
 import json
 import math
@@ -49,6 +50,48 @@ class DesktopTests(unittest.TestCase):
         return 2 * abs(sum(x * complex(math.cos(2*math.pi*frequency*i/48000),
                                       math.sin(2*math.pi*frequency*i/48000))
                            for i, x in enumerate(samples))) / len(samples)
+
+    def test_language_reaches_whisper_and_separates_cache_dictionary_and_history(self):
+        for backend, target in [("faster-whisper", "FasterWhisperBackend"), ("mlx", "MLXWhisperBackend")]:
+            with self.subTest(backend=backend), patch('censor.desktop.' + target) as engine, contextlib.redirect_stdout(io.StringIO()):
+                engine.return_value.transcribe.return_value = [WordTimestamp('fuck', 1, 1.3), WordTimestamp('бля', 2, 2.3)]
+                request = dict(source=str(self.source), backend=backend, cache_dir=str(self.work / 'cache'))
+                ru = analyze(request)
+                en = analyze({**request, 'language': 'en'})
+                self.assertEqual(engine.call_args.args[1], 'en')
+                self.assertEqual([w['profane'] for w in ru['words']], [False, True])
+                self.assertEqual([w['profane'] for w in en['words']], [True, False])
+                self.assertFalse(en['cache_hit'])
+                self.assertEqual(en['language'], 'en')
+                self.assertTrue(analyze({**request, 'language': 'en'})['cache_hit'])
+                self.assertEqual(engine.call_count, 2)
+        with (self.work / 'recognition-history/runs.csv').open(encoding='utf-8-sig') as handle:
+            rows = list(csv.DictReader(handle))
+        self.assertEqual({row['language'] for row in rows}, {'ru', 'en'})
+
+    def test_gigaam_english_is_rejected_before_model_download(self):
+        with patch('censor.experimental_gpu.prepare') as prepare, contextlib.redirect_stdout(io.StringIO()):
+            with self.assertRaisesRegex(CensorError, 'Russian only'):
+                analyze(dict(source=str(self.source), backend='gigaam-mps', model='gigaam-v3', language='en'))
+            prepare.assert_not_called()
+            with self.assertRaisesRegex(CensorError, 'Russian or English'):
+                analyze(dict(source=str(self.source), language='de'))
+
+    def test_custom_lists_reclassify_cached_speech_and_log_the_effective_rules(self):
+        with patch('censor.desktop.FasterWhisperBackend.transcribe', return_value=[
+            WordTimestamp('fuck', 1, 1.3), WordTimestamp('banana', 2, 2.3)]) as engine, contextlib.redirect_stdout(io.StringIO()):
+            request = dict(source=str(self.source), language='en', cache_dir=str(self.work / 'cache'))
+            original = analyze(request)
+            custom = analyze({**request, 'word_lists': {'censor': ['fuck*', 'banana'], 'allow': ['fuck']}})
+            self.assertEqual([w['profane'] for w in original['words']], [True, False])
+            self.assertEqual([w['profane'] for w in custom['words']], [False, True])
+            self.assertTrue(custom['cache_hit'])
+            engine.assert_called_once()
+            imported = analyze({**request, 'transcript': str(self.transcript), 'word_lists': {'censor': []}})
+            self.assertTrue(imported['words'][0]['profane'], 'Reviewed flags are preserved')
+        snapshots = [json.loads(path.read_text()) for path in (self.work / 'recognition-history/runs').glob('*.json')]
+        self.assertEqual(len({s['summary']['matcher_sha256'] for s in snapshots}), 2)
+        self.assertTrue(any(s['metadata']['profanity_rules']['allow'] == ['fuck'] for s in snapshots))
 
     def test_audio_probe_and_silence_export(self):
         self.assertFalse(self.document['has_video'])
@@ -102,6 +145,60 @@ class DesktopTests(unittest.TestCase):
         self.assertFalse(first["cache_hit"])
         self.assertTrue(second["cache_hit"])
         self.assertAlmostEqual(first['words'][0]['mute_start'], 1.06)
+        with (self.work / 'recognition-history/runs.csv').open(encoding='utf-8-sig', newline='') as handle:
+            rows = list(csv.DictReader(handle))
+        self.assertEqual(len(rows), 2)
+        self.assertEqual({row['cache_hit'] for row in rows}, {'False', 'True'})
+        self.assertTrue(all(row['explicit_words'] == '1' and row['device'] == 'CPU' for row in rows))
+        cached = next(row for row in rows if row['cache_hit'] == 'True')
+        self.assertEqual(cached['recognition_seconds'], '')
+
+    def test_history_failure_does_not_discard_recognition(self):
+        with patch('censor.desktop.FasterWhisperBackend.transcribe',
+                   return_value=[WordTimestamp('бля', 1, 1.3)]), \
+             patch('censor.recognition_history.record_run', side_effect=OSError('disk full')), \
+             contextlib.redirect_stdout(io.StringIO()), self.assertLogs('censor.desktop', level='ERROR'):
+            result = analyze(dict(source=str(self.source), cache_dir=str(self.work / 'cache')))
+        self.assertTrue(result['words'][0]['profane'])
+
+    def test_experimental_models_share_classification_cache_and_progress(self):
+        from censor.experimental_gpu import MODELS
+        for choice, (backend, repo, _) in MODELS.items():
+            def transcribe(audio, progress):
+                print('Library diagnostic')
+                progress(2)
+                return [WordTimestamp('въебали', 1, 1.5)]
+            with self.subTest(model=choice), \
+                 patch('censor.experimental_gpu.prepare', return_value=['/cached']), \
+                 patch('censor.experimental_gpu.importlib.metadata.version', return_value='test'), \
+                 patch('censor.desktop.ExperimentalGPUBackend.transcribe', side_effect=transcribe) as engine, \
+                 contextlib.redirect_stdout(io.StringIO()) as protocol, contextlib.redirect_stderr(io.StringIO()) as diagnostic:
+                request = dict(source=str(self.source), backend=backend, model=choice,
+                               cache_dir=str(self.work / 'cache'))
+                first = analyze(request)
+                cached = analyze(request)
+            self.assertTrue(first['words'][0]['profane'])
+            self.assertEqual(first['engine'], backend)
+            self.assertTrue(cached['cache_hit'])
+            engine.assert_called_once()
+            events = [json.loads(line) for line in protocol.getvalue().splitlines()]
+            self.assertTrue(any(e.get('stage') == 'Recognizing speech' and e.get('fraction', 0) > 0 for e in events))
+            self.assertIn('Library diagnostic', diagnostic.getvalue())
+
+    def test_selected_models_reach_each_engine_and_have_separate_caches(self):
+        for backend, target, expected in [
+            ('faster-whisper', 'FasterWhisperBackend', ['large-v3', 'large-v3-turbo']),
+            ('mlx', 'MLXWhisperBackend', ['mlx-community/whisper-large-v3-mlx', 'mlx-community/whisper-large-v3-turbo'])
+        ]:
+            with self.subTest(backend=backend), patch('censor.desktop.' + target) as engine, contextlib.redirect_stdout(io.StringIO()):
+                engine.return_value.transcribe.return_value = [WordTimestamp('бля', 1, 1.3)]
+                for model, resolved in zip(['large-v3', 'large-v3-turbo'], expected):
+                    request = dict(source=str(self.source), cache_dir=str(self.work / 'cache'), backend=backend, model=model)
+                    first = analyze(request)
+                    self.assertFalse(first['cache_hit'])
+                    self.assertEqual(engine.call_args.args[0], resolved)
+                    self.assertTrue(analyze(request)['cache_hit'])
+                self.assertEqual(engine.call_count, 2)
 
     def test_json_protocol_and_video_stream_copy(self):
         source = self.work / 'video.mov'

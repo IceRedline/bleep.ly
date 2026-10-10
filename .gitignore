@@ -8,6 +8,7 @@ build/
 dist/
 
 # Models, caches and test reports
+/тесты bleep.ly/
 .cache/
 .pytest_cache/
 .mypy_cache/

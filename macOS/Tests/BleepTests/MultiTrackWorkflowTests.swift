@@ -32,7 +32,7 @@ final class MultiTrackWorkflowTests: XCTestCase {
              '-map','0:v','-map','1:a','-map','2:a','-c:v','libx264','-c:a','aac',sys.argv[1]])
         with patch('censor.desktop.FasterWhisperBackend.transcribe',side_effect=[
             [WordTimestamp('бля',1,1.3)], [WordTimestamp('бля',2,2.3)]]):
-            analyze(dict(source=sys.argv[1],cache_dir=sys.argv[2]))
+            analyze(dict(source=sys.argv[1],cache_dir=sys.argv[2],model='large-v3'))
         """, source.path, support.appendingPathComponent("cache").path]
         generator.standardOutput = FileHandle.nullDevice
         try generator.run(); generator.waitUntilExit()

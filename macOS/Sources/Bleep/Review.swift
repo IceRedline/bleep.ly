@@ -41,6 +41,7 @@ struct ReviewDocument: Codable, Equatable {
     var cacheHit: Bool?
     var analysisSeconds: Double?
     var censorStyle: String? // Absent in reviews saved before this setting existed.
+    var language: String?
 
     var count: Int { words.filter(\.profane).count }
     var url: URL { URL(fileURLWithPath: source) }
