@@ -9,7 +9,6 @@ final class AppModel: ObservableObject {
     @Published var phase: Phase = .ready
     @Published private(set) var workflowMode: WorkflowMode
     @Published private(set) var videoLanguage: VideoLanguage
-    @Published private(set) var languageNotice: String?
     @Published var document: ReviewDocument? { didSet { rebuildPlaybackWords() } }
     @Published var selected: UUID?
     @Published var selectedAudioTrack = 0 { didSet { rebuildPlaybackWords() } }
@@ -130,18 +129,14 @@ final class AppModel: ObservableObject {
         defaults.set(language.rawValue, forKey: "videoLanguage")
         let currentBackend = WhisperKitExperiment.backend(defaults: defaults)
         #if arch(arm64)
-        let recommended: RecognitionModel = language == .russian ? .gigaAM : .largeV3
+        let recommended: RecognitionModel = language == .russian ? .gigaAM : .turbo
         let backend = language == .russian || currentBackend != "faster-whisper" ? "mlx" : "faster-whisper"
         #else
-        let recommended: RecognitionModel = .largeV3
+        let recommended: RecognitionModel = language == .russian ? .largeV3 : .turbo
         let backend = "faster-whisper"
         #endif
         defaults.set(backend, forKey: "backend")
         defaults.set(recommended.rawValue, forKey: "recognitionModel")
-        let engine = backend == "mlx" ? "Apple GPU" : "CPU"
-        let name = language == .russian ? "Russian" : "English"
-        let modelName = recommended == .gigaAM ? "GigaAM v3" : "Whisper Large v3"
-        languageNotice = "\(name) selected · \(modelName) on \(engine). You can change the model in Settings."
     }
 
     @discardableResult

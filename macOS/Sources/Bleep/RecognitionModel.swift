@@ -27,7 +27,7 @@ enum RecognitionModel: String, CaseIterable {
         case .parakeetV3: "Parakeet v3 · Experimental"
         case .parakeetUltra: "Parakeet Ultra · Experimental"
         case .qwen: "Qwen3-ASR 1.7B · Experimental"
-        case .gigaAM: "GigaAM v3 · Experimental"
+        case .gigaAM: "GigaAM v3"
         }
     }
 

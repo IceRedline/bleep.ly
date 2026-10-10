@@ -8,6 +8,8 @@ final class WindowLayoutTests: XCTestCase {
         let suite = "layout-\(UUID())"
         let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
         defer { defaults.removePersistentDomain(forName: suite) }
+        defaults.set("mlx", forKey: "backend")
+        defaults.set("gigaam-v3", forKey: "recognitionModel")
         let model = AppModel(defaults: defaults)
         let root = URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent()
             .deletingLastPathComponent().deletingLastPathComponent()
@@ -50,7 +52,6 @@ final class WindowLayoutTests: XCTestCase {
             model.selectLanguage(.english)
             try await Task.sleep(nanoseconds: 350_000_000)
             host.layoutSubtreeIfNeeded()
-            XCTAssertNotNil(model.languageNotice)
             let frame = try XCTUnwrap(host.superview)
             let bitmap = try XCTUnwrap(frame.bitmapImageRepForCachingDisplay(in: frame.bounds))
             frame.cacheDisplay(in: frame.bounds, to: bitmap)

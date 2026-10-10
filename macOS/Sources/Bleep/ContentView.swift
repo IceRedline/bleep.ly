@@ -104,12 +104,10 @@ struct ContentView: View {
                             Text(language.title).tag(language)
                         }
                     }.pickerStyle(.menu).fixedSize()
-                    Text("\(backend == "whisperkit" ? "WhisperKit · Large v3 Turbo" : (RecognitionModel(rawValue: recognitionModel) ?? .largeV3).title) · \(model.videoLanguage == .english ? "English detection · experimental" : "Russian detection")")
+                    Text("\(backend == "whisperkit" ? "WhisperKit · Large v3 Turbo" : (RecognitionModel(rawValue: recognitionModel) ?? .largeV3).title) · \(model.videoLanguage == .english ? "English detection" : "Russian detection")")
                         .font(.caption).foregroundStyle(.secondary)
-                    if let notice = model.languageNotice {
-                        Text(notice).font(.caption).foregroundStyle(.orange)
-                            .multilineTextAlignment(.center)
-                    }
+                    Text("You can change the model in Settings.")
+                        .font(.caption).foregroundStyle(.secondary)
                 }
                 Button("Choose a file…", action: model.chooseSource)
                     .buttonStyle(.borderedProminent).controlSize(.large)

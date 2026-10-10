@@ -2,7 +2,7 @@
 
 Select **Apple GPU · MLX / MPS → Model · testing** in the single bleep.ly app.
 Changing the media language now selects GigaAM v3 for Russian on Apple Silicon,
-or Whisper Large v3 for English; Settings allows a manual override. Experimental choices share the existing
+or Whisper Large v3 Turbo for English; Settings allows a manual override. Experimental choices share the existing
 profanity filter, review editor, audio preview and export code. Existing reviewed
 mute intervals and cue playback rules are unchanged.
 
