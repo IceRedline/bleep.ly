@@ -1,0 +1,83 @@
+name: Tests
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: tests-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  HF_HUB_OFFLINE: "1"
+  HF_HUB_DISABLE_TELEMETRY: "1"
+
+jobs:
+  python:
+    name: Python tests
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: requirements*.txt
+      - name: Install FFmpeg
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes ffmpeg
+      - name: Install Python dependencies
+        run: |
+          python -m venv .venv
+          .venv/bin/python -m pip install -r requirements.txt
+      - name: Verify test prerequisites
+        run: |
+          .venv/bin/python --version
+          ffmpeg -version
+          ffprobe -version
+      - name: Run all Python tests
+        run: .venv/bin/python -m unittest discover -s tests -v
+
+  swift:
+    name: Swift app tests
+    runs-on: macos-15
+    timeout-minutes: 20
+    env:
+      CLANG_MODULE_CACHE_PATH: ${{ github.workspace }}/.cache/clang
+      SWIFTPM_MODULECACHE_OVERRIDE: ${{ github.workspace }}/.cache/clang
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: requirements*.txt
+      - name: Install FFmpeg
+        run: |
+          # The engine uses filter_complex_script, removed in FFmpeg 9.
+          brew install ffmpeg@8
+          # Bridge fixtures use Homebrew's bin directory explicitly.
+          brew link --force --overwrite ffmpeg@8
+      - name: Install Python bridge dependencies
+        run: |
+          python -m venv .venv
+          .venv/bin/python -m pip install -r requirements.txt
+      - name: Verify test prerequisites
+        run: |
+          .venv/bin/python --version
+          ffmpeg -version
+          ffprobe -version
+          swift --version
+      - name: Run all Swift tests
+        run: swift test --disable-sandbox --package-path macOS --scratch-path .cache/swift-build -c release

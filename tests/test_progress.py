@@ -4,6 +4,7 @@ import os
 import shutil
 import tempfile
 import unittest
+import wave
 from pathlib import Path
 from unittest.mock import patch
 
@@ -85,12 +86,16 @@ class ProgressTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as folder:
             paths = [Path(folder) / name for name in ("normal.wav", "progress.wav")]
             base = ["ffmpeg", "-v", "error", "-nostdin", "-n", "-f", "lavfi", "-i",
-                    "sine=frequency=440:sample_rate=48000:duration=1", "-c:a", "pcm_s16le"]
+                    "sine=frequency=440:sample_rate=48000:duration=1:samples_per_frame=1024", "-c:a", "pcm_s16le"]
             run([*base, str(paths[0])])
             seen = []
             run([*base, str(paths[1])], seen.append)
             self.assertTrue(seen)
-            self.assertAlmostEqual(seen[-1], 1, places=2)
+            # FFmpeg 6 reports the last packet's start; newer versions report its end.
+            self.assertAlmostEqual(seen[-1], 1, delta=1024 / 48000)
+            with wave.open(str(paths[1])) as audio:
+                self.assertEqual(audio.getnframes(), 48000)
+                self.assertEqual(audio.getframerate(), 48000)
             self.assertEqual(paths[0].read_bytes(), paths[1].read_bytes())
 
     @unittest.skipUnless(shutil.which("ffmpeg"), "FFmpeg required")

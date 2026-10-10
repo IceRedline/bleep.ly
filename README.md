@@ -133,6 +133,16 @@ The [CLI guide](docs/cli.md) covers reviewed JSON, word matching, mute/duck timi
 
 ## Checks
 
+GitHub Actions runs the complete Python suite on Ubuntu and the complete Swift
+app suite on macOS for every pull request and push to `main`. The **Tests**
+workflow can also be started manually. Both jobs install Python 3.11, the engine
+dependencies in `.venv`, and FFmpeg so media and Swift → Python integration tests
+run on a fresh checkout. macOS uses FFmpeg 8 because the engine's
+`filter_complex_script` option was removed in FFmpeg 9.
+Model downloads are disabled; inference is mocked.
+The one Python check against `input.reviewed.transcript.json` is skipped in CI
+because the approved personal recording and transcript are local, ignored files.
+
 Each successful app recognition now records one history row per audio track in
 `тесты bleep.ly/recognition-history/runs.csv` inside the selected project folder.
 It includes the exact model, engine/device, total and flagged word counts, source
