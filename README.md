@@ -32,9 +32,13 @@ Enable **Allow first-time model download** in Settings if the selected model is 
 ## App workflow
 
 Choose **Video language → Русский / English** on the home screen before opening media.
-The saved choice controls recognition and the profanity dictionary. Selecting English
-with GigaAM v3 selected automatically switches to Whisper Large v3 and shows a notice;
-compatible model choices are kept. Settings hides GigaAM for English. Downloads still
+The saved choice controls recognition and the profanity dictionary. Changing to Russian
+selects GigaAM v3 on Apple GPU; changing to English selects Whisper Large v3 (keeping
+CPU if already selected, otherwise using Apple GPU). Intel Macs use Whisper on CPU.
+A notice explains the choice. You can override it in Settings until the next language
+change; relaunching or selecting the same language keeps your manual choice. GigaAM
+is our current Russian default based on the local trial, not a proven accuracy winner.
+Settings hides GigaAM for English. Downloads still
 require **Allow first-time model download**. English detection uses an experimental
 word list (`profanity.en.txt`); review contextual false positives and missed words.
 There is no automatic language detection or mixed-language censorship mode. Parakeet

@@ -125,16 +125,23 @@ final class AppModel: ObservableObject {
     }
 
     func selectLanguage(_ language: VideoLanguage) {
-        guard !busy else { return }
+        guard !busy, language != videoLanguage else { return }
         videoLanguage = language
         defaults.set(language.rawValue, forKey: "videoLanguage")
-        languageNotice = nil
-        let backend = WhisperKitExperiment.backend(defaults: defaults)
-        if backend != "whisperkit", language == .english,
-           defaults.string(forKey: "recognitionModel") == RecognitionModel.gigaAM.rawValue {
-            defaults.set(RecognitionModel.largeV3.rawValue, forKey: "recognitionModel")
-            languageNotice = "GigaAM v3 supports Russian only. Switched to Whisper Large v3 for English."
-        }
+        let currentBackend = WhisperKitExperiment.backend(defaults: defaults)
+        #if arch(arm64)
+        let recommended: RecognitionModel = language == .russian ? .gigaAM : .largeV3
+        let backend = language == .russian || currentBackend != "faster-whisper" ? "mlx" : "faster-whisper"
+        #else
+        let recommended: RecognitionModel = .largeV3
+        let backend = "faster-whisper"
+        #endif
+        defaults.set(backend, forKey: "backend")
+        defaults.set(recommended.rawValue, forKey: "recognitionModel")
+        let engine = backend == "mlx" ? "Apple GPU" : "CPU"
+        let name = language == .russian ? "Russian" : "English"
+        let modelName = recommended == .gigaAM ? "GigaAM v3" : "Whisper Large v3"
+        languageNotice = "\(name) selected · \(modelName) on \(engine). You can change the model in Settings."
     }
 
     @discardableResult
