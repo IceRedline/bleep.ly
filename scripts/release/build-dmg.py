@@ -4,6 +4,8 @@ import argparse
 import math
 from pathlib import Path
 import plistlib
+import subprocess
+import sys
 from PIL import Image, ImageDraw, ImageFont
 import dmgbuild
 
@@ -49,11 +51,15 @@ assert info['CFBundleShortVersionString'] == args.version
 out = ROOT/'dist'
 out.mkdir(exist_ok=True)
 dmgbuild.build_dmg(str(out/f'bleep.ly-{args.version}-arm64.dmg'), f'bleep.ly {args.version}', settings={
-    'format': 'ULFO', 'filesystem': 'HFS+',
+    # Tens of thousands of runtime files need more HFS+ metadata space than
+    # dmgbuild's default estimate (which can silently truncate a ditto copy).
+    'format': 'ULFO', 'filesystem': 'HFS+', 'size': '4g',
     'files': [str(app)], 'symlinks': {'Applications': '/Applications'},
     'background': str(background), 'badge_icon': str(app/'Contents/Resources/AppIcon.icns'),
     'window_rect': ((180,180),(720,480)), 'default_view': 'icon-view',
     'icon_locations': {'bleep.ly.app': (202,236), 'Applications': (518,236)},
-    'icon_size': 96, 'text_size': 13, 'hide_extensions': ['bleep.ly.app'],
+    'icon_size': 96, 'text_size': 13,
     'show_toolbar': False, 'show_status_bar': False, 'show_sidebar': False,
 })
+subprocess.run([sys.executable, str(Path(__file__).with_name('verify-dmg.py')),
+                str(out/f'bleep.ly-{args.version}-arm64.dmg'), str(app)], check=True)
