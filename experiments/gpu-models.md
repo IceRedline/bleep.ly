@@ -1,7 +1,8 @@
 # Experimental Apple GPU models
 
 Select **Apple GPU · MLX / MPS → Model · testing** in the single bleep.ly app.
-The default remains Whisper Large v3. Experimental choices share the existing
+Changing the media language now selects GigaAM v3 for Russian on Apple Silicon,
+or Whisper Large v3 for English; Settings allows a manual override. Experimental choices share the existing
 profanity filter, review editor, audio preview and export code. Existing reviewed
 mute intervals and cue playback rules are unchanged.
 
@@ -33,7 +34,7 @@ Parakeet uses 120-second chunks with 15-second overlap and the library's overlap
 merge. Its tokens must be joined before counting profanity; counting subword
 tokens directly would inflate word counts and miss split profanity.
 Qwen uses the runtime's approximately 30-second low-energy chunk boundaries,
-forced Russian, greedy decoding, and its separate GPU aligner. Generation hitting
+the selected Russian or English language, greedy decoding, and its separate GPU aligner. Generation hitting
 the token limit is an error rather than an accepted partial transcript.
 GigaAM uses Silero VAD with a 20-second maximum speech chunk and maps each result
 to the original recording. This avoids the optional gated pyannote longform
@@ -53,7 +54,17 @@ choices and Whisper Turbo sequentially, in separate processes, with network
 access disabled and transcription cache bypassed. Use `--models` to choose a
 subset or include `large-v3`. Do not run heavy applications or compilation while
 measuring. Use a new output directory for a new experiment; existing per-model
-results are retained when resuming an interrupted batch.
+results are retained when resuming an interrupted batch. Resume requires the same
+source path, source SHA-256 and language; older result files without that provenance
+need a new output directory. For an English full-file run, pass `--language en`;
+GigaAM is excluded from the default list and explicitly requesting it is rejected.
+For example:
+
+```sh
+.cache/asr-env/bin/python scripts/benchmark-gpu-models.py english.mp4 \
+  --language en --models parakeet-v3 parakeet-ultra qwen3-asr large-v3-turbo large-v3 \
+  --output 'тесты bleep.ly/english-comparison-new'
+```
 
 `summary.csv` contains each success/error and wall time. Successful results also
 append to `тесты bleep.ly/recognition-history/runs.csv`. Requests, progress events,
@@ -90,3 +101,40 @@ No reviewed ground truth exists for this full recording, so no recall/precision
 or winner on accuracy is claimed. Parakeet timestamps sometimes cover a long
 interval (the first flagged word spans about a second); audible censor quality
 must be checked separately. The default model was not changed.
+
+
+## English full-file run · 2026-10-10
+
+Source: [Silver Surfer — AVGN Episode 27, Cinemassacre](https://cinemassacre.com/silver-surfer-nes-angry-video-game-nerd-avgn-episode-27/).
+The complete author-embedded Odysee version was used: 628.43 seconds of audio
+(10:28), with no excerpts or concatenation. The YouTube upload has a different
+length and was not used. Source SHA-256:
+`e58d5c395c889a18a6e29e32be0732ee1e5758b030679809d5b32d4a5becf346`.
+
+Same Apple M3 Pro / 36 GiB machine, sequential MLX GPU runs, English selected,
+default English word list, no exceptions, offline weights, no transcript cache.
+Times include loading, extraction and recognition/alignment; exclude download.
+
+| Model | ASR words | Flagged words | Wall time |
+| --- | ---: | ---: | ---: |
+| Parakeet v3 | 1906 | 49 | 16.34 s |
+| Parakeet Ultra | 1938 | 50 | 13.62 s |
+| Qwen3-ASR 1.7B + aligner | 1860 | 50 | 91.03 s |
+| Whisper Large v3 Turbo | 1958 | 50 | 46.93 s |
+| Whisper Large v3 | 1868 | 49 | 116.17 s |
+
+Artifacts: ignored `тесты bleep.ly/english-benchmark-2026-10-10/` with source
+provenance, the full source, per-model requests/reviews/logs, `full/summary.csv`
+and `full/review-candidates.csv`. All five runs also appear in recognition history
+with the effective word lists and classifier hash.
+
+These are counts, not precision/recall. There is no manually reviewed full-file
+reference. The review queue groups detections with a 0.5-second center tolerance;
+its 11 rows include timestamp disagreements, not 11 confirmed missing words.
+Large v3 has no transcript words around 503–508 seconds, where the other four
+transcripts include a flagged word. Parakeet v3 lacks the final flagged word.
+Ultra includes it but stretches its interval from 612.76 to 627.96 seconds
+(15.2 seconds), which makes its middle-word mute land too late. This is a material
+limitation of the current Parakeet adapter; matching counts do not establish
+usable censorship timing. English model defaults remain provisional pending
+listening and manual annotation. No quality winner is claimed.

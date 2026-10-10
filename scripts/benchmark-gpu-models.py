@@ -11,16 +11,23 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 from censor.experimental_gpu import MODELS, prepare
 from censor.recognition_history import write_csv
+from censor.transcription import file_hash
 
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("source", type=Path)
     parser.add_argument("--output", type=Path, required=True)
-    parser.add_argument("--models", nargs="+", default=[*MODELS, "large-v3-turbo"],
+    parser.add_argument("--language", choices=["ru", "en"], default="ru")
+    parser.add_argument("--models", nargs="+",
                         choices=[*MODELS, "large-v3", "large-v3-turbo"])
     parser.add_argument("--prepare", action="store_true", help="Download missing experimental weights before measurement")
     args = parser.parse_args()
+    args.models = args.models or [model for model in [*MODELS, "large-v3-turbo"]
+                                 if args.language == "ru" or model != "gigaam-v3"]
+    if args.language == "en" and "gigaam-v3" in args.models:
+        parser.error("GigaAM v3 supports Russian only; omit it for --language en.")
+    source_sha256 = file_hash(args.source)
     output = args.output.resolve()
     output.mkdir(parents=True, exist_ok=True)
     environment = {**os.environ, "HF_HOME": str(ROOT / ".cache/huggingface"),
@@ -40,15 +47,17 @@ def main():
         result_path = prefix.with_suffix(".result.json")
         if result_path.exists():
             previous = json.loads(result_path.read_text())
-            if previous["source"] != str(args.source.resolve()):
-                raise ValueError("Output belongs to another source; choose a new directory.")
+            if (previous["source"] != str(args.source.resolve())
+                    or previous.get("source_sha256") != source_sha256
+                    or previous.get("language") != args.language):
+                raise ValueError("Output belongs to another source or language, or lacks provenance; choose a new directory.")
             rows.append(previous)
             failed |= previous["status"] != "ok"
             continue
         backend = MODELS[model][0] if model in MODELS else "mlx"
         python = ROOT / (".cache/asr-env/bin/python" if model in MODELS else ".venv/bin/python")
         request = dict(operation="analyze", source=str(args.source.resolve()), backend=backend,
-                       model=model, offline=True, bypass_cache=True,
+                       model=model, language=args.language, offline=True, bypass_cache=True,
                        cache_dir=str(output / "cache"),
                        history_dir=str(ROOT / "тесты bleep.ly/recognition-history"))
         request_path = prefix.with_suffix(".request.json")
@@ -61,7 +70,8 @@ def main():
         elapsed = time.perf_counter() - started
         records = [json.loads(line) for line in prefix.with_suffix(".events.jsonl").read_text().splitlines()]
         result = next((item for item in reversed(records) if item.get("event") == "result"), None)
-        row = dict(model=model, backend=backend, source=str(args.source.resolve()), wall_seconds=elapsed,
+        row = dict(model=model, backend=backend, language=args.language, source=str(args.source.resolve()),
+                   source_sha256=source_sha256, wall_seconds=elapsed,
                    status="ok" if process.returncode == 0 and result else "error")
         if row["status"] == "ok":
             if result["cache_hit"]:
@@ -74,7 +84,7 @@ def main():
             failed = True
         result_path.write_text(json.dumps(row, ensure_ascii=False, indent=2))
         rows.append(row)
-        write_csv(output / "summary.csv", ["model", "backend", "source", "status", "total_words", "explicit_words",
+        write_csv(output / "summary.csv", ["model", "backend", "language", "source", "source_sha256", "status", "total_words", "explicit_words",
                                            "duration_seconds", "analysis_seconds", "wall_seconds", "error"], rows)
         print(json.dumps(row, ensure_ascii=False), flush=True)
     if failed:
