@@ -34,6 +34,8 @@ def speech_audio(audio: Path):
 def resolve_model(model: str) -> str:
     if Path(model).is_dir():
         return str(Path(model).resolve())
+    if model == "large-v3":
+        return "mlx-community/whisper-large-v3-mlx"
     if model in {"large-v3-turbo", "turbo"}:
         return DEFAULT_MODEL
     if "/" not in model:

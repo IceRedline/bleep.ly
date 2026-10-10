@@ -50,6 +50,7 @@ struct SettingsView: View {
     @AppStorage("projectRoot") private var projectRoot = AppModel.defaultRoot
     @AppStorage("pythonPath") private var pythonPath = ""
     @AppStorage("backend") private var backend = "faster-whisper"
+    @AppStorage("recognitionModel") private var recognitionModel = RecognitionModel.largeV3.rawValue
     @AppStorage("allowDownloads") private var allowDownloads = false
     @AppStorage("censorStyle") private var censorStyle = "middle"
 
@@ -64,10 +65,16 @@ struct SettingsView: View {
                 if backend == "whisperkit" {
                     Text("Core ML · less accurate in our test: 2–3/4 explicit words; MLX: 4/4.")
                         .font(.caption).foregroundStyle(.orange)
-                    Text("Downloads an OpenAI Whisper model (~1.7 GB). First run may take a few minutes.")
+                    Text("Uses Large v3 Turbo (~1.7 GB download). First run may take a few minutes.")
                         .font(.caption).foregroundStyle(.secondary)
                 } else {
-                    Text(backend == "mlx" ? "Speech recognition on the Apple GPU." : "Classic speech recognition on the CPU.")
+                    Text(backend == "mlx" ? "Faster · GPU recognition" : "Classic · CPU recognition")
+                        .font(.caption).foregroundStyle(.secondary)
+                    Picker("Model · testing", selection: $recognitionModel) {
+                        Text("Large v3").tag(RecognitionModel.largeV3.rawValue)
+                        Text("Large v3 Turbo").tag(RecognitionModel.turbo.rawValue)
+                    }
+                    Text("Large v3 is the full model and takes longer. Applies to the next file; each model has its own cache.")
                         .font(.caption).foregroundStyle(.secondary)
                 }
                 Toggle("Allow first-time model download", isOn: $allowDownloads)

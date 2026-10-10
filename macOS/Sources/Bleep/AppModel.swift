@@ -133,6 +133,8 @@ final class AppModel: ObservableObject {
         let previousDocument = document
         let selectedSound = sound
         let selectedCustomSound = customSound
+        let selectedBackend = WhisperKitExperiment.backend(defaults: defaults)
+        let selectedRecognitionModel = RecognitionModel.requested(defaults: defaults, backend: selectedBackend)
         // A new source deliberately starts a fresh review; the last draft stays on disk until success.
         pause()
         playerLoadTask?.cancel(); playerGeneration = UUID()
@@ -160,7 +162,8 @@ final class AppModel: ObservableObject {
             do {
                 var request: [String: Any] = ["operation": "analyze", "source": url.path,
                     "cache_dir": supportDirectory.appendingPathComponent("cache").path,
-                    "backend": WhisperKitExperiment.backend(defaults: defaults),
+                    "backend": selectedBackend,
+                    "model": selectedRecognitionModel,
                     "censor_style": defaults.string(forKey: "censorStyle") ?? "middle",
                     "offline": !defaults.bool(forKey: "allowDownloads")]
                 if let replacingTrack { request["audio_stream"] = replacingTrack }

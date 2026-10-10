@@ -24,7 +24,7 @@ brew install ffmpeg
 .venv/bin/pip install -r requirements-mlx.txt
 ```
 
-The app defaults to the project's `.venv/bin/python`, CPU/faster-whisper, `large-v3-turbo`, and Russian speech. Choose **Apple GPU · MLX** in Settings to use the existing MLX implementation. The same app includes **WhisperKit · Experimental** in the Engine picker; see [WhisperKit setup](../experiments/README.md). Model downloads are disabled by default; enable **Allow first-time model download** if your chosen engine's model is not cached. The app reuses the repository’s `.cache/huggingface` model cache (or an explicitly inherited `HF_HOME`). Recognition happens locally with all three engines. No recording is uploaded.
+The app defaults to the project's `.venv/bin/python`, CPU/faster-whisper, full `large-v3`, and Russian speech. The temporary **Model · testing** picker selects Large v3 or Large v3 Turbo for CPU and MLX. WhisperKit keeps its pinned Turbo model. Selection applies to new files, and each model has a separate recognition cache. Large v3 has its own initial download. Choose **Apple GPU · MLX** in Settings to use the existing MLX implementation. The same app includes **WhisperKit · Experimental** in the Engine picker; see [WhisperKit setup](../experiments/README.md). Model downloads are disabled by default; enable **Allow first-time model download** if your chosen engine's model is not cached. The app reuses the repository’s `.cache/huggingface` model cache (or an explicitly inherited `HF_HOME`). Recognition happens locally with all three engines. No recording is uploaded.
 
 ## Fast Mode and Advanced Mode
 

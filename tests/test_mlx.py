@@ -13,6 +13,7 @@ from censor.utils import CensorError
 
 class MLXTests(unittest.TestCase):
     def test_model_alias_and_local_directory(self):
+        self.assertEqual(resolve_model("large-v3"), "mlx-community/whisper-large-v3-mlx")
         self.assertEqual(resolve_model("large-v3-turbo"), DEFAULT_MODEL)
         self.assertEqual(resolve_model("mlx-community/whisper-small-mlx"), "mlx-community/whisper-small-mlx")
         with tempfile.TemporaryDirectory() as folder:

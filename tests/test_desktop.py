@@ -103,6 +103,21 @@ class DesktopTests(unittest.TestCase):
         self.assertTrue(second["cache_hit"])
         self.assertAlmostEqual(first['words'][0]['mute_start'], 1.06)
 
+    def test_selected_models_reach_each_engine_and_have_separate_caches(self):
+        for backend, target, expected in [
+            ('faster-whisper', 'FasterWhisperBackend', ['large-v3', 'large-v3-turbo']),
+            ('mlx', 'MLXWhisperBackend', ['mlx-community/whisper-large-v3-mlx', 'mlx-community/whisper-large-v3-turbo'])
+        ]:
+            with self.subTest(backend=backend), patch('censor.desktop.' + target) as engine, contextlib.redirect_stdout(io.StringIO()):
+                engine.return_value.transcribe.return_value = [WordTimestamp('бля', 1, 1.3)]
+                for model, resolved in zip(['large-v3', 'large-v3-turbo'], expected):
+                    request = dict(source=str(self.source), cache_dir=str(self.work / 'cache'), backend=backend, model=model)
+                    first = analyze(request)
+                    self.assertFalse(first['cache_hit'])
+                    self.assertEqual(engine.call_args.args[0], resolved)
+                    self.assertTrue(analyze(request)['cache_hit'])
+                self.assertEqual(engine.call_count, 2)
+
     def test_json_protocol_and_video_stream_copy(self):
         source = self.work / 'video.mov'
         run(['ffmpeg', '-v', 'error', '-f', 'lavfi', '-i', 'color=s=160x90:r=25:d=3',
