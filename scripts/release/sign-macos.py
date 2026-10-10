@@ -15,11 +15,14 @@ parser.add_argument('--identity', required=True)
 parser.add_argument('app', type=Path)
 args = parser.parse_args()
 files, minimum = bundle.audit(args.app)
+files = [p for p in files if p != args.app/'Contents/MacOS/Bleep']
 def sign(path):
     command = ['codesign', '--force', '--sign', args.identity, '--timestamp', '--options', 'runtime']
     if path.name.startswith('python') and path.parent.name == 'bin':
         command += ['--entitlements', str(ROOT/'scripts/release/python.entitlements')]
-    subprocess.run([*command, str(path)], check=True, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE)
+    result = subprocess.run([*command, str(path)], stdout=subprocess.DEVNULL, stderr=subprocess.PIPE, text=True)
+    if result.returncode:
+        raise RuntimeError(f'{path}: {result.stderr}')
 with concurrent.futures.ThreadPoolExecutor(max_workers=4) as pool:
     for index, _ in enumerate(pool.map(sign, files), 1):
         if index % 50 == 0: print(f'Signed {index}/{len(files)} native files', flush=True)

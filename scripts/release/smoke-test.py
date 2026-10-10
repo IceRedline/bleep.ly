@@ -15,8 +15,8 @@ args = parser.parse_args()
 app = args.app.resolve()
 engine = app/'Contents/Resources/Engine'
 helpers = app/'Contents/Helpers'
-core = app/'Contents/Frameworks/Python/bin/python3.11'
-gpu = app/'Contents/Frameworks/PythonGPU/bin/python3.11'
+core = app/'Contents/Resources/Runtime/Python/bin/python3.11'
+gpu = app/'Contents/Resources/Runtime/PythonGPU/bin/python3.11'
 
 with tempfile.TemporaryDirectory(prefix='bleep-release-smoke-') as temporary:
     folder = Path(temporary)

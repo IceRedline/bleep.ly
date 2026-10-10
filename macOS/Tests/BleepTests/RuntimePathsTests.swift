@@ -10,7 +10,7 @@ final class RuntimePathsTests: XCTestCase {
         try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
         try Data("{}".utf8).write(to: root.appendingPathComponent("runtime.json"))
         let python = RuntimePaths.python(root: root)
-        XCTAssertEqual(python.path, folder.appendingPathComponent("Moved App.app/Contents/Frameworks/Python/bin/python3.11").path)
+        XCTAssertEqual(python.path, folder.appendingPathComponent("Moved App.app/Contents/Resources/Runtime/Python/bin/python3.11").path)
         XCTAssertTrue(RuntimePaths.python(root: root, experimental: true).path.contains("/PythonGPU/"))
         let environment = RuntimePaths.environment(root: root, python: python, support: support,
             inherited: ["HOME": "/Users/example", "PYTHONHOME": "/old/python", "PYTHONPATH": "/old/project",

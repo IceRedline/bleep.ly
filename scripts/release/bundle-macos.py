@@ -78,7 +78,7 @@ def main():
         expected = (ROOT/f'scripts/release/requirements-{lock}.lock').read_text()
         if sorted(actual.splitlines()) != sorted(expected.splitlines()):
             raise RuntimeError(f'{environment} does not match the release lockfile')
-        target = app/'Contents/Frameworks'/name
+        target = app/'Contents/Resources/Runtime'/name
         shutil.copytree(args.python, target, symlinks=True, ignore=shutil.ignore_patterns('__pycache__', '*.pyc'))
         site = target/'lib/python3.11/site-packages'
         shutil.rmtree(site)
@@ -128,7 +128,7 @@ print(json.dumps(files))
         shutil.copy2(ROOT/f'scripts/release/requirements-{lock}.lock', licenses)
     (licenses/'README.txt').write_text(
         'Python distribution: https://github.com/astral-sh/python-build-standalone\n'
-        'Python package license files and metadata are retained in Contents/Frameworks/Python*/lib/python3.11/site-packages.\n'
+        'Python package license files and metadata are retained in Contents/Resources/Runtime/Python*/lib/python3.11/site-packages.\n'
         'WhisperKit 1.1.0: https://github.com/argmaxinc/argmax-oss-swift (MIT).\n'
         'FFmpeg 8.1.2: https://ffmpeg.org (LGPL 2.1 or later). Unmodified source archive accompanies this release.\n'
         'Build configuration: scripts/release/build-ffmpeg.sh in the matching source release.\n'

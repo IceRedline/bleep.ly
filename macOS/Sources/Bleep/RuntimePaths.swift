@@ -14,7 +14,7 @@ enum RuntimePaths {
 
     static func python(root: URL, experimental: Bool = false) -> URL {
         if isBundled(root) {
-            return root.appendingPathComponent("../../Frameworks/\(experimental ? "PythonGPU" : "Python")/bin/python3.11")
+            return root.appendingPathComponent("../Runtime/\(experimental ? "PythonGPU" : "Python")/bin/python3.11")
                 .standardizedFileURL
         }
         return root.appendingPathComponent(experimental ? ".cache/asr-env/bin/python" : ".venv/bin/python")
