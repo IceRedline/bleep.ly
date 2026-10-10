@@ -65,16 +65,17 @@ final class AppModel: ObservableObject {
             .appendingPathComponent("bleep.ly", isDirectory: true)
     }
     static var defaultRoot: String {
-        Bundle.main.object(forInfoDictionaryKey: "BleepProjectRoot") as? String ?? FileManager.default.currentDirectoryPath
+        RuntimePaths.bundledRoot?.path ?? (Bundle.main.object(forInfoDictionaryKey: "BleepProjectRoot") as? String ?? FileManager.default.currentDirectoryPath)
     }
     var busy: Bool { phase == .analyzing || phase == .exporting }
     var canUndo: Bool { !undoDocuments.isEmpty }
     var root: URL {
-        URL(fileURLWithPath: defaults.string(forKey: "projectRoot") ?? Self.defaultRoot)
+        RuntimePaths.bundledRoot ?? URL(fileURLWithPath: defaults.string(forKey: "projectRoot") ?? Self.defaultRoot)
     }
     var python: URL {
+        if RuntimePaths.isBundled(root) { return RuntimePaths.python(root: root) }
         let path = defaults.string(forKey: "pythonPath") ?? ""
-        return path.isEmpty ? root.appendingPathComponent(".venv/bin/python") : URL(fileURLWithPath: path)
+        return path.isEmpty ? RuntimePaths.python(root: root) : URL(fileURLWithPath: path)
     }
     var visibleWords: [ReviewWord] {
         (document?.words ?? []).filter { ($0.audioTrack ?? document?.audioStream ?? 0) == selectedAudioTrack && (showAllWords || $0.profane) &&
@@ -157,8 +158,8 @@ final class AppModel: ObservableObject {
         let selectedRecognitionModel = RecognitionModel.requested(defaults: defaults, backend: selectedBackend)
         let recognitionBackend = RecognitionModel.engine(model: selectedRecognitionModel, selected: selectedBackend)
         let experimental = transcript == nil && recognitionBackend != selectedBackend
-        let recognitionPython = experimental && (defaults.string(forKey: "pythonPath") ?? "").isEmpty
-            ? root.appendingPathComponent(".cache/asr-env/bin/python") : python
+        let recognitionPython = experimental && (RuntimePaths.isBundled(root) || (defaults.string(forKey: "pythonPath") ?? "").isEmpty)
+            ? RuntimePaths.python(root: root, experimental: true) : python
         // A new source deliberately starts a fresh review; the last draft stays on disk until success.
         pause()
         playerLoadTask?.cancel(); playerGeneration = UUID()
@@ -186,7 +187,7 @@ final class AppModel: ObservableObject {
             do {
                 var request: [String: Any] = ["operation": "analyze", "source": url.path,
                     "cache_dir": supportDirectory.appendingPathComponent("cache").path,
-                    "history_dir": root.appendingPathComponent("тесты bleep.ly/recognition-history").path,
+                    "history_dir": RuntimePaths.history(root: root, support: supportDirectory).path,
                     "backend": recognitionBackend,
                     "model": selectedRecognitionModel,
                     "language": selectedLanguage.rawValue,
@@ -196,7 +197,7 @@ final class AppModel: ObservableObject {
                 if let replacingTrack { request["audio_stream"] = replacingTrack }
                 if request["backend"] as? String == "whisperkit", transcript == nil {
                     request["whisperkit_executable"] = WhisperKitExperiment.helper.path
-                    request["whisperkit_model_folder"] = root.appendingPathComponent(".cache/whisperkit/model").path
+                    request["whisperkit_model_folder"] = RuntimePaths.models(root: root, support: supportDirectory).appendingPathComponent("whisperkit/model").path
                 }
                 if let transcript { request["transcript"] = transcript.path }
                 if experimental && !FileManager.default.isExecutableFile(atPath: recognitionPython.path) {
