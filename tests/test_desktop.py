@@ -1,6 +1,7 @@
 """Desktop contract tests with real FFmpeg; inference stays offline."""
 import array
 import contextlib
+import csv
 import io
 import json
 import math
@@ -102,6 +103,21 @@ class DesktopTests(unittest.TestCase):
         self.assertFalse(first["cache_hit"])
         self.assertTrue(second["cache_hit"])
         self.assertAlmostEqual(first['words'][0]['mute_start'], 1.06)
+        with (self.work / 'recognition-history/runs.csv').open(encoding='utf-8-sig', newline='') as handle:
+            rows = list(csv.DictReader(handle))
+        self.assertEqual(len(rows), 2)
+        self.assertEqual({row['cache_hit'] for row in rows}, {'False', 'True'})
+        self.assertTrue(all(row['explicit_words'] == '1' and row['device'] == 'CPU' for row in rows))
+        cached = next(row for row in rows if row['cache_hit'] == 'True')
+        self.assertEqual(cached['recognition_seconds'], '')
+
+    def test_history_failure_does_not_discard_recognition(self):
+        with patch('censor.desktop.FasterWhisperBackend.transcribe',
+                   return_value=[WordTimestamp('бля', 1, 1.3)]), \
+             patch('censor.recognition_history.record_run', side_effect=OSError('disk full')), \
+             contextlib.redirect_stdout(io.StringIO()), self.assertLogs('censor.desktop', level='ERROR'):
+            result = analyze(dict(source=str(self.source), cache_dir=str(self.work / 'cache')))
+        self.assertTrue(result['words'][0]['profane'])
 
     def test_selected_models_reach_each_engine_and_have_separate_caches(self):
         for backend, target, expected in [

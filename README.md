@@ -96,6 +96,33 @@ The [CLI guide](docs/cli.md) covers reviewed JSON, word matching, mute/duck timi
 
 ## Checks
 
+Each successful app recognition now records one history row per audio track in
+`тесты bleep.ly/recognition-history/runs.csv` inside the selected project folder.
+It includes the exact model, engine/device, total and flagged word counts, source
+hash, track index, elapsed analysis/inference time, and cache-hit status. A cache
+hit has no inference time. WhisperKit uses automatic Core ML device selection;
+it is not labelled as a GPU-only run. Counts measure flagged ASR tokens, not
+verified profanity recall. JSON snapshots preserve all words and cache metadata;
+each snapshot also has a word-level CSV. Repeated runs remain separate even if
+they replace the same recognition cache. The matcher hash identifies which
+dictionary/code produced the count. History is local and excluded from Git.
+
+Import existing caches (safe to repeat; changed cache contents create another record):
+
+```sh
+.venv/bin/python scripts/import-recognition-history.py \
+  --output 'тесты bleep.ly/recognition-history' \
+  "$HOME/Library/Application Support/bleep.ly/cache" \
+  "$HOME/Library/Application Support/bleep.ly Lab/cache"
+```
+
+Optional `--source /path/to/video` attaches the filename and duration only to
+caches with the same SHA-256. Imported records are labelled `cache_import` and
+reclassified with the current matcher. Old run time, cache-hit status, and
+inference duration are unknown and left blank; cache modification time is a
+separate column. This cannot recover runs already overwritten before logging
+was enabled. Logging failures go to the worker log without discarding results.
+
 ```sh
 .venv/bin/python -m unittest discover -s tests -q
 CLANG_MODULE_CACHE_PATH="$PWD/.cache/clang" \

@@ -39,6 +39,7 @@ final class RecognitionModelTests: XCTestCase {
             let request = try XCTUnwrap(JSONSerialization.jsonObject(with: data) as? [String: Any])
             XCTAssertEqual(request["model"] as? String, expected)
             XCTAssertEqual(request["backend"] as? String, backend)
+            XCTAssertEqual(request["history_dir"] as? String, folder.appendingPathComponent("тесты bleep.ly/recognition-history").path)
             XCTAssertEqual(defaults.string(forKey: "recognitionModel"), choice, "WhisperKit must not overwrite the CPU/MLX choice")
         }
     }

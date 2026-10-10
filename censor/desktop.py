@@ -5,6 +5,7 @@ third-party diagnostics go to stderr. Requests and sessions belong to the app.
 """
 import contextlib
 import json
+import logging
 import os
 import signal
 import sys
@@ -88,6 +89,7 @@ def analyze(request):
 def analyze_track(request):
     started = time.perf_counter()
     cache_hit = False
+    recognition_seconds = None
     backend = "reviewed-transcript"
     style = request.get("censor_style", "middle")
     if style not in {"middle", "full"}:
@@ -138,7 +140,9 @@ def analyze_track(request):
                 # Some inference libraries print to stdout; keep the protocol clean.
                 with contextlib.redirect_stdout(sys.stderr):
                     transcriber = native_engine if backend == "whisperkit" else engine(model, "ru", compute, request.get("offline", True))
+                    recognition_started = time.perf_counter()
                     raw = transcriber.transcribe(audio, callback)
+                    recognition_seconds = time.perf_counter() - recognition_started
                 if backend == "whisperkit":
                     metadata["native_metrics"] = native_engine.metrics
                 words = parse_words({"words": [asdict(w) for w in raw
@@ -149,6 +153,18 @@ def analyze_track(request):
         words = classify(words, ProfanityMatcher.from_file(Path(__file__).resolve().parents[1] / "profanity.txt"))
     if fingerprint(source) != signature:
         raise CensorError("Source changed during analysis. Open it again.")
+    if backend != "reviewed-transcript":
+        from .recognition_history import record_run
+        try:
+            # Preserve the cache's full identity/metrics even when no inference ran.
+            cached_metadata = json.loads(cache.read_text())["metadata"]
+            record_run(request.get("history_dir", Path(request["cache_dir"]).parent / "recognition-history"),
+                       metadata=cached_metadata, words=[asdict(word) for word in words],
+                       cache_path=cache, source=source, duration=info.duration,
+                       analysis_seconds=time.perf_counter() - started,
+                       recognition_seconds=recognition_seconds, cache_hit=cache_hit)
+        except (OSError, ValueError, KeyError, TypeError):
+            logging.getLogger(__name__).exception("Could not save recognition history; analysis remains available")
     items = []
     for word in words:
         interval = (CensorRange(word.start, word.end) if style == "full" else

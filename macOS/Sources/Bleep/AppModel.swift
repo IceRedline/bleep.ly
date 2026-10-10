@@ -162,6 +162,7 @@ final class AppModel: ObservableObject {
             do {
                 var request: [String: Any] = ["operation": "analyze", "source": url.path,
                     "cache_dir": supportDirectory.appendingPathComponent("cache").path,
+                    "history_dir": root.appendingPathComponent("тесты bleep.ly/recognition-history").path,
                     "backend": selectedBackend,
                     "model": selectedRecognitionModel,
                     "censor_style": defaults.string(forKey: "censorStyle") ?? "middle",
