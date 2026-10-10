@@ -6,6 +6,23 @@ Local speech recognition and profanity censoring for Russian video and audio, wi
 
 **Contents:** [Setup](#setup) · [App workflow](#app-workflow) · [Recognition](#recognition) · [Exports](#exports) · [CLI](#cli) · [Checks](#checks) · [Limitations](#limitations)
 
+## Download for macOS
+
+The [v0.1.0 release](https://github.com/IceRedline/bleep.ly/releases/tag/v0.1.0)
+provides a self-contained DMG for **Apple Silicon, macOS 26.2 or later** (required
+by the bundled MLX library). Open the DMG and drag **bleep.ly** to **Applications**.
+Python, FFmpeg and the recognition engines are included; Homebrew and this
+repository are not needed. Models download separately: enable **Allow first-time
+model download** in Settings before processing the first recording. Downloads
+can be several GB, depending on the model. Afterwards recognition works offline.
+
+The release is signed with Developer ID and notarized by Apple. Models and caches
+live under `~/Library/Application Support/bleep.ly/`; moving or updating the app
+does not remove them. The Intel build is not included in this release.
+
+See [release build instructions](scripts/release/README.md) for packaging and
+verification. The setup below is for building from source.
+
 ## Setup
 
 Requires macOS 14+, Swift 5.9+, Python 3.11+, and FFmpeg. MLX requires Apple Silicon.
