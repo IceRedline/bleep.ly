@@ -56,6 +56,17 @@ The drop target stays in place when switching modes; controls below it fade. The
 
 Reading media uses a simple activity indicator without percentages. Other stage progress uses worker reports where available. Sparse recognition/export updates are supplemented by an approximate percentage (≈). Three compact columns show progress, elapsed time, and estimated time remaining in the current stage. Remaining time is calculated from smoothed real worker throughput and shown in coarse steps (for example, ~2 min, ~1.5 min, ~1 min), with hysteresis to avoid flicker near boundaries; a dash appears until measurements are available or when an old estimate expires. Interpolated percentages never complete a stage. WhisperKit's initial download shows received/total MB, followed by installation and Core ML preparation.
 
+**Settings → Censoring → Edit word lists…** edits the full censor list and a
+**Never censor** list separately for Russian and English. Lists accept one word per
+line, optional trailing `*` for prefix matching, and `#` comments. Known Russian
+censor stems retain their morphological families; exceptions match exact words or
+explicit prefixes and take priority. Empty censor lists disable automatic flags.
+Save validates both language drafts before persisting; Cancel discards edits, and
+Reset restores the selected language's defaults in the draft until Save. Changes
+apply when opening a file again, including cached recognition. Imported/saved
+reviews keep their manual flags. Recognition history records the effective rules
+and their hash, so comparisons made with different lists remain distinguishable.
+
 In Settings, choose **Word middle** (default) or **Whole word**. The choice applies to newly analyzed/imported media. Existing reviews and manual edits keep their timing. The selected sound mode is remembered across launches. Custom audio is copied into the app’s support folder, so moving or deleting the original cue does not lose it. A custom sound plays **once, in full, at its original speed**; speech resumes at the approved mute endpoint underneath any remaining sound tail. The cue never extends the mute interval. The end of the media still limits the output.
 
 See the [macOS guide](macOS/README.md) for shortcuts, drafts, and development details.

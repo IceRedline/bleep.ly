@@ -54,6 +54,7 @@ struct SettingsView: View {
     @AppStorage("allowDownloads") private var allowDownloads = false
     @AppStorage("censorStyle") private var censorStyle = "middle"
     @AppStorage("videoLanguage") private var videoLanguage = "ru"
+    @State private var showWordLists = false
 
     var body: some View {
         Form {
@@ -93,6 +94,9 @@ struct SettingsView: View {
                 }
             }
             Section("Censoring") {
+                Button("Edit word lists…") { showWordLists = true }
+                Text("Customize censored words and exceptions for Russian and English.")
+                    .font(.caption).foregroundStyle(.secondary)
                 Picker("Mute interval", selection: $censorStyle) {
                     Text("Word middle (default)").tag("middle")
                     Text("Whole word").tag("full")
@@ -119,5 +123,8 @@ struct SettingsView: View {
         }
         .formStyle(.grouped).padding(16).frame(width: 590, height: 550)
         .onAppear { WhisperKitExperiment.migratePreferences(defaults: .standard) }
+        .sheet(isPresented: $showWordLists) {
+            WordListEditor(root: URL(fileURLWithPath: projectRoot), language: VideoLanguage(rawValue: videoLanguage) ?? .russian)
+        }
     }
 }

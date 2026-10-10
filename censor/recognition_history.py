@@ -86,7 +86,7 @@ def record_run(directory, *, metadata, words, cache_path, source=None, duration=
                analysis_seconds=analysis_seconds, recognition_seconds=recognition_seconds,
                cache_hit=cache_hit, backend_version=metadata.get("backend_version"),
                compute_type=metadata.get("compute_type", metadata.get("compute")),
-               matcher_sha256=matcher_identity(language), cache_path=str(cache_path),
+               matcher_sha256=metadata.get("matcher_sha256") or matcher_identity(language), cache_path=str(cache_path),
                snapshot=f"runs/{run_id}.json", words_csv=f"runs/{run_id}.csv")
     with (directory / ".lock").open("a") as lock:
         fcntl.flock(lock, fcntl.LOCK_EX)

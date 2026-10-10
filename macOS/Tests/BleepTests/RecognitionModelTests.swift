@@ -22,6 +22,7 @@ final class RecognitionModelTests: XCTestCase {
         defer { defaults.removePersistentDomain(forName: suite) }
         defaults.set(folder.path, forKey: "projectRoot")
         defaults.set("/usr/bin/python3", forKey: "pythonPath")
+        try WordListPreferences.save([.russian: WordListDraft(censor: "бля", allow: "бляха")], defaults: defaults)
         let model = AppModel(defaults: defaults, supportDirectory: folder.appendingPathComponent("support"))
         for (backend, choice, expected, engine) in [
             ("faster-whisper", "", "large-v3", "faster-whisper"),
@@ -42,6 +43,9 @@ final class RecognitionModelTests: XCTestCase {
             XCTAssertEqual(model.error, "Request captured without inference")
             let data = try Data(contentsOf: folder.appendingPathComponent("captured.json"))
             let request = try XCTUnwrap(JSONSerialization.jsonObject(with: data) as? [String: Any])
+            let lists = try XCTUnwrap(request["word_lists"] as? [String: [String]])
+            XCTAssertEqual(lists["censor"], ["бля"])
+            XCTAssertEqual(lists["allow"], ["бляха"])
             XCTAssertEqual(request["model"] as? String, expected)
             XCTAssertEqual(request["backend"] as? String, engine)
             XCTAssertEqual(request["history_dir"] as? String, folder.appendingPathComponent("тесты bleep.ly/recognition-history").path)

@@ -1,4 +1,6 @@
-"""Conservative whole-token Russian morphology, never arbitrary substring matching."""
+"""Language-specific word lists and explicit exceptions; no substring matching."""
+import hashlib
+import json
 import re
 import unicodedata
 from pathlib import Path
@@ -32,22 +34,49 @@ _FAMILIES = {
 
 
 class ProfanityMatcher:
-    def __init__(self, entries: list[str], language="ru"):
+    def __init__(self, entries: list[str], language="ru", exceptions=None):
+        self.patterns = self.compile_patterns(entries, language)
+        self.exceptions = self.compile_patterns(exceptions or [], language, families=False)
+        self.rules = dict(language=language, censor=entries, allow=exceptions or [])
+
+    @staticmethod
+    def compile_patterns(entries, language, families=True):
         if language not in {"ru", "en"}:
             raise ValueError("Choose Russian or English.")
+        if not isinstance(entries, list) or any(not isinstance(entry, str) for entry in entries):
+            raise ValueError("Word lists must contain one string per entry.")
         alphabet = "а-я" if language == "ru" else "a-z"
-        self.patterns: list[re.Pattern] = []
+        patterns = []
         for entry in entries:
             entry = entry.split("#", 1)[0].strip()
             if not entry:
                 continue
-            stem = normalize(entry.rstrip("*"))
+            stem = normalize(entry[:-1] if entry.endswith("*") else entry)
             if not re.fullmatch(f"[{alphabet}]+", stem):
                 raise ValueError(f"Invalid blacklist entry: {entry!r}; use a {language} word or stem*.")
-            families = _FAMILIES if language == "ru" else {}
+            forms = _FAMILIES if language == "ru" and families else {}
             pattern = (re.escape(stem) + f"[{alphabet}]*" if entry.endswith("*")
-                       else families.get(stem, re.escape(stem)))
-            self.patterns.append(re.compile(pattern))
+                       else forms.get(stem, re.escape(stem)))
+            patterns.append(re.compile(pattern))
+        return patterns
+
+    def identity(self):
+        return hashlib.sha256(json.dumps(self.rules, sort_keys=True, ensure_ascii=False).encode() +
+                              Path(__file__).read_bytes()).hexdigest()
+
+    @classmethod
+    def from_request(cls, language, rules=None):
+        if rules is None:
+            rules = {}
+        if not isinstance(rules, dict):
+            raise ValueError("Invalid word lists.")
+        entries = rules.get("censor")
+        if entries is None:
+            entries = cls.dictionary_path(language).read_text(encoding="utf-8-sig").splitlines()
+        exceptions = rules.get("allow", [])
+        if not isinstance(exceptions, list):
+            raise ValueError("Exceptions must be a list of words.")
+        return cls(entries, language, exceptions)
 
     @classmethod
     def from_file(cls, path: Path, language="ru") -> "ProfanityMatcher":
@@ -69,6 +98,9 @@ class ProfanityMatcher:
         chunks = re.findall(r"[^\W\d_]+(?:[-‐‑–—][^\W\d_]+)*", normalized)
         for chunk in chunks:
             parts = re.split(r"[-‐‑–—]", chunk)
+            if any(pattern.fullmatch(candidate) for candidate in [chunk, "".join(parts)]
+                   for pattern in self.exceptions):
+                continue
             candidates = [*parts, "".join(parts)]  # ху-й, за-ебало, кто-то
             if any(pattern.fullmatch(candidate) for candidate in candidates for pattern in self.patterns):
                 return True

@@ -111,6 +111,10 @@ def analyze_track(request):
     if request.get("transcript"):
         words = read_transcript(Path(request["transcript"]), info.duration)
     else:
+        try:
+            matcher = ProfanityMatcher.from_request(language, request.get("word_lists"))
+        except ValueError as exc:
+            raise CensorError(f"Invalid word lists: {exc}") from exc
         backend = request.get("backend", "faster-whisper")
         if backend not in {"mlx", "faster-whisper", "whisperkit"} | GPU_BACKENDS:
             raise CensorError("Unknown speech backend.")
@@ -170,7 +174,7 @@ def analyze_track(request):
                 if cache.resolve() == source:
                     raise CensorError("Cache collides with source.")
                 save_transcript(cache, words, metadata)
-        words = classify(words, ProfanityMatcher.for_language(language))
+        words = classify(words, matcher)
     if fingerprint(source) != signature:
         raise CensorError("Source changed during analysis. Open it again.")
     if backend != "reviewed-transcript":
@@ -179,7 +183,9 @@ def analyze_track(request):
             # Preserve the cache's full identity/metrics even when no inference ran.
             cached_metadata = json.loads(cache.read_text())["metadata"]
             record_run(request.get("history_dir", Path(request["cache_dir"]).parent / "recognition-history"),
-                       metadata={**cached_metadata, "detection_language": language}, words=[asdict(word) for word in words],
+                       metadata={**cached_metadata, "detection_language": language,
+                                 "profanity_rules": matcher.rules, "matcher_sha256": matcher.identity()},
+                       words=[asdict(word) for word in words],
                        cache_path=cache, source=source, duration=info.duration,
                        analysis_seconds=time.perf_counter() - started,
                        recognition_seconds=recognition_seconds, cache_hit=cache_hit)

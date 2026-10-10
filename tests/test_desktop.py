@@ -77,6 +77,22 @@ class DesktopTests(unittest.TestCase):
             with self.assertRaisesRegex(CensorError, 'Russian or English'):
                 analyze(dict(source=str(self.source), language='de'))
 
+    def test_custom_lists_reclassify_cached_speech_and_log_the_effective_rules(self):
+        with patch('censor.desktop.FasterWhisperBackend.transcribe', return_value=[
+            WordTimestamp('fuck', 1, 1.3), WordTimestamp('banana', 2, 2.3)]) as engine, contextlib.redirect_stdout(io.StringIO()):
+            request = dict(source=str(self.source), language='en', cache_dir=str(self.work / 'cache'))
+            original = analyze(request)
+            custom = analyze({**request, 'word_lists': {'censor': ['fuck*', 'banana'], 'allow': ['fuck']}})
+            self.assertEqual([w['profane'] for w in original['words']], [True, False])
+            self.assertEqual([w['profane'] for w in custom['words']], [False, True])
+            self.assertTrue(custom['cache_hit'])
+            engine.assert_called_once()
+            imported = analyze({**request, 'transcript': str(self.transcript), 'word_lists': {'censor': []}})
+            self.assertTrue(imported['words'][0]['profane'], 'Reviewed flags are preserved')
+        snapshots = [json.loads(path.read_text()) for path in (self.work / 'recognition-history/runs').glob('*.json')]
+        self.assertEqual(len({s['summary']['matcher_sha256'] for s in snapshots}), 2)
+        self.assertTrue(any(s['metadata']['profanity_rules']['allow'] == ['fuck'] for s in snapshots))
+
     def test_audio_probe_and_silence_export(self):
         self.assertFalse(self.document['has_video'])
         self.assertEqual(media_info(self.source, allow_audio=True).video_index, -1)

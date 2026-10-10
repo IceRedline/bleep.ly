@@ -56,3 +56,26 @@ class EnglishMatcherTests(unittest.TestCase):
         self.assertFalse(ProfanityMatcher.for_language("ru").matches("fuck"))
         with self.assertRaises(ValueError):
             ProfanityMatcher.for_language("de")
+
+
+class CustomWordListTests(unittest.TestCase):
+    def test_exceptions_override_forms_but_do_not_suppress_other_words(self):
+        matcher = ProfanityMatcher(['еб'], exceptions=['ебать'])
+        self.assertFalse(matcher.matches('ЕБАТЬ!'))
+        self.assertTrue(matcher.matches('ебаный'))
+        self.assertTrue(matcher.matches('ебать ебаный'))
+        english = ProfanityMatcher(['fuck*', 'cock'], 'en', ['fucking', 'cocktail'])
+        self.assertFalse(english.matches('FUCKING!'))
+        self.assertFalse(english.matches('cocktail'))
+        self.assertTrue(english.matches('fucker'))
+        self.assertFalse(ProfanityMatcher(['fuck*'], 'en', ['fuck*']).matches('fucker'))
+
+    def test_full_replacement_empty_list_validation_and_identity(self):
+        matcher = ProfanityMatcher.from_request('en', {'censor': ['banana'], 'allow': []})
+        self.assertTrue(matcher.matches('banana'))
+        self.assertFalse(matcher.matches('fuck'))
+        self.assertFalse(ProfanityMatcher.from_request('en', {'censor': []}).matches('fuck'))
+        self.assertNotEqual(matcher.identity(), ProfanityMatcher.from_request('en').identity())
+        for rules in [{'censor': ['bad**']}, {'censor': 'word'}, {'allow': 'word'}, {'allow': [3]}]:
+            with self.subTest(rules=rules), self.assertRaises(ValueError):
+                ProfanityMatcher.from_request('en', rules)

@@ -158,6 +158,7 @@ final class AppModel: ObservableObject {
         let selectedCustomSound = customSound
         let selectedBackend = WhisperKitExperiment.backend(defaults: defaults)
         let selectedLanguage = VideoLanguage.selected(defaults: defaults)
+        let selectedWordLists = WordListPreferences.request(selectedLanguage, defaults: defaults)
         let selectedRecognitionModel = RecognitionModel.requested(defaults: defaults, backend: selectedBackend)
         let recognitionBackend = RecognitionModel.engine(model: selectedRecognitionModel, selected: selectedBackend)
         let experimental = transcript == nil && recognitionBackend != selectedBackend
@@ -194,6 +195,7 @@ final class AppModel: ObservableObject {
                     "backend": recognitionBackend,
                     "model": selectedRecognitionModel,
                     "language": selectedLanguage.rawValue,
+                    "word_lists": selectedWordLists,
                     "censor_style": defaults.string(forKey: "censorStyle") ?? "middle",
                     "offline": !defaults.bool(forKey: "allowDownloads")]
                 if let replacingTrack { request["audio_stream"] = replacingTrack }
