@@ -64,7 +64,11 @@ jobs:
           cache: pip
           cache-dependency-path: requirements*.txt
       - name: Install FFmpeg
-        run: brew install ffmpeg
+        run: |
+          # The engine uses filter_complex_script, removed in FFmpeg 9.
+          brew install ffmpeg@8
+          # Bridge fixtures use Homebrew's bin directory explicitly.
+          brew link --force --overwrite ffmpeg@8
       - name: Install Python bridge dependencies
         run: |
           python -m venv .venv

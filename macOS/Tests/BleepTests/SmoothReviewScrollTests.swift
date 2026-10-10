@@ -29,6 +29,14 @@ final class SmoothReviewScrollTests: XCTestCase {
         return view.subviews.lazy.compactMap(findScroll).first
     }
 
+    private func waitUntil(_ condition: () -> Bool) async throws {
+        let deadline = Date().addingTimeInterval(5)
+        while !condition() && Date() < deadline {
+            try await Task.sleep(nanoseconds: 5_000_000)
+        }
+        XCTAssertTrue(condition(), "Scroll did not reach the expected position")
+    }
+
     func testNativeScrollHasIntermediateFramesAndHandlesDistantTargetsAndReducedMotion() async throws {
         let selection = Selection()
         let host = NSHostingView(rootView: ListView(selection: selection))
@@ -39,33 +47,45 @@ final class SmoothReviewScrollTests: XCTestCase {
         try await Task.sleep(nanoseconds: 200_000_000)
         let scroll = try XCTUnwrap(findScroll(host))
         let clip = scroll.contentView
-        selection.index = 5
         var positions: [CGFloat] = []
-        for _ in 0..<24 {
-            try await Task.sleep(nanoseconds: 16_666_667)
-            positions.append(clip.bounds.minY)
+        // Observe actual frames; hosted runners do not guarantee 60 Hz scheduling.
+        clip.postsBoundsChangedNotifications = true
+        let observer = NotificationCenter.default.addObserver(
+            forName: NSView.boundsDidChangeNotification, object: clip, queue: .main
+        ) { _ in
+            MainActor.assumeIsolated { positions.append(clip.bounds.minY) }
         }
+        defer { NotificationCenter.default.removeObserver(observer) }
         let target = CGFloat(5) * 60 + 28 - clip.bounds.height / 2
+        selection.index = 5
+        try await waitUntil { abs(clip.bounds.minY - target) < 1 }
         XCTAssertEqual(clip.bounds.minY, target, accuracy: 1)
-        XCTAssertGreaterThan(positions.filter { $0 > 1 && $0 < target - 1 }.count, 5,
-                             "Scrolling must traverse multiple intermediate frames instead of snapping")
+        XCTAssertTrue(positions.contains { $0 > 1 && $0 < target - 1 },
+                      "Scrolling must have intermediate frames instead of snapping")
         for pair in zip(positions, positions.dropFirst()) { XCTAssertGreaterThanOrEqual(pair.1, pair.0 - 0.5) }
         selection.index = 180
-        try await Task.sleep(nanoseconds: 60_000_000)
+        try await waitUntil { clip.bounds.minY > target + 1 }
         let interrupted = clip.bounds.minY
+        let distantTarget = 180 * 60 + 28 - clip.bounds.height / 2
+        XCTAssertLessThan(interrupted, distantTarget - 1)
+        positions.removeAll()
         selection.index = 20
-        try await Task.sleep(nanoseconds: 20_000_000)
-        XCTAssertLessThan(abs(clip.bounds.minY - interrupted), 600,
-                          "Retargeting must continue from the visible position, not the previous destination")
-        try await Task.sleep(nanoseconds: 400_000_000)
-        XCTAssertEqual(clip.bounds.minY, 20 * 60 + 28 - clip.bounds.height / 2, accuracy: 1)
+        let retarget = 20 * 60 + 28 - clip.bounds.height / 2
+        try await waitUntil { abs(clip.bounds.minY - retarget) < 1 }
+        XCTAssertFalse(positions.contains { $0 >= distantTarget - 1 },
+                       "Retargeting must not jump to the previous destination")
+        XCTAssertEqual(clip.bounds.minY, retarget, accuracy: 1)
         XCTAssertGreaterThan(interrupted, target)
         selection.reduceMotion = true
         selection.index = 190
-        try await Task.sleep(nanoseconds: 60_000_000)
-        XCTAssertEqual(clip.bounds.minY, 190 * 60 + 28 - clip.bounds.height / 2, accuracy: 1)
+        positions.removeAll()
+        let reducedTarget = 190 * 60 + 28 - clip.bounds.height / 2
+        try await waitUntil { abs(clip.bounds.minY - reducedTarget) < 1 }
+        XCTAssertFalse(positions.contains { $0 > retarget + 1 && $0 < reducedTarget - 1 },
+                       "Reduce Motion must jump without intermediate animation frames")
+        XCTAssertEqual(clip.bounds.minY, reducedTarget, accuracy: 1)
         selection.index = 0
-        try await Task.sleep(nanoseconds: 60_000_000)
+        try await waitUntil { abs(clip.bounds.minY) < 1 }
         XCTAssertEqual(clip.bounds.minY, 0, accuracy: 1)
     }
 }
