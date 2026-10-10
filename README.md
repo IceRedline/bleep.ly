@@ -2,7 +2,7 @@
 
 # bleep.ly
 
-Local speech recognition and profanity censoring for Russian video and audio. A native **macOS app** wraps the Python engine with drag and drop, a review timeline, and clean audio/video export. Your recordings stay on your Mac.
+Local speech recognition and profanity censoring for Russian video and audio, with experimental English support in the desktop app. A native **macOS app** wraps the Python engine with drag and drop, a review timeline, and clean audio/video export. Your recordings stay on your Mac.
 
 **Contents:** [Setup](#setup) · [App workflow](#app-workflow) · [Recognition](#recognition) · [Exports](#exports) · [CLI](#cli) · [Checks](#checks) · [Limitations](#limitations)
 
@@ -30,6 +30,18 @@ Optional Apple GPU recognition:
 Enable **Allow first-time model download** in Settings if the selected model is not installed. Downloads are disabled by default. Once installed, recognition works offline. Models use the repository's `.cache/huggingface` (or an inherited `HF_HOME`).
 
 ## App workflow
+
+Choose **Video language → Русский / English** on the home screen before opening media.
+The saved choice controls recognition and the profanity dictionary. Selecting English
+with GigaAM v3 selected automatically switches to Whisper Large v3 and shows a notice;
+compatible model choices are kept. Settings hides GigaAM for English. Downloads still
+require **Allow first-time model download**. English detection uses an experimental
+word list (`profanity.en.txt`); review contextual false positives and missed words.
+There is no automatic language detection or mixed-language censorship mode. Parakeet
+itself auto-detects speech language; the selected language controls its profanity list.
+Language is recorded in reviews and recognition history, and English/Russian runs use
+separate caches. Existing Russian benchmark caches remain reusable (WhisperKit helper
+changes still invalidate its cache). Changing language applies to the next file.
 
 - **Fast Mode:** select Beep, Silence, or custom audio, then drop a file. Recognition and export run automatically. The result is saved beside the source as `NAME_censored.ext`; existing files receive a numbered alternative and are never overwritten.
 - **Advanced:** review detections on the timeline, uncheck false positives, flag other transcript words, add missing intervals, and adjust mute boundaries. `⌘Z` undoes review edits. **Listen in Context** plays the word with **0.2 seconds before and 0.2 seconds after**, clipped at the file boundaries. **Choose Beep, Silence, or Custom before dropping media.** Preview with censorship is enabled by default and prepares automatically after analysis. The original stays playable during preparation; the player switches to censored audio at the current position when ready. Both Play and Listen in Context use it; turn the checkbox off to hear the original. During playback, Review Words highlights and scrolls to each censored word on the selected track, keeping the last heard word highlighted between intervals.

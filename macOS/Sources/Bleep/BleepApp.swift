@@ -53,6 +53,7 @@ struct SettingsView: View {
     @AppStorage("recognitionModel") private var recognitionModel = RecognitionModel.largeV3.rawValue
     @AppStorage("allowDownloads") private var allowDownloads = false
     @AppStorage("censorStyle") private var censorStyle = "middle"
+    @AppStorage("videoLanguage") private var videoLanguage = "ru"
 
     var body: some View {
         Form {
@@ -71,19 +72,23 @@ struct SettingsView: View {
                     Text(backend == "mlx" ? "Faster · GPU recognition" : "Classic · CPU recognition")
                         .font(.caption).foregroundStyle(.secondary)
                     Picker("Model · testing", selection: $recognitionModel) {
-                        ForEach(RecognitionModel.choices(backend: backend), id: \.rawValue) { model in
+                        ForEach(RecognitionModel.choices(backend: backend, language: VideoLanguage(rawValue: videoLanguage) ?? .russian), id: \.rawValue) { model in
                             Text(model.title).tag(model.rawValue)
                         }
                     }
                     Text("Applies to the next file; each model has its own cache. New GPU models are experimental; GigaAM uses MPS.")
                         .font(.caption).foregroundStyle(.secondary)
+                    if videoLanguage == "en" {
+                        Text("English selected on Home. GigaAM v3 is available for Russian only.")
+                            .font(.caption).foregroundStyle(.secondary)
+                    }
                 }
                 Toggle("Allow first-time model download", isOn: $allowDownloads)
                 Text("Runs locally. Applies to new files. With downloads off, the selected model must already be cached.")
                     .font(.caption).foregroundStyle(.secondary)
             }
             .onChange(of: backend) { _, value in
-                if !RecognitionModel.choices(backend: value).contains(where: { $0.rawValue == recognitionModel }), value != "whisperkit" {
+                if !RecognitionModel.choices(backend: value, language: VideoLanguage(rawValue: videoLanguage) ?? .russian).contains(where: { $0.rawValue == recognitionModel }), value != "whisperkit" {
                     recognitionModel = RecognitionModel.largeV3.rawValue
                 }
             }

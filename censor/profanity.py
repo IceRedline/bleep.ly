@@ -32,22 +32,36 @@ _FAMILIES = {
 
 
 class ProfanityMatcher:
-    def __init__(self, entries: list[str]):
+    def __init__(self, entries: list[str], language="ru"):
+        if language not in {"ru", "en"}:
+            raise ValueError("Choose Russian or English.")
+        alphabet = "а-я" if language == "ru" else "a-z"
         self.patterns: list[re.Pattern] = []
         for entry in entries:
             entry = entry.split("#", 1)[0].strip()
             if not entry:
                 continue
             stem = normalize(entry.rstrip("*"))
-            if not re.fullmatch(r"[а-я]+", stem):
-                raise ValueError(f"Invalid blacklist entry: {entry!r}; use a Russian word or stem*.")
-            pattern = (re.escape(stem) + r"[а-я]*" if entry.endswith("*")
-                       else _FAMILIES.get(stem, re.escape(stem)))
+            if not re.fullmatch(f"[{alphabet}]+", stem):
+                raise ValueError(f"Invalid blacklist entry: {entry!r}; use a {language} word or stem*.")
+            families = _FAMILIES if language == "ru" else {}
+            pattern = (re.escape(stem) + f"[{alphabet}]*" if entry.endswith("*")
+                       else families.get(stem, re.escape(stem)))
             self.patterns.append(re.compile(pattern))
 
     @classmethod
-    def from_file(cls, path: Path) -> "ProfanityMatcher":
-        return cls(path.read_text(encoding="utf-8-sig").splitlines())
+    def from_file(cls, path: Path, language="ru") -> "ProfanityMatcher":
+        return cls(path.read_text(encoding="utf-8-sig").splitlines(), language)
+
+    @staticmethod
+    def dictionary_path(language="ru") -> Path:
+        if language not in {"ru", "en"}:
+            raise ValueError("Choose Russian or English.")
+        return Path(__file__).resolve().parents[1] / ("profanity.en.txt" if language == "en" else "profanity.txt")
+
+    @classmethod
+    def for_language(cls, language="ru") -> "ProfanityMatcher":
+        return cls.from_file(cls.dictionary_path(language), language)
 
     def matches(self, word: str) -> bool:
         normalized = normalize(word)

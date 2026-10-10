@@ -42,3 +42,17 @@ class MatcherTests(unittest.TestCase):
     def test_invalid_blacklist(self):
         with self.assertRaises(ValueError):
             ProfanityMatcher([".*"])
+
+
+class EnglishMatcherTests(unittest.TestCase):
+    def test_english_words_inflections_and_script_boundaries(self):
+        matcher = ProfanityMatcher.for_language("en")
+        for word in ["FUCK!", "fucking", "motherfucker", "bullshit", "assholes", "shit’s", "fuck-ing"]:
+            with self.subTest(word=word):
+                self.assertTrue(matcher.matches(word))
+        for word in ["Scunthorpe", "class", "assistant", "cocktail", "Dickinson", "shitake", "бля", "fуck"]:
+            with self.subTest(word=word):
+                self.assertFalse(matcher.matches(word))
+        self.assertFalse(ProfanityMatcher.for_language("ru").matches("fuck"))
+        with self.assertRaises(ValueError):
+            ProfanityMatcher.for_language("de")

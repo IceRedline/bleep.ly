@@ -18,6 +18,7 @@ struct Request: Decodable {
     var audio: String
     var modelFolder: String
     var output: String
+    var language: String?
 }
 struct Word: Encodable {
     var word: String
@@ -44,6 +45,8 @@ struct Runner {
             _ = URLProtocol.registerClass(NoNetwork.self)
             guard CommandLine.arguments.count == 2 else { throw NSError(domain: "Supply a request JSON path", code: 1) }
             let request = try JSONDecoder().decode(Request.self, from: Data(contentsOf: URL(fileURLWithPath: CommandLine.arguments[1])))
+            let language = request.language ?? "ru"
+            guard ["ru", "en"].contains(language) else { throw NSError(domain: "Unsupported media language", code: 1) }
             let folder = URL(fileURLWithPath: request.modelFolder)
             let output = URL(fileURLWithPath: request.output)
             guard !FileManager.default.fileExists(atPath: output.path) else { throw NSError(domain: "Output already exists", code: 1) }
@@ -59,7 +62,7 @@ struct Runner {
                 if let end = segments.map(\.end).max() { emit(["event": "progress", "seconds": end]) }
             }
             emit(["event": "stage", "stage": "Recognizing with WhisperKit (experimental)"])
-            let options = DecodingOptions(language: "ru", temperature: 0, temperatureFallbackCount: 5,
+            let options = DecodingOptions(language: language, temperature: 0, temperatureFallbackCount: 5,
                 skipSpecialTokens: true, wordTimestamps: true, maxInitialTimestamp: 1,
                 suppressBlank: true, concurrentWorkerCount: 1, chunkingStrategy: .vad)
             let results = try await pipe.transcribe(audioPath: request.audio,

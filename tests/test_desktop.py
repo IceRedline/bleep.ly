@@ -51,6 +51,32 @@ class DesktopTests(unittest.TestCase):
                                       math.sin(2*math.pi*frequency*i/48000))
                            for i, x in enumerate(samples))) / len(samples)
 
+    def test_language_reaches_whisper_and_separates_cache_dictionary_and_history(self):
+        for backend, target in [("faster-whisper", "FasterWhisperBackend"), ("mlx", "MLXWhisperBackend")]:
+            with self.subTest(backend=backend), patch('censor.desktop.' + target) as engine, contextlib.redirect_stdout(io.StringIO()):
+                engine.return_value.transcribe.return_value = [WordTimestamp('fuck', 1, 1.3), WordTimestamp('бля', 2, 2.3)]
+                request = dict(source=str(self.source), backend=backend, cache_dir=str(self.work / 'cache'))
+                ru = analyze(request)
+                en = analyze({**request, 'language': 'en'})
+                self.assertEqual(engine.call_args.args[1], 'en')
+                self.assertEqual([w['profane'] for w in ru['words']], [False, True])
+                self.assertEqual([w['profane'] for w in en['words']], [True, False])
+                self.assertFalse(en['cache_hit'])
+                self.assertEqual(en['language'], 'en')
+                self.assertTrue(analyze({**request, 'language': 'en'})['cache_hit'])
+                self.assertEqual(engine.call_count, 2)
+        with (self.work / 'recognition-history/runs.csv').open(encoding='utf-8-sig') as handle:
+            rows = list(csv.DictReader(handle))
+        self.assertEqual({row['language'] for row in rows}, {'ru', 'en'})
+
+    def test_gigaam_english_is_rejected_before_model_download(self):
+        with patch('censor.experimental_gpu.prepare') as prepare, contextlib.redirect_stdout(io.StringIO()):
+            with self.assertRaisesRegex(CensorError, 'Russian only'):
+                analyze(dict(source=str(self.source), backend='gigaam-mps', model='gigaam-v3', language='en'))
+            prepare.assert_not_called()
+            with self.assertRaisesRegex(CensorError, 'Russian or English'):
+                analyze(dict(source=str(self.source), language='de'))
+
     def test_audio_probe_and_silence_export(self):
         self.assertFalse(self.document['has_video'])
         self.assertEqual(media_info(self.source, allow_audio=True).video_index, -1)

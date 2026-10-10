@@ -15,7 +15,7 @@ from .utils import write_json
 
 FIELDS = [
     "run_id", "record_kind", "timestamp_utc", "cache_modified_at_utc", "source",
-    "source_sha256", "backend", "device", "model", "audio_index", "duration_seconds",
+    "source_sha256", "backend", "device", "model", "language", "audio_index", "duration_seconds",
     "total_words", "explicit_words", "analysis_seconds", "recognition_seconds",
     "cache_hit", "backend_version", "compute_type", "matcher_sha256", "cache_path",
     "snapshot", "words_csv",
@@ -28,9 +28,9 @@ def utc_time(seconds=None):
     return value.isoformat(timespec="microseconds" if seconds is None else "seconds")
 
 
-def matcher_identity():
+def matcher_identity(language="ru"):
     root = Path(__file__).resolve().parents[1]
-    return hashlib.sha256((root / "profanity.txt").read_bytes() +
+    return hashlib.sha256(ProfanityMatcher.dictionary_path(language).read_bytes() +
                           (root / "censor/profanity.py").read_bytes()).hexdigest()
 
 
@@ -70,6 +70,8 @@ def record_run(directory, *, metadata, words, cache_path, source=None, duration=
     snapshots.mkdir(exist_ok=True)
     run_id = run_id or str(uuid.uuid4())
     backend = metadata.get("backend", "")
+    language = metadata.get("detection_language", metadata.get("language", "ru"))
+    language = language if language in {"ru", "en"} else "ru"
     row = dict(run_id=run_id, record_kind=record_kind,
                timestamp_utc=utc_time() if record_kind == "analysis" else None,
                cache_modified_at_utc=cache_modified_at, source=str(source) if source else None,
@@ -78,13 +80,13 @@ def record_run(directory, *, metadata, words, cache_path, source=None, duration=
                        "parakeet-mlx": "GPU (Metal)", "mlx-qwen3-asr": "GPU (Metal)",
                        "gigaam-mps": "GPU (MPS)",
                        "whisperkit": "Core ML (automatic)"}.get(backend, "unknown"),
-               model=metadata.get("model"), audio_index=metadata.get("audio_index"),
+               model=metadata.get("model"), language=language, audio_index=metadata.get("audio_index"),
                duration_seconds=duration, total_words=len(words),
                explicit_words=sum(bool(word["profane"]) for word in words),
                analysis_seconds=analysis_seconds, recognition_seconds=recognition_seconds,
                cache_hit=cache_hit, backend_version=metadata.get("backend_version"),
                compute_type=metadata.get("compute_type", metadata.get("compute")),
-               matcher_sha256=matcher_identity(), cache_path=str(cache_path),
+               matcher_sha256=matcher_identity(language), cache_path=str(cache_path),
                snapshot=f"runs/{run_id}.json", words_csv=f"runs/{run_id}.csv")
     with (directory / ".lock").open("a") as lock:
         fcntl.flock(lock, fcntl.LOCK_EX)
@@ -112,7 +114,8 @@ def import_cache(directory, cache_path, *, source=None, duration=None):
     cache_path = Path(cache_path).resolve()
     content = cache_path.read_bytes()
     data = json.loads(content)
-    matcher = ProfanityMatcher.from_file(Path(__file__).resolve().parents[1] / "profanity.txt")
+    language = data["metadata"].get("detection_language", data["metadata"].get("language", "ru"))
+    matcher = ProfanityMatcher.for_language(language if language in {"ru", "en"} else "ru")
     words = [{**word, "profane": matcher.matches(word["word"])} for word in data["words"]]
     identity = hashlib.sha256(str(cache_path).encode() + b"\0" + content).hexdigest()
     return record_run(directory, metadata=data["metadata"], words=words, cache_path=cache_path,

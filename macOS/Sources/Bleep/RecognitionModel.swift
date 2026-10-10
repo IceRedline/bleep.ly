@@ -1,5 +1,16 @@
 import Foundation
 
+enum VideoLanguage: String, CaseIterable {
+    case russian = "ru"
+    case english = "en"
+
+    var title: String { self == .russian ? "Русский" : "English" }
+
+    static func selected(defaults: UserDefaults) -> Self {
+        Self(rawValue: defaults.string(forKey: "videoLanguage") ?? "") ?? .russian
+    }
+}
+
 /// Temporary model comparison choice; WhisperKit keeps its pinned Core ML weights.
 enum RecognitionModel: String, CaseIterable {
     case largeV3 = "large-v3"
@@ -20,8 +31,9 @@ enum RecognitionModel: String, CaseIterable {
         }
     }
 
-    static func choices(backend: String) -> [Self] {
-        backend == "mlx" ? allCases : [.largeV3, .turbo]
+    static func choices(backend: String, language: VideoLanguage = .russian) -> [Self] {
+        let candidates: [Self] = backend == "mlx" ? allCases : [.largeV3, .turbo]
+        return candidates.filter { language == .russian || $0 != .gigaAM }
     }
 
     static func engine(model: String, selected: String) -> String {
@@ -37,6 +49,7 @@ enum RecognitionModel: String, CaseIterable {
     static func requested(defaults: UserDefaults, backend: String) -> String {
         if backend == "whisperkit" { return Self.turbo.rawValue }
         let model = Self(rawValue: defaults.string(forKey: "recognitionModel") ?? "") ?? .largeV3
-        return choices(backend: backend).contains(model) ? model.rawValue : Self.largeV3.rawValue
+        return choices(backend: backend, language: VideoLanguage.selected(defaults: defaults)).contains(model)
+            ? model.rawValue : Self.largeV3.rawValue
     }
 }

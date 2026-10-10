@@ -15,8 +15,10 @@ final class WindowLayoutTests: XCTestCase {
         try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
         for size in [NSSize(width: 880, height: 690), NSSize(width: 1120, height: 780)] {
             var dropFrame = CGRect.zero
+            model.selectLanguage(.russian)
             model.selectMode(.fast)
             let host = NSHostingView(rootView: ContentView(model: model)
+                .defaultAppStorage(defaults)
                 .onPreferenceChange(DropZoneFrameKey.self) { dropFrame = $0 })
             let window = NSWindow(contentRect: NSRect(origin: .zero, size: size),
                                   styleMask: [.titled, .closable, .miniaturizable, .resizable], backing: .buffered, defer: false)
@@ -43,6 +45,17 @@ final class WindowLayoutTests: XCTestCase {
                 try XCTUnwrap(bitmap.representation(using: .png, properties: [:]))
                     .write(to: folder.appendingPathComponent("window-\(mode.rawValue)-\(Int(size.width)).png"))
             }
+            defaults.set("mlx", forKey: "backend")
+            defaults.set("gigaam-v3", forKey: "recognitionModel")
+            model.selectLanguage(.english)
+            try await Task.sleep(nanoseconds: 350_000_000)
+            host.layoutSubtreeIfNeeded()
+            XCTAssertNotNil(model.languageNotice)
+            let frame = try XCTUnwrap(host.superview)
+            let bitmap = try XCTUnwrap(frame.bitmapImageRepForCachingDisplay(in: frame.bounds))
+            frame.cacheDisplay(in: frame.bounds, to: bitmap)
+            try XCTUnwrap(bitmap.representation(using: .png, properties: [:]))
+                .write(to: folder.appendingPathComponent("window-english-\(Int(size.width)).png"))
         }
     }
 }

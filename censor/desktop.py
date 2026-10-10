@@ -89,6 +89,9 @@ def analyze(request):
 
 def analyze_track(request):
     started = time.perf_counter()
+    language = request.get("language", "ru")
+    if language not in {"ru", "en"}:
+        raise CensorError("Choose Russian or English for the media language.")
     cache_hit = False
     recognition_seconds = None
     backend = "reviewed-transcript"
@@ -119,24 +122,26 @@ def analyze_track(request):
             from .experimental_gpu import MODELS, prepare, cache_identity as gpu_cache_identity
             if model not in MODELS or MODELS[model][0] != backend:
                 raise CensorError("Selected experimental model does not match its GPU backend.")
+            if model == "gigaam-v3" and language != "ru":
+                raise CensorError("GigaAM v3 supports Russian only. Choose Whisper for English.")
             report("Preparing experimental model", 0)
             assets = prepare(model, offline=request.get("offline", True))
-            native_engine = ExperimentalGPUBackend(model, assets)
+            native_engine = ExperimentalGPUBackend(model, assets, language=language)
             key, metadata = gpu_cache_identity(source, model, info.audio_index,
-                                               tracking("Reading media", source.stat().st_size))
+                                               tracking("Reading media", source.stat().st_size), language=language)
         elif backend == "whisperkit":
             from .whisperkit_backend import WhisperKitBackend, prepare_assets, cache_identity
             model_folder = Path(request["whisperkit_model_folder"]).resolve()
             executable = Path(request["whisperkit_executable"]).resolve()
             native_engine = WhisperKitBackend(executable, model_folder,
-                stage=lambda label: report(label, 0))
+                stage=lambda label: report(label, 0), language=language)
             report("Preparing WhisperKit model", 0)
             prepare_assets(model_folder, offline=request.get("offline", True),
                            progress=report)
             key, metadata = cache_identity(source, model_folder, executable, info.audio_index,
-                                          tracking("Reading media", source.stat().st_size))
+                                          tracking("Reading media", source.stat().st_size), language=language)
         else:
-            key, metadata = cache_key(source, model, "ru", compute, info.audio_index,
+            key, metadata = cache_key(source, model, language, compute, info.audio_index,
                                       tracking("Reading media", source.stat().st_size), backend=backend)
         cache = Path(request["cache_dir"]) / f"{key}.json"
         words = None if request.get("bypass_cache", False) else load_cache(cache, info.duration)
@@ -154,7 +159,7 @@ def analyze_track(request):
                 engine = MLXWhisperBackend if backend == "mlx" else FasterWhisperBackend
                 # Some inference libraries print to stdout; keep the protocol clean.
                 with contextlib.redirect_stdout(sys.stderr):
-                    transcriber = native_engine if backend == "whisperkit" or backend in GPU_BACKENDS else engine(model, "ru", compute, request.get("offline", True))
+                    transcriber = native_engine if backend == "whisperkit" or backend in GPU_BACKENDS else engine(model, language, compute, request.get("offline", True))
                     recognition_started = time.perf_counter()
                     raw = transcriber.transcribe(audio, inference_progress)
                     recognition_seconds = time.perf_counter() - recognition_started
@@ -165,7 +170,7 @@ def analyze_track(request):
                 if cache.resolve() == source:
                     raise CensorError("Cache collides with source.")
                 save_transcript(cache, words, metadata)
-        words = classify(words, ProfanityMatcher.from_file(Path(__file__).resolve().parents[1] / "profanity.txt"))
+        words = classify(words, ProfanityMatcher.for_language(language))
     if fingerprint(source) != signature:
         raise CensorError("Source changed during analysis. Open it again.")
     if backend != "reviewed-transcript":
@@ -174,7 +179,7 @@ def analyze_track(request):
             # Preserve the cache's full identity/metrics even when no inference ran.
             cached_metadata = json.loads(cache.read_text())["metadata"]
             record_run(request.get("history_dir", Path(request["cache_dir"]).parent / "recognition-history"),
-                       metadata=cached_metadata, words=[asdict(word) for word in words],
+                       metadata={**cached_metadata, "detection_language": language}, words=[asdict(word) for word in words],
                        cache_path=cache, source=source, duration=info.duration,
                        analysis_seconds=time.perf_counter() - started,
                        recognition_seconds=recognition_seconds, cache_hit=cache_hit)
@@ -188,7 +193,7 @@ def analyze_track(request):
     return {"source": str(source), "fingerprint": signature, "duration": info.duration,
             "has_video": info.video_index >= 0, "audio_stream": stream,
             "audio_count": info.audio_count, "censor_style": style, "words": items,
-            "engine": backend, "cache_hit": cache_hit, "analysis_seconds": time.perf_counter() - started}
+            "language": language, "engine": backend, "cache_hit": cache_hit, "analysis_seconds": time.perf_counter() - started}
 
 
 def reviewed_ranges(document, duration):

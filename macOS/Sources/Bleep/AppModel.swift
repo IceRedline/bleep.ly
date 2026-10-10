@@ -8,6 +8,8 @@ final class AppModel: ObservableObject {
     enum Phase: String { case ready, analyzing, review, exporting, done }
     @Published var phase: Phase = .ready
     @Published private(set) var workflowMode: WorkflowMode
+    @Published private(set) var videoLanguage: VideoLanguage
+    @Published private(set) var languageNotice: String?
     @Published var document: ReviewDocument? { didSet { rebuildPlaybackWords() } }
     @Published var selected: UUID?
     @Published var selectedAudioTrack = 0 { didSet { rebuildPlaybackWords() } }
@@ -91,6 +93,7 @@ final class AppModel: ObservableObject {
         }
         WhisperKitExperiment.migratePreferences(defaults: defaults)
         self.defaults = defaults
+        self.videoLanguage = VideoLanguage.selected(defaults: defaults)
         self.supportDirectory = supportDirectory ?? Self.support
         self.workflowMode = WorkflowMode(rawValue: defaults.string(forKey: "workflowMode") ?? "") ?? .fast
         self.customSound = SavedCensorSound(directory: self.supportDirectory, defaults: defaults).url
@@ -121,6 +124,19 @@ final class AppModel: ObservableObject {
         if panel.runModal() == .OK, let url = panel.url { open(url) }
     }
 
+    func selectLanguage(_ language: VideoLanguage) {
+        guard !busy else { return }
+        videoLanguage = language
+        defaults.set(language.rawValue, forKey: "videoLanguage")
+        languageNotice = nil
+        let backend = WhisperKitExperiment.backend(defaults: defaults)
+        if backend != "whisperkit", language == .english,
+           defaults.string(forKey: "recognitionModel") == RecognitionModel.gigaAM.rawValue {
+            defaults.set(RecognitionModel.largeV3.rawValue, forKey: "recognitionModel")
+            languageNotice = "GigaAM v3 supports Russian only. Switched to Whisper Large v3 for English."
+        }
+    }
+
     @discardableResult
     func open(_ url: URL, transcript: URL? = nil, workflow: WorkflowMode? = nil, replacingTrack: Int? = nil) -> Task<Void, Never>? {
         guard !busy else { return nil }
@@ -134,6 +150,7 @@ final class AppModel: ObservableObject {
         let selectedSound = sound
         let selectedCustomSound = customSound
         let selectedBackend = WhisperKitExperiment.backend(defaults: defaults)
+        let selectedLanguage = VideoLanguage.selected(defaults: defaults)
         let selectedRecognitionModel = RecognitionModel.requested(defaults: defaults, backend: selectedBackend)
         let recognitionBackend = RecognitionModel.engine(model: selectedRecognitionModel, selected: selectedBackend)
         let experimental = transcript == nil && recognitionBackend != selectedBackend
@@ -169,6 +186,7 @@ final class AppModel: ObservableObject {
                     "history_dir": root.appendingPathComponent("тесты bleep.ly/recognition-history").path,
                     "backend": recognitionBackend,
                     "model": selectedRecognitionModel,
+                    "language": selectedLanguage.rawValue,
                     "censor_style": defaults.string(forKey: "censorStyle") ?? "middle",
                     "offline": !defaults.bool(forKey: "allowDownloads")]
                 if let replacingTrack { request["audio_stream"] = replacingTrack }
