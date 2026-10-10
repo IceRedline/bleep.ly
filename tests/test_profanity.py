@@ -24,6 +24,14 @@ class MatcherTests(unittest.TestCase):
             with self.subTest(word=word):
                 self.assertTrue(self.matcher.matches(word))
 
+    def test_inflections_missed_in_model_comparison(self):
+        for word in ["въебали", "въебу.", "въебанутый?", "ебём,", "проебем", "разъебём.", "Схуели."]:
+            with self.subTest(word=word):
+                self.assertTrue(self.matcher.matches(word))
+        for word in ["веб", "вебу", "вебка", "вебку", "вебинар", "схуднуть", "схудели", "схулиганить", "небесная", "потребление"]:
+            with self.subTest(word=word):
+                self.assertFalse(self.matcher.matches(word))
+
     def test_custom_entries_are_not_substrings(self):
         matcher = ProfanityMatcher(["плохой", "руг* # opt-in prefix", "# ignored"])
         self.assertTrue(matcher.matches("плохой"))
