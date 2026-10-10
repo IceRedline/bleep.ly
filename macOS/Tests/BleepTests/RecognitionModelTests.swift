@@ -23,13 +23,18 @@ final class RecognitionModelTests: XCTestCase {
         defaults.set(folder.path, forKey: "projectRoot")
         defaults.set("/usr/bin/python3", forKey: "pythonPath")
         let model = AppModel(defaults: defaults, supportDirectory: folder.appendingPathComponent("support"))
-        for (backend, choice, expected) in [
-            ("faster-whisper", "", "large-v3"),
-            ("faster-whisper", "large-v3-turbo", "large-v3-turbo"),
-            ("mlx", "large-v3", "large-v3"),
-            ("mlx", "large-v3-turbo", "large-v3-turbo"),
-            ("mlx", "invalid", "large-v3"),
-            ("whisperkit", "large-v3", "large-v3-turbo")
+        for (backend, choice, expected, engine) in [
+            ("faster-whisper", "", "large-v3", "faster-whisper"),
+            ("faster-whisper", "large-v3-turbo", "large-v3-turbo", "faster-whisper"),
+            ("faster-whisper", "qwen3-asr", "large-v3", "faster-whisper"),
+            ("mlx", "large-v3", "large-v3", "mlx"),
+            ("mlx", "large-v3-turbo", "large-v3-turbo", "mlx"),
+            ("mlx", "invalid", "large-v3", "mlx"),
+            ("mlx", "parakeet-v3", "parakeet-v3", "parakeet-mlx"),
+            ("mlx", "parakeet-ultra", "parakeet-ultra", "parakeet-mlx"),
+            ("mlx", "qwen3-asr", "qwen3-asr", "mlx-qwen3-asr"),
+            ("mlx", "gigaam-v3", "gigaam-v3", "gigaam-mps"),
+            ("whisperkit", "large-v3", "large-v3-turbo", "whisperkit")
         ] {
             defaults.set(backend, forKey: "backend")
             defaults.set(choice, forKey: "recognitionModel")
@@ -38,9 +43,28 @@ final class RecognitionModelTests: XCTestCase {
             let data = try Data(contentsOf: folder.appendingPathComponent("captured.json"))
             let request = try XCTUnwrap(JSONSerialization.jsonObject(with: data) as? [String: Any])
             XCTAssertEqual(request["model"] as? String, expected)
-            XCTAssertEqual(request["backend"] as? String, backend)
+            XCTAssertEqual(request["backend"] as? String, engine)
             XCTAssertEqual(request["history_dir"] as? String, folder.appendingPathComponent("тесты bleep.ly/recognition-history").path)
             XCTAssertEqual(defaults.string(forKey: "recognitionModel"), choice, "WhisperKit must not overwrite the CPU/MLX choice")
         }
+        defaults.removeObject(forKey: "pythonPath")
+        defaults.set("mlx", forKey: "backend")
+        defaults.set("parakeet-v3", forKey: "recognitionModel")
+        let experimentalPython = folder.appendingPathComponent(".cache/asr-env/bin/python")
+        try FileManager.default.createDirectory(at: experimentalPython.deletingLastPathComponent(), withIntermediateDirectories: true)
+        // macOS /usr/bin/python3 is an argv[0]-sensitive shim, not a symlinkable Python binary.
+        let launcher = Data("#!/bin/sh\nexec /usr/bin/python3 \"$@\"\n".utf8)
+        try launcher.write(to: experimentalPython)
+        try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: experimentalPython.path)
+        await model.open(folder.appendingPathComponent("source.wav"), workflow: .advanced)?.value
+        XCTAssertEqual(model.error, "Request captured without inference", "Experimental models must automatically select their separate runtime")
+
+        try FileManager.default.removeItem(at: experimentalPython)
+        let standardPython = folder.appendingPathComponent(".venv/bin/python")
+        try FileManager.default.createDirectory(at: standardPython.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try launcher.write(to: standardPython)
+        try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: standardPython.path)
+        await model.open(folder.appendingPathComponent("source.wav"), transcript: folder.appendingPathComponent("review.json"), workflow: .advanced)?.value
+        XCTAssertEqual(model.error, "Request captured without inference", "Importing reviewed words must not require experimental inference dependencies")
     }
 }

@@ -56,6 +56,16 @@ One **Engine** picker selects the backend for the next file:
 
 CPU and MLX now offer a temporary **Model · testing** picker: **Large v3** (default, full model) or **Large v3 Turbo**. The choice applies to the next opened file and uses a separate recognition cache. WhisperKit currently keeps its pinned Large v3 Turbo weights. WhisperKit is an Argmax framework; its model is **not an Apple speech model** and must also be downloaded. It is not Apple's Speech framework. Native execution does not guarantee higher accuracy or model download availability.
 
+The **Apple GPU · MLX / MPS** option also offers experimental **Parakeet v3**,
+**Parakeet Ultra**, **Qwen3-ASR 1.7B**, and **GigaAM v3 RNNT**. Install their separate
+runtime with `bash scripts/setup-experimental-gpu.sh`. The app selects
+`.cache/asr-env/bin/python` automatically for these models unless a custom Python
+executable is configured. The standard Whisper runtime remains in `.venv`.
+Model weights download on first use only when downloads are enabled. The new
+choices are GPU-only; unavailable GPU support produces an error without CPU
+fallback. See [GPU comparison](experiments/gpu-models.md) for pinned weights,
+timestamps, and the full-file benchmark command.
+
 On the initial 19.93-second local reference using Turbo, MLX found 4/4 reviewed occurrences in three runs; CPU found 3/4; WhisperKit found 2/4, 3/4, and 3/4. This small sample is insufficient for a general quality ranking. WhisperKit remains experimental. See the [WhisperKit setup and reproducible benchmark](experiments/README.md).
 
 ```sh

@@ -135,6 +135,10 @@ final class AppModel: ObservableObject {
         let selectedCustomSound = customSound
         let selectedBackend = WhisperKitExperiment.backend(defaults: defaults)
         let selectedRecognitionModel = RecognitionModel.requested(defaults: defaults, backend: selectedBackend)
+        let recognitionBackend = RecognitionModel.engine(model: selectedRecognitionModel, selected: selectedBackend)
+        let experimental = transcript == nil && recognitionBackend != selectedBackend
+        let recognitionPython = experimental && (defaults.string(forKey: "pythonPath") ?? "").isEmpty
+            ? root.appendingPathComponent(".cache/asr-env/bin/python") : python
         // A new source deliberately starts a fresh review; the last draft stays on disk until success.
         pause()
         playerLoadTask?.cancel(); playerGeneration = UUID()
@@ -163,7 +167,7 @@ final class AppModel: ObservableObject {
                 var request: [String: Any] = ["operation": "analyze", "source": url.path,
                     "cache_dir": supportDirectory.appendingPathComponent("cache").path,
                     "history_dir": root.appendingPathComponent("тесты bleep.ly/recognition-history").path,
-                    "backend": selectedBackend,
+                    "backend": recognitionBackend,
                     "model": selectedRecognitionModel,
                     "censor_style": defaults.string(forKey: "censorStyle") ?? "middle",
                     "offline": !defaults.bool(forKey: "allowDownloads")]
@@ -173,7 +177,10 @@ final class AppModel: ObservableObject {
                     request["whisperkit_model_folder"] = root.appendingPathComponent(".cache/whisperkit/model").path
                 }
                 if let transcript { request["transcript"] = transcript.path }
-                let result = try await bridge.run(root: root, python: python, request: request, progress: updateProgress, timing: { self.progressState.duration = $0 })
+                if experimental && !FileManager.default.isExecutableFile(atPath: recognitionPython.path) {
+                    throw BridgeFailure(message: "Install experimental GPU models with: bash scripts/setup-experimental-gpu.sh")
+                }
+                let result = try await bridge.run(root: root, python: recognitionPython, request: request, progress: updateProgress, timing: { self.progressState.duration = $0 })
                 let analyzed = try JSONDecoder.bridge.decode(ReviewDocument.self, from: result)
                 if let replacingTrack, var previous = previousDocument, previous.source == analyzed.source {
                     guard previous.fingerprint == analyzed.fingerprint else {

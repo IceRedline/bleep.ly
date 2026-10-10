@@ -1,0 +1,10 @@
+# Separate runtime: does not change the Whisper/WhisperKit environment.
+faster-whisper==1.2.1
+onnxruntime==1.23.2
+mlx==0.32.3
+huggingface-hub==2.2.0
+parakeet-mlx==0.5.3
+mlx-qwen3-asr==0.4.4
+gigaam @ git+https://github.com/salute-developers/GigaAM.git@7447938d791c4f3e643386ee22c33777004293a5
+torch==2.11.0
+torchaudio==2.11.0

@@ -59,7 +59,7 @@ struct SettingsView: View {
             Section("Recognition") {
                 Picker("Engine", selection: $backend) {
                     Text("CPU · Classic processing").tag("faster-whisper")
-                    Text("MLX · GPU recognition").tag("mlx")
+                    Text("Apple GPU · MLX / MPS").tag("mlx")
                     Text("WhisperKit · Experimental").tag("whisperkit")
                 }
                 if backend == "whisperkit" {
@@ -71,15 +71,21 @@ struct SettingsView: View {
                     Text(backend == "mlx" ? "Faster · GPU recognition" : "Classic · CPU recognition")
                         .font(.caption).foregroundStyle(.secondary)
                     Picker("Model · testing", selection: $recognitionModel) {
-                        Text("Large v3").tag(RecognitionModel.largeV3.rawValue)
-                        Text("Large v3 Turbo").tag(RecognitionModel.turbo.rawValue)
+                        ForEach(RecognitionModel.choices(backend: backend), id: \.rawValue) { model in
+                            Text(model.title).tag(model.rawValue)
+                        }
                     }
-                    Text("Large v3 is the full model and takes longer. Applies to the next file; each model has its own cache.")
+                    Text("Applies to the next file; each model has its own cache. New GPU models are experimental; GigaAM uses MPS.")
                         .font(.caption).foregroundStyle(.secondary)
                 }
                 Toggle("Allow first-time model download", isOn: $allowDownloads)
                 Text("Runs locally. Applies to new files. With downloads off, the selected model must already be cached.")
                     .font(.caption).foregroundStyle(.secondary)
+            }
+            .onChange(of: backend) { _, value in
+                if !RecognitionModel.choices(backend: value).contains(where: { $0.rawValue == recognitionModel }), value != "whisperkit" {
+                    recognitionModel = RecognitionModel.largeV3.rawValue
+                }
             }
             Section("Censoring") {
                 Picker("Mute interval", selection: $censorStyle) {

@@ -75,6 +75,8 @@ def record_run(directory, *, metadata, words, cache_path, source=None, duration=
                cache_modified_at_utc=cache_modified_at, source=str(source) if source else None,
                source_sha256=metadata.get("source_sha256"), backend=backend,
                device={"mlx": "GPU (Metal)", "faster-whisper": "CPU",
+                       "parakeet-mlx": "GPU (Metal)", "mlx-qwen3-asr": "GPU (Metal)",
+                       "gigaam-mps": "GPU (MPS)",
                        "whisperkit": "Core ML (automatic)"}.get(backend, "unknown"),
                model=metadata.get("model"), audio_index=metadata.get("audio_index"),
                duration_seconds=duration, total_words=len(words),

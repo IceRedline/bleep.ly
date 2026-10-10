@@ -23,6 +23,7 @@ from .ranges import middle_ranges
 from .transcription import (FasterWhisperBackend, cache_key, classify, load_cache,
                             parse_words, read_transcript, save_transcript)
 from .utils import CensorError, finite_number
+from .experimental_gpu import BACKENDS as GPU_BACKENDS, ExperimentalGPUBackend
 
 # Approved beep_trimmed.wav timing, independent of the subsequently selected cue.
 MUTE_CAP = 0.383021
@@ -108,13 +109,22 @@ def analyze_track(request):
         words = read_transcript(Path(request["transcript"]), info.duration)
     else:
         backend = request.get("backend", "faster-whisper")
-        if backend not in {"mlx", "faster-whisper", "whisperkit"}:
+        if backend not in {"mlx", "faster-whisper", "whisperkit"} | GPU_BACKENDS:
             raise CensorError("Unknown speech backend.")
         model = request.get("model", "large-v3-turbo")
         compute = "float16" if backend == "mlx" else "int8"
         if backend == "mlx":
             model = resolve_model(model)
-        if backend == "whisperkit":
+        if backend in GPU_BACKENDS:
+            from .experimental_gpu import MODELS, prepare, cache_identity as gpu_cache_identity
+            if model not in MODELS or MODELS[model][0] != backend:
+                raise CensorError("Selected experimental model does not match its GPU backend.")
+            report("Preparing experimental model", 0)
+            assets = prepare(model, offline=request.get("offline", True))
+            native_engine = ExperimentalGPUBackend(model, assets)
+            key, metadata = gpu_cache_identity(source, model, info.audio_index,
+                                               tracking("Reading media", source.stat().st_size))
+        elif backend == "whisperkit":
             from .whisperkit_backend import WhisperKitBackend, prepare_assets, cache_identity
             model_folder = Path(request["whisperkit_model_folder"]).resolve()
             executable = Path(request["whisperkit_executable"]).resolve()
@@ -136,12 +146,17 @@ def analyze_track(request):
                 audio = Path(folder) / "speech.wav"
                 extract_audio(source, audio, info, tracking("Preparing audio", info.duration))
                 callback = tracking("Recognizing speech", info.duration)
+                protocol_output = sys.stdout
+                def inference_progress(seconds):
+                    # Library stdout is redirected, but app progress must stay on the protocol pipe.
+                    with contextlib.redirect_stdout(protocol_output):
+                        callback(seconds)
                 engine = MLXWhisperBackend if backend == "mlx" else FasterWhisperBackend
                 # Some inference libraries print to stdout; keep the protocol clean.
                 with contextlib.redirect_stdout(sys.stderr):
-                    transcriber = native_engine if backend == "whisperkit" else engine(model, "ru", compute, request.get("offline", True))
+                    transcriber = native_engine if backend == "whisperkit" or backend in GPU_BACKENDS else engine(model, "ru", compute, request.get("offline", True))
                     recognition_started = time.perf_counter()
-                    raw = transcriber.transcribe(audio, callback)
+                    raw = transcriber.transcribe(audio, inference_progress)
                     recognition_seconds = time.perf_counter() - recognition_started
                 if backend == "whisperkit":
                     metadata["native_metrics"] = native_engine.metrics

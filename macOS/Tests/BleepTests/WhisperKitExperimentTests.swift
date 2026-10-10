@@ -57,7 +57,10 @@ final class WhisperKitExperimentTests: XCTestCase {
             .deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
         let output = root.appendingPathComponent(".cache/macos-previews/settings.png")
         try FileManager.default.createDirectory(at: output.deletingLastPathComponent(), withIntermediateDirectories: true)
-        let view = NSHostingView(rootView: SettingsView().environment(\.colorScheme, .dark))
+        let defaults = try preferences()
+        defaults.set("mlx", forKey: "backend")
+        defaults.set("qwen3-asr", forKey: "recognitionModel")
+        let view = NSHostingView(rootView: SettingsView().defaultAppStorage(defaults).environment(\.colorScheme, .dark))
         let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 590, height: 550),
                               styleMask: [.borderless], backing: .buffered, defer: false)
         window.appearance = NSAppearance(named: .darkAqua)

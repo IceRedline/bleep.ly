@@ -119,6 +119,30 @@ class DesktopTests(unittest.TestCase):
             result = analyze(dict(source=str(self.source), cache_dir=str(self.work / 'cache')))
         self.assertTrue(result['words'][0]['profane'])
 
+    def test_experimental_models_share_classification_cache_and_progress(self):
+        from censor.experimental_gpu import MODELS
+        for choice, (backend, repo, _) in MODELS.items():
+            def transcribe(audio, progress):
+                print('Library diagnostic')
+                progress(2)
+                return [WordTimestamp('въебали', 1, 1.5)]
+            with self.subTest(model=choice), \
+                 patch('censor.experimental_gpu.prepare', return_value=['/cached']), \
+                 patch('censor.experimental_gpu.importlib.metadata.version', return_value='test'), \
+                 patch('censor.desktop.ExperimentalGPUBackend.transcribe', side_effect=transcribe) as engine, \
+                 contextlib.redirect_stdout(io.StringIO()) as protocol, contextlib.redirect_stderr(io.StringIO()) as diagnostic:
+                request = dict(source=str(self.source), backend=backend, model=choice,
+                               cache_dir=str(self.work / 'cache'))
+                first = analyze(request)
+                cached = analyze(request)
+            self.assertTrue(first['words'][0]['profane'])
+            self.assertEqual(first['engine'], backend)
+            self.assertTrue(cached['cache_hit'])
+            engine.assert_called_once()
+            events = [json.loads(line) for line in protocol.getvalue().splitlines()]
+            self.assertTrue(any(e.get('stage') == 'Recognizing speech' and e.get('fraction', 0) > 0 for e in events))
+            self.assertIn('Library diagnostic', diagnostic.getvalue())
+
     def test_selected_models_reach_each_engine_and_have_separate_caches(self):
         for backend, target, expected in [
             ('faster-whisper', 'FasterWhisperBackend', ['large-v3', 'large-v3-turbo']),
