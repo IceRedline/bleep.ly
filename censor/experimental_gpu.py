@@ -26,7 +26,7 @@ def prepare(model, offline=True):
     backend, repo, revision = MODELS[model]
     if backend == "gigaam-mps":
         os.environ["PYTORCH_ENABLE_MPS_FALLBACK"] = "0"
-        folder = ROOT / ".cache/gigaam"
+        folder = Path(os.environ.get("BLEEP_MODEL_CACHE", str(ROOT / ".cache"))) / "gigaam"
         files = [folder / f"{repo}.ckpt", folder / f"{repo}_tokenizer.model"]
         if not offline:
             from gigaam import _download_model, _download_tokenizer

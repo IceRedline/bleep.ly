@@ -45,15 +45,8 @@ final class PythonBridge {
         child.executableURL = python
         child.arguments = ["-u", "-m", "censor.desktop", requestURL.path]
         child.currentDirectoryURL = root
-        var environment = ProcessInfo.processInfo.environment
-        environment["PATH"] = "\(root.appendingPathComponent(".venv/bin").path):/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin"
-        environment["PYTHONUNBUFFERED"] = "1"
-        environment["HF_HUB_DISABLE_TELEMETRY"] = "1"
-        environment["DO_NOT_TRACK"] = "1"
-        if environment["HF_HOME"] == nil {
-            environment["HF_HOME"] = root.appendingPathComponent(".cache/huggingface").path
-        }
-        child.environment = environment
+        child.environment = RuntimePaths.environment(root: root, python: python, support: AppModel.support,
+                                                     inherited: ProcessInfo.processInfo.environment)
         child.standardOutput = output
         child.standardError = errors
         child.standardInput = FileHandle.nullDevice

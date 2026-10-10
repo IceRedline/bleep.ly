@@ -1,6 +1,6 @@
 # bleep.ly for macOS
 
-Native SwiftUI front end for the existing Python engine. macOS 14+, Xcode/Swift 5.9+, Python 3.11+, and FFmpeg. The first version exports **Audio Only** (48 kHz, 24-bit stereo WAV) and **Video** (original video stream + AAC audio, no video re-encoding).
+Native SwiftUI front end for the existing Python engine. A self-contained Apple Silicon DMG is available through [GitHub Releases](https://github.com/IceRedline/bleep.ly/releases); that binary requires macOS 26.2+ for its bundled MLX version. The instructions below describe development builds. macOS 14+, Xcode/Swift 5.9+, Python 3.11+, and FFmpeg. The first version exports **Audio Only** (48 kHz, 24-bit stereo WAV) and **Video** (original video stream + AAC audio, no video re-encoding).
 
 ## Build and launch
 
@@ -71,6 +71,6 @@ The Python integration tests cover audio inputs, silence, cue tails, no-clobber 
 - `Sources/Bleep/PythonBridge.swift`: asynchronous `Process` execution without a shell, JSON-lines events, error capture, cancellation.
 - `../censor/desktop.py`: version 1 JSON request/event protocol, using the existing recognition, profanity matching, and mixing functions.
 
-FCPXML/JSON export, a packaged Python runtime, and waveform zoom are left for subsequent versions. The CLI's existing FCPXML features remain available independently.
+FCPXML/JSON export and waveform zoom are left for subsequent versions. Release DMGs include Python and FFmpeg; see [release instructions](../scripts/release/README.md). The CLI's existing FCPXML features remain available independently.
 
 There is no separate Lab app. The unified build uses `ly.bleep.desktop` and the regular app support directory. On first launch it copies missing settings, the saved custom cue, and the last review from the former Lab app; existing regular-app data and the original Lab files are preserved.

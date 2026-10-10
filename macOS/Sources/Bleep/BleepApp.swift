@@ -104,17 +104,19 @@ struct SettingsView: View {
                 Text("Applies when opening media. Whole word mutes from word start to end. Existing reviewed intervals stay unchanged; the sound always plays once at its original speed.")
                     .font(.caption).foregroundStyle(.secondary)
             }
-            Section("Local setup") {
-                HStack {
-                    TextField("Project folder", text: $projectRoot)
-                    Button("Choose…") {
-                        let panel = NSOpenPanel(); panel.canChooseDirectories = true; panel.canChooseFiles = false
-                        if panel.runModal() == .OK, let url = panel.url { projectRoot = url.path }
+            if RuntimePaths.bundledRoot == nil {
+                Section("Local setup") {
+                    HStack {
+                        TextField("Project folder", text: $projectRoot)
+                        Button("Choose…") {
+                            let panel = NSOpenPanel(); panel.canChooseDirectories = true; panel.canChooseFiles = false
+                            if panel.runModal() == .OK, let url = panel.url { projectRoot = url.path }
+                        }
                     }
+                    TextField("Python executable (optional)", text: $pythonPath)
+                    Text("By default, uses .venv/bin/python in your project folder. FFmpeg must be installed.")
+                        .font(.caption).foregroundStyle(.secondary)
                 }
-                TextField("Python executable (optional)", text: $pythonPath)
-                Text("By default, uses .venv/bin/python in your project folder. FFmpeg must be installed.")
-                    .font(.caption).foregroundStyle(.secondary)
             }
             Section("Audio tracks") {
                 Text("All audio tracks are processed separately. Advanced shows each track for review; Video export keeps them separate. Audio Only exports a stereo mix.")
@@ -124,7 +126,7 @@ struct SettingsView: View {
         .formStyle(.grouped).padding(16).frame(width: 590, height: 550)
         .onAppear { WhisperKitExperiment.migratePreferences(defaults: .standard) }
         .sheet(isPresented: $showWordLists) {
-            WordListEditor(root: URL(fileURLWithPath: projectRoot), language: VideoLanguage(rawValue: videoLanguage) ?? .russian)
+            WordListEditor(root: RuntimePaths.bundledRoot ?? URL(fileURLWithPath: projectRoot), language: VideoLanguage(rawValue: videoLanguage) ?? .russian)
         }
     }
 }

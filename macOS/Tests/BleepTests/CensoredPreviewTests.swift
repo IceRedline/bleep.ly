@@ -260,8 +260,13 @@ final class CensoredPreviewTests: XCTestCase {
         XCTAssertFalse(cancellable.playingCensoredPreview)
         XCTAssertNotNil(cancellable.player.currentItem)
         cancellable.togglePlayback()
-        try await Task.sleep(nanoseconds: 300_000_000)
+        // AVPlayer startup includes asynchronous media-service work on hosted Macs.
+        let playbackDeadline = Date().addingTimeInterval(5)
+        while cancellable.playhead <= 0.05 && Date() < playbackDeadline {
+            try await Task.sleep(nanoseconds: 25_000_000)
+        }
         XCTAssertGreaterThan(cancellable.playhead, 0.05, "Original playback must work during rendering")
+        XCTAssertTrue(cancellable.preparingPreview, "Playback must start before preview rendering finishes")
         let start = Date()
         if terminating {
             let cached = try await audioURL(model)

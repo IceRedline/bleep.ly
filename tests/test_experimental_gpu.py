@@ -9,6 +9,14 @@ from censor.utils import CensorError
 
 
 class ExperimentalGPUTests(unittest.TestCase):
+    def test_bundled_gigaam_uses_writable_model_directory(self):
+        with tempfile.TemporaryDirectory() as folder, patch.dict('os.environ', {'BLEEP_MODEL_CACHE': folder}):
+            models = Path(folder) / 'gigaam'
+            models.mkdir()
+            (models / 'v3_e2e_rnnt.ckpt').write_bytes(b'weights')
+            (models / 'v3_e2e_rnnt_tokenizer.model').write_bytes(b'tokenizer')
+            self.assertEqual(prepare('gigaam-v3', offline=True), [str(models)])
+
     def test_subword_pieces_become_one_word_before_profanity_matching(self):
         pieces = [SimpleNamespace(text=text, start=start, end=end) for text, start, end in [
             (" Е", 1, 1.1), ("б", 1.1, 1.15), ("ать", 1.15, 1.4), (",", 1.4, 1.4),

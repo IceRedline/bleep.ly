@@ -81,3 +81,53 @@ jobs:
           swift --version
       - name: Run all Swift tests
         run: swift test --disable-sandbox --package-path macOS --scratch-path .cache/swift-build -c release
+
+  release-runtime:
+    name: macOS 15 runtime (${{ matrix.runtime }})
+    runs-on: macos-15
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        runtime: [core, gpu]
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: scripts/release/requirements*.lock
+      - name: Install pinned release runtime
+        run: |
+          python -m venv .venv
+          .venv/bin/python -m pip install -r scripts/release/requirements-${{ matrix.runtime }}.lock
+          .venv/bin/python -m pip install --no-deps --force-reinstall --require-hashes -r scripts/release/requirements-mlx-macos15.lock
+          .venv/bin/python -m pip check
+      - name: Check deployment targets and run on Sequoia
+        env:
+          RUNTIME: ${{ matrix.runtime }}
+        run: |
+          .venv/bin/python - <<'PY'
+          import importlib
+          import os
+          import platform
+          import site
+          import subprocess
+          import sys
+          assert platform.mac_ver()[0].split('.')[0] == '15'
+          subprocess.run([sys.executable, 'scripts/release/bundle-macos.py',
+                          '--audit-only', site.getsitepackages()[0]], check=True)
+          for module in ['censor.desktop', 'faster_whisper', 'mlx_whisper', 'torch', 'onnxruntime']:
+              importlib.import_module(module)
+          if os.environ['RUNTIME'] == 'gpu':
+              for module in ['gigaam', 'parakeet_mlx', 'mlx_qwen3_asr', 'torchaudio', 'soundfile']:
+                  importlib.import_module(module)
+          import mlx.core as mx
+          # Hosted VMs have no Metal GPU; validate loading/execution on the real OS.
+          # GPU kernels and real inference are checked locally before signing.
+          mx.set_default_device(mx.cpu)
+          assert (mx.array([1, 2, 3]) * 2).tolist() == [2, 4, 6]
+          print('Release runtime passed on macOS', platform.mac_ver()[0])
+          PY
