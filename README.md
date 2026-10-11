@@ -4,7 +4,7 @@
 
 Local speech recognition and profanity censoring for Russian video and audio, with experimental English support in the desktop app. A native **macOS app** wraps the Python engine with drag and drop, a review timeline, and clean audio/video export. Your recordings stay on your Mac.
 
-**Contents:** [Setup](#setup) · [App workflow](#app-workflow) · [Recognition](#recognition) · [Exports](#exports) · [CLI](#cli) · [Checks](#checks) · [Limitations](#limitations)
+**Contents:** [Download](#download-for-macos) · [Setup](#setup) · [App workflow](#app-workflow) · [Recognition](#recognition) · [Exports](#exports) · [Architecture](#architecture) · [CLI](#cli) · [Checks](#checks) · [Limitations](#limitations)
 
 ## Download for macOS
 
@@ -20,17 +20,27 @@ The release is signed with Developer ID and notarized by Apple. Models and cache
 live under `~/Library/Application Support/bleep.ly/`; moving or updating the app
 does not remove them. The Intel build is not included in this release.
 
+The 0.1.1 DMG is about **761 MB**; the installed app is about **2.43 GB**, before
+model downloads. Most of that space is used by the two bundled Python runtimes
+and their recognition libraries. To update from 0.1.0, replace the app in
+Applications; your settings, downloaded models and saved review are retained.
+
 See [release build instructions](scripts/release/README.md) for packaging and
 verification. The setup below is for building from source.
 
 ## Setup
 
-Requires macOS 14+, Swift 5.9+, Python 3.11+, and FFmpeg. MLX requires Apple Silicon.
+The Swift app targets macOS 14+. Building the included WhisperKit helper requires
+Swift 5.10 or later. Install Xcode with its Swift toolchain, Python 3.11, and
+FFmpeg 8. GPU backends require Apple Silicon and may impose a higher macOS minimum
+through their Python packages; the release's macOS 15 compatibility is checked
+separately with pinned dependencies.
 
 ```sh
 git clone https://github.com/IceRedline/bleep.ly.git
 cd bleep.ly
-brew install ffmpeg python@3.11
+brew install ffmpeg@8 python@3.11
+brew link --force ffmpeg@8
 python3.11 -m venv .venv
 .venv/bin/pip install -r requirements.txt
 bash scripts/build-macos.sh --open
@@ -54,7 +64,9 @@ selects GigaAM v3 on Apple GPU; changing to English selects Whisper Large v3 Tur
 CPU if already selected, otherwise using Apple GPU). Intel Macs use Whisper on CPU.
 The subtitle shows the selected model and language. You can override it in Settings until the next language
 change; relaunching or selecting the same language keeps your manual choice. GigaAM
-is our current Russian default based on the local trial, not a proven accuracy winner.
+is the Russian preset selected on a language change, based on the local trial,
+not a proven accuracy winner. With no saved preferences, the app starts in
+Russian with CPU / Whisper Large v3.
 Settings hides GigaAM for English. Downloads still
 require **Allow first-time model download**. English detection uses an experimental
 word list (`profanity.en.txt`); review contextual false positives and missed words.
@@ -92,19 +104,24 @@ See the [macOS guide](macOS/README.md) for shortcuts, drafts, and development de
 
 One **Engine** picker selects the backend for the next file:
 
-| Engine | Processing | Availability |
+| Engine | Processing | Availability in the DMG |
 | --- | --- | --- |
-| CPU · faster-whisper | Conventional CPU recognition, int8 | Included |
-| Apple GPU · MLX | Metal GPU recognition, float16 | Apple Silicon; optional Python dependencies |
-| WhisperKit · Experimental | Native Swift framework running converted Whisper weights through Core ML | Included; experimental |
+| CPU · faster-whisper | Whisper on CPU, int8 | Included |
+| Apple GPU · MLX / MPS | Whisper, Parakeet and Qwen3-ASR through MLX; GigaAM through PyTorch MPS | Included; Apple Silicon |
+| WhisperKit · Experimental | Native Swift helper running converted Whisper weights through Core ML | Included; experimental |
+
+All engines still require a separate model download. For source builds, install
+the optional GPU dependencies described below.
 
 CPU and MLX now offer a temporary **Model · testing** picker: **Large v3** (default, full model) or **Large v3 Turbo**. The choice applies to the next opened file and uses a separate recognition cache. WhisperKit currently keeps its pinned Large v3 Turbo weights. WhisperKit is an Argmax framework; its model is **not an Apple speech model** and must also be downloaded. It is not Apple's Speech framework. Native execution does not guarantee higher accuracy or model download availability.
 
 The **Apple GPU · MLX / MPS** option also offers experimental **Parakeet v3**,
-**Parakeet Ultra**, **Qwen3-ASR 1.7B**, and **GigaAM v3 RNNT**. Install their separate
-runtime with `bash scripts/setup-experimental-gpu.sh`. The app selects
+**Parakeet Ultra**, **Qwen3-ASR 1.7B**, and **GigaAM v3 RNNT**. Their runtime is
+already included in the DMG. For a source build, install it with
+`bash scripts/setup-experimental-gpu.sh`. The development app selects
 `.cache/asr-env/bin/python` automatically for these models unless a custom Python
-executable is configured. The standard Whisper runtime remains in `.venv`.
+executable is configured. The standard development runtime remains in `.venv`;
+the release selects its bundled runtimes automatically.
 Model weights download on first use only when downloads are enabled. The new
 choices are GPU-only; unavailable GPU support produces an error without CPU
 fallback. See [GPU comparison](experiments/gpu-models.md) for pinned weights,
@@ -112,10 +129,8 @@ timestamps, and the full-file benchmark command.
 
 On the initial 19.93-second local reference using Turbo, MLX found 4/4 reviewed occurrences in three runs; CPU found 3/4; WhisperKit found 2/4, 3/4, and 3/4. This small sample is insufficient for a general quality ranking. WhisperKit remains experimental. See the [WhisperKit setup and reproducible benchmark](experiments/README.md).
 
-```sh
-.venv/bin/pip install -r requirements-whisperkit.txt
-bash scripts/build-macos.sh --open
-```
+For development, `requirements.txt` already includes the Python dependencies for
+WhisperKit model downloads; `scripts/build-macos.sh` builds its Swift helper.
 
 There is one app, **bleep.ly**, with CPU, MLX, and WhisperKit in the same Engine picker. The build always bundles the native WhisperKit helper; model weights are still downloaded only when requested. Choose WhisperKit and allow the initial download, or prepare the weights with `scripts/prepare-whisperkit.py`. The first Core ML preparation can take several minutes.
 
@@ -131,6 +146,19 @@ Upgrading removes the generated `build/bleep.ly Lab.app` after building the repl
 MOV, MP4, and MKV are supported output containers. A codec/container mismatch produces an error; there is no silent video re-encoding fallback. Subtitles, alternate video angles, and additional data streams are not preserved. Original recordings and existing outputs remain intact.
 
 FCPXML and JSON export are available through the CLI; they are not app export options in this version.
+
+## Architecture
+
+The shipped app uses **SwiftUI and AVKit for the interface and playback**, plus
+**Python for recognition orchestration, profanity matching, mute intervals,
+caching, and export orchestration**. The Swift app exchanges JSON messages with
+Python worker processes. FFmpeg handles media extraction, audio mixing and export.
+WhisperKit inference runs in a native Swift/Core ML helper launched by the Python
+worker; choosing WhisperKit does not currently remove the Python dependency.
+
+The release embeds two Python environments to preserve the tested dependency
+versions for its recognition backends. Model weights are downloaded separately
+and run locally. The app is not yet a Python-free implementation.
 
 ## CLI
 
@@ -160,10 +188,18 @@ Model downloads are disabled; inference is mocked.
 The one Python check against `input.reviewed.transcript.json` is skipped in CI
 because the approved personal recording and transcript are local, ignored files.
 
-Each successful app recognition now records one history row per audio track in
-`тесты bleep.ly/recognition-history/runs.csv` inside the selected project folder.
-It includes the exact model, engine/device, total and flagged word counts, source
-hash, track index, elapsed analysis/inference time, and cache-hit status. A cache
+Two additional jobs install the complete core and GPU release dependencies on
+macOS 15. They check dependency consistency, native library deployment targets,
+backend imports and MLX CPU execution. Hosted runners lack Metal GPU access;
+GPU execution and real model inference are checked separately during local
+release smoke tests. See [release checks](scripts/release/README.md).
+
+Each successful app recognition records one history row per audio track in
+`recognition-history/runs.csv`. In a release build this lives under
+`~/Library/Application Support/bleep.ly/`; in a development build, under
+`тесты bleep.ly/` inside the selected project folder. It includes the exact model,
+engine/device, total and flagged word counts, source hash, track index, elapsed
+analysis/inference time, and cache-hit status. A cache
 hit has no inference time. WhisperKit uses automatic Core ML device selection;
 it is not labelled as a GPU-only run. Counts measure flagged ASR tokens, not
 verified profanity recall. JSON snapshots preserve all words and cache metadata;
@@ -202,4 +238,4 @@ Code lives in `censor/`, the SwiftUI app in `macOS/`, the experimental native he
 
 Recognition can miss words or place approximate boundaries, especially with music, overlapping voices, shouting, or fast speech. Review important material in Advanced and listen to the export. Muting affects the entire selected track, including music; this does not separate voices from a mixed recording. After analysis, **Preview with censorship** automatically prepares a temporary WAV using the export mixer. Original playback remains available while preparation runs; ready audio replaces it at the current position. The video is never copied or re-encoded. Completed Beep, Silence, and Custom variants are cached per track, so switching back does not render again. Edits or a changed custom cue require a new variant. The session retains up to eight recent variants and clears them on Home, a new source, or normal app exit; long WAV files can still use substantial disk space. The checkbox affects listening only; exports always apply the reviewed censoring. **Play export** opens the exported file.
 
-The app is not notarized or distributed with a bundled Python runtime. Waveform zoom remains future work.
+Waveform zoom remains future work.
