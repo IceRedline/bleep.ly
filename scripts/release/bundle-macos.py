@@ -165,7 +165,7 @@ print(json.dumps(files))
     info_path = app/'Contents/Info.plist'
     info = plistlib.loads(info_path.read_bytes())
     info.pop('BleepProjectRoot', None)
-    info.update(CFBundleShortVersionString=args.version, CFBundleVersion='8', LSMinimumSystemVersion=minimum,
+    info.update(CFBundleShortVersionString=args.version, CFBundleVersion='10', LSMinimumSystemVersion=minimum,
                 BleepBuildID=str(uuid.uuid4()))
     info_path.write_bytes(plistlib.dumps(info))
     print(json.dumps(dict(app=str(app), native_files=len(files), **manifest), indent=2))

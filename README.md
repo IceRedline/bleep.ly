@@ -12,8 +12,8 @@ The [v0.1.2 release](https://github.com/IceRedline/bleep.ly/releases/tag/v0.1.2)
 provides a self-contained DMG for **Apple Silicon, macOS 15.0 or later**.
 Open the DMG and drag **bleep.ly** to **Applications**.
 Python, FFmpeg and the recognition engines are included; Homebrew and this
-repository are not needed. Models download separately: enable **Allow first-time
-model download** in Settings before processing the first recording. Downloads
+repository are not needed. Models download separately: when one is missing, choose **OK** in the download
+prompt to allow model downloads and continue processing. Downloads
 can be several GB, depending on the model. Afterwards recognition works offline.
 
 The release is signed with Developer ID and notarized by Apple. Models and caches
@@ -54,7 +54,7 @@ Optional Apple GPU recognition:
 .venv/bin/pip install -r requirements-mlx.txt
 ```
 
-In current source builds, opening a file with a missing model asks **Download model?**. Choose **OK** to allow missing-model downloads and continue automatically, or **No** to cancel without downloading. The choice is remembered and can be changed with **Allow first-time model download** in Settings. Cached models work offline without a prompt. Models use the repository's `.cache/huggingface` (or an inherited `HF_HOME`).
+Opening a file with a missing model asks **Download model?**. Choose **OK** to allow missing-model downloads and continue automatically, or **No** to cancel without downloading. The choice is remembered and can be changed with **Allow first-time model download** in Settings. Cached models work offline without a prompt. Models use the repository's `.cache/huggingface` (or an inherited `HF_HOME`).
 
 ## App workflow
 
