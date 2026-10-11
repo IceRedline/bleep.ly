@@ -13,6 +13,65 @@ packaging = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(packaging)
 
 
+class ReleasePermissionsTests(unittest.TestCase):
+    def test_temporary_overlay_cannot_leave_runtime_private(self):
+        import shutil
+        with tempfile.TemporaryDirectory() as folder, tempfile.TemporaryDirectory() as overlay:
+            app = Path(folder)/'App.app'
+            site = app/'Contents/Runtime/lib/site-packages'
+            site.mkdir(parents=True)
+            Path(overlay, 'module.py').write_text('module')
+            shutil.copytree(overlay, site, dirs_exist_ok=True)
+            executable = app/'Contents/Runtime/python'
+            executable.write_text('executable')
+            executable.chmod(0o700)
+            resource = app/'Contents/private.txt'
+            resource.write_text('resource')
+            resource.chmod(0o600)
+            outside = Path(folder)/'outside'
+            outside.write_text('unchanged')
+            outside.chmod(0o600)
+            (app/'link').symlink_to(outside)
+            with self.assertRaisesRegex(RuntimeError, 'non-root'):
+                packaging.bundle.audit_permissions(app)
+            packaging.bundle.normalize_permissions(app)
+            packaging.bundle.audit_permissions(app)
+            self.assertEqual(site.stat().st_mode & 0o777, 0o755)
+            self.assertEqual(executable.stat().st_mode & 0o777, 0o755)
+            self.assertEqual(resource.stat().st_mode & 0o777, 0o644)
+            self.assertEqual(outside.stat().st_mode & 0o777, 0o600)
+            self.assertTrue((app/'link').is_symlink())
+
+    @unittest.skipUnless(sys.platform == 'darwin', 'macOS installer tools')
+    def test_actual_package_permissions_are_checked(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            payload = root/'payload'
+            private = payload/'App.app/Contents/site-packages'
+            private.mkdir(parents=True)
+            (private/'module.py').write_text('module')
+            private.chmod(0o700)
+            pkg = root/'private.pkg'
+            subprocess.run(['pkgbuild', '--root', str(payload), '--identifier', 'ly.bleep.test',
+                            str(pkg)], check=True, stdout=subprocess.DEVNULL)
+            with self.assertRaisesRegex(RuntimeError, 'non-root'):
+                packaging.bundle.audit_package_permissions(pkg)
+            packaging.bundle.normalize_permissions(payload)
+            fixed = root/'fixed.pkg'
+            subprocess.run(['pkgbuild', '--root', str(payload), '--identifier', 'ly.bleep.test',
+                            str(fixed)], check=True, stdout=subprocess.DEVNULL)
+            packaging.bundle.audit_package_permissions(fixed)
+
+    def test_installer_bom_rejects_private_directories_resources_and_executables(self):
+        for mode in ['40700', '100600', '100744', '40744']:
+            with self.subTest(mode=mode), self.assertRaisesRegex(RuntimeError, 'non-root'):
+                packaging.bundle.audit_bom('./App.app/payload\t' + mode)
+        self.assertEqual(packaging.bundle.audit_bom(
+            './App.app\t40755\n./App.app/python\t100755\n./App.app/data\t100644'), 3)
+        with self.assertRaisesRegex(RuntimeError, 'Empty'):
+            packaging.bundle.audit_bom('')
+
+
 class TestFlightProfileTests(unittest.TestCase):
     def test_candidate_refreshes_engine_without_carrying_old_modules_or_caches(self):
         with tempfile.TemporaryDirectory() as folder:

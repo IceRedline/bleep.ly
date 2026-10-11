@@ -108,8 +108,8 @@ def prepare(args):
         raise ValueError('Source must be the original bleep.ly direct-download release')
     if not args.executable.is_file():
         raise ValueError('Build the Swift app before preparing the candidate')
-    if not args.build_number.isdecimal() or int(args.build_number) <= int(info['CFBundleVersion']):
-        raise ValueError('Build number must be an integer greater than the source release build')
+    if not args.build_number.isdecimal() or int(args.build_number) < int(info['CFBundleVersion']):
+        raise ValueError('Build number must be an integer at least the source release build')
     # Never stamp a source revision that omits tracked implementation edits.
     subprocess.run(['git', 'diff', '--exit-code', 'HEAD', '--', 'macOS', 'censor', 'profanity.txt', 'profanity.en.txt', 'scripts/release'], cwd=ROOT, check=True)
     source_commit = command('git', '-C', ROOT, 'rev-parse', 'HEAD')
@@ -148,9 +148,10 @@ def sign(args):
         raise ValueError('Only a separately prepared TestFlight candidate may be signed')
     profile_bytes = subprocess.check_output(['security', 'cms', '-D', '-i', str(args.profile)])
     entitlements = validate_profile(plistlib.loads(profile_bytes), info['CFBundleIdentifier'], args.identity)
-    files, _ = bundle.audit(app)
     shutil.copy2(args.profile, app/'Contents/embedded.provisionprofile')
     clear_quarantine(app)
+    bundle.normalize_permissions(app)
+    files, _ = bundle.audit(app)
     child = {'com.apple.security.app-sandbox': True, 'com.apple.security.inherit': True}
     python = {**child, 'com.apple.security.cs.allow-jit': True,
               'com.apple.security.cs.allow-unsigned-executable-memory': True}
@@ -177,6 +178,7 @@ def sign(args):
     subprocess.run(['productbuild', '--component', str(app), '/Applications', '--sign', args.installer_identity,
                     str(args.pkg)], check=True)
     subprocess.run(['pkgutil', '--check-signature', str(args.pkg)], check=True)
+    bundle.audit_package_permissions(args.pkg)
     print(f'Package ready for App Store Connect validation: {args.pkg}')
 
 

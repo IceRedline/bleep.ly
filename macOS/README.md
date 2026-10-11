@@ -1,7 +1,7 @@
 # bleep.ly for macOS
 
 Native SwiftUI front end for the Python engine. The signed, Apple-notarized
-[0.1.2 release](https://github.com/IceRedline/bleep.ly/releases/tag/v0.1.2) supports
+[0.1.3 release](https://github.com/IceRedline/bleep.ly/releases/tag/v0.1.3) supports
 **Apple Silicon and macOS 15.0 or later**. It includes Python, FFmpeg and the
 recognition engines; only model weights download separately. Install it by
 dragging **bleep.ly** from the DMG to **Applications**.

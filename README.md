@@ -8,7 +8,7 @@ Local speech recognition and profanity censoring for Russian video and audio, wi
 
 ## Download for macOS
 
-The [v0.1.2 release](https://github.com/IceRedline/bleep.ly/releases/tag/v0.1.2)
+The [v0.1.3 release](https://github.com/IceRedline/bleep.ly/releases/tag/v0.1.3)
 provides a self-contained DMG for **Apple Silicon, macOS 15.0 or later**.
 Open the DMG and drag **bleep.ly** to **Applications**.
 Python, FFmpeg and the recognition engines are included; Homebrew and this
