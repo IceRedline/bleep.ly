@@ -436,7 +436,7 @@ final class AppModel: ObservableObject {
         let cue = customSound
         let cached = censored ? try? censoredPreview.cachedAudio(document: document, track: index, sound: selectedSound, customSound: cue) : nil
         preparingPreview = censored && cached == nil
-        previewPreparation = "Preparing censored preview…"
+        previewPreparation = playingCensoredPreview ? "Updating censored preview…" : "Preparing censored preview…"
         if loadedSource != document.source || loadedTrack != index {
             player.replaceCurrentItem(with: nil)
             playingCensoredPreview = false
@@ -452,14 +452,14 @@ final class AppModel: ObservableObject {
                     await installPlayerItem(item, document: document, track: index, censored: true, generation: generation)
                     return
                 }
-                if player.currentItem == nil || playingCensoredPreview {
+                if player.currentItem == nil || (playingCensoredPreview && !censored) {
                     let original = try await makePlayerItem(document: document, track: index)
                     await installPlayerItem(original, document: document, track: index, censored: false, generation: generation)
                 }
                 guard !Task.isCancelled, playerGeneration == generation else { return }
                 loadingPlayer = false
                 guard censored else { return }
-                // Original audio is already playable while the selected mode is prepared.
+                // Keep current audio playable while preparing or patching the preview.
                 try await Task.sleep(nanoseconds: 150_000_000)
                 guard selectedSound != "custom" || cue != nil else {
                     throw BridgeFailure(message: "Choose a custom censor sound first.")
@@ -467,7 +467,7 @@ final class AppModel: ObservableObject {
                 let url = try await censoredPreview.audio(document: document, track: index,
                     sound: selectedSound, customSound: cue, root: root, python: python) { [weak self] _, fraction in
                         guard let self, self.playerGeneration == generation else { return }
-                        self.previewPreparation = "Preparing censored preview · \(Int(fraction * 100))%"
+                        self.previewPreparation = "Updating censored preview · \(Int(fraction * 100))%"
                     }
                 try Task.checkCancellation()
                 let item = try await makePlayerItem(document: document, track: index, audioURL: url)
@@ -475,6 +475,9 @@ final class AppModel: ObservableObject {
             } catch {
                 if !Task.isCancelled && playerGeneration == generation {
                     self.error = "Could not prepare censored preview: \(error.localizedDescription)"
+                    if playingCensoredPreview, let original = try? await makePlayerItem(document: document, track: index) {
+                        await installPlayerItem(original, document: document, track: index, censored: false, generation: generation)
+                    }
                 }
             }
         }

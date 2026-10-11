@@ -150,8 +150,14 @@ final class CensoredPreviewTests: XCTestCase {
             XCTAssertEqual(reusedMode, expected)
         }
         model.toggle(word)
+        XCTAssertTrue(model.playingCensoredPreview, "Keep the prepared audio playing while applying an edit")
         try await waitForPreview(model)
         let unchecked = try await audioURL(model)
+        let patchInfo = try XCTUnwrap(JSONSerialization.jsonObject(with: Data(contentsOf:
+            unchecked.deletingPathExtension().appendingPathExtension("json"))) as? [String: Any])
+        XCTAssertEqual(patchInfo["source_decoded"] as? Bool, false)
+        XCTAssertLessThan(try XCTUnwrap(patchInfo["rendered_seconds"] as? Double), 2,
+                          "Unchecking one word must only process its local audio window")
         XCTAssertGreaterThan(try amplitude(unchecked, at: 1.1, frequency: 440), 0.08)
         model.undo()
         try await waitForPreview(model)

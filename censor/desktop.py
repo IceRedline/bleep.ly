@@ -326,9 +326,13 @@ def main():
         request = json.loads(Path(sys.argv[1]).read_text())
         require_tools()
         operation = request["operation"]
-        if operation not in {"analyze", "export"}:
+        if operation not in {"analyze", "export", "preview"}:
             raise CensorError("Unsupported desktop operation.")
-        result = analyze(request) if operation == "analyze" else export(request)
+        if operation == "preview":
+            from .preview import preview
+            result = preview(request)
+        else:
+            result = analyze(request) if operation == "analyze" else export(request)
         emit("result", **result)
         return 0
     except KeyboardInterrupt:
