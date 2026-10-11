@@ -400,6 +400,7 @@ struct ContentView: View {
     private func exportControls(_ document: ReviewDocument) -> some View {
         HStack(alignment: .center, spacing: 22) {
             soundControls
+            Spacer(minLength: 0)
             VStack(alignment: .leading, spacing: 8) {
                 Text("Export as").font(.caption).foregroundStyle(.secondary)
                 Picker("Export format", selection: $model.exportFormat) {
@@ -409,7 +410,6 @@ struct ContentView: View {
                 Text(model.exportFormat == "video" ? "Original video · no re-encoding" : "WAV · stereo mix of all tracks")
                     .font(.caption).foregroundStyle(.secondary)
             }
-            Spacer(minLength: 0)
             Button(action: model.export) { Label("Export", systemImage: "square.and.arrow.up").frame(minWidth: 96) }
                 .buttonStyle(.borderedProminent).controlSize(.large).keyboardShortcut("e", modifiers: .command)
                 .disabled(model.sound == "custom" && model.customSound == nil)
