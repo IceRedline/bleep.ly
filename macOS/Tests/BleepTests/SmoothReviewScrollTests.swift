@@ -62,7 +62,9 @@ final class SmoothReviewScrollTests: XCTestCase {
         XCTAssertEqual(clip.bounds.minY, target, accuracy: 1)
         XCTAssertTrue(positions.contains { $0 > 1 && $0 < target - 1 },
                       "Scrolling must have intermediate frames instead of snapping")
-        for pair in zip(positions, positions.dropFirst()) { XCTAssertGreaterThanOrEqual(pair.1, pair.0 - 0.5) }
+        // AppKit can snap an interpolated fractional position to the next logical
+        // pixel. Allow that rounding while still rejecting backward animation.
+        for pair in zip(positions, positions.dropFirst()) { XCTAssertGreaterThanOrEqual(pair.1, pair.0 - 1) }
         selection.index = 180
         try await waitUntil { clip.bounds.minY > target + 1 }
         let interrupted = clip.bounds.minY
