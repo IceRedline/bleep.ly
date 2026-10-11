@@ -180,7 +180,7 @@ final class AppModel: ObservableObject {
                 if returnHomeAfterCancel { returnHomeAfterCancel = false; startNewFile() }
             }
             if cancelling {
-                phase = document == nil ? .ready : .review
+                restoreReviewAfterOpenFailure()
                 cancelling = false
                 return
             }
@@ -232,11 +232,18 @@ final class AppModel: ObservableObject {
                 }
             } catch {
                 if !cancelling { self.error = error.localizedDescription }
-                phase = document == nil ? .ready : .review
-                sourceName = document?.url.lastPathComponent ?? url.lastPathComponent
+                restoreReviewAfterOpenFailure()
             }
             cancelling = false
         }
+    }
+
+    private func restoreReviewAfterOpenFailure() {
+        phase = document == nil ? .ready : .review
+        guard let document else { return }
+        sourceName = document.url.lastPathComponent
+        // Opening cleared the player, but a failed/cancelled attempt retains the review.
+        if workflowMode == .advanced && !returnHomeAfterCancel { preparePlayer() }
     }
 
     func selectMode(_ mode: WorkflowMode) {

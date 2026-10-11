@@ -158,6 +158,32 @@ final class WorkflowTests: XCTestCase {
         XCTAssertFalse(FileManager.default.fileExists(atPath: source.deletingLastPathComponent()
             .appendingPathComponent("audio_censored.wav").path))
     }
+
+    func testFailedOrCancelledOpenRestoresPreviousReviewPlayback() async throws {
+        let (model, source, transcript, _) = try fixture()
+        await model.open(source, transcript: transcript, workflow: .advanced)?.value
+        await model.setPreviewCensorship(false)?.value
+        let previous = try XCTUnwrap(model.document)
+        XCTAssertNotNil(model.player.currentItem)
+
+        let missing = source.deletingLastPathComponent().appendingPathComponent("missing.wav")
+        await model.open(missing, transcript: transcript, workflow: .advanced)?.value
+        XCTAssertNotNil(model.error)
+        XCTAssertEqual(model.document, previous)
+        XCTAssertEqual(model.phase, .review)
+        for _ in 0..<100 where model.loadingPlayer { try await Task.sleep(nanoseconds: 20_000_000) }
+        XCTAssertNotNil(model.player.currentItem, "The retained review must remain playable after an error")
+
+        let task = try XCTUnwrap(model.open(missing, transcript: transcript, workflow: .advanced))
+        model.cancel()
+        await task.value
+        XCTAssertNil(model.error)
+        XCTAssertEqual(model.document, previous)
+        XCTAssertEqual(model.phase, .review)
+        XCTAssertEqual(model.sourceName, source.lastPathComponent)
+        for _ in 0..<100 where model.loadingPlayer { try await Task.sleep(nanoseconds: 20_000_000) }
+        XCTAssertNotNil(model.player.currentItem, "Cancelling before the worker starts must restore playback too")
+    }
     func testHomeCancelsAndReturnsToEmptyWelcome() async throws {
         let (model, source, transcript, _) = try fixture()
         let task = try XCTUnwrap(model.open(source, transcript: transcript, workflow: .fast))
