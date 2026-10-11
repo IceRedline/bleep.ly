@@ -17,8 +17,7 @@ class TestFlightProfileTests(unittest.TestCase):
             'TeamIdentifier': ['TEAM123456'], 'Platform': ['OSX'],
             'ExpirationDate': datetime.now(timezone.utc) + timedelta(days=30),
             'DeveloperCertificates': [certificate],
-            'Entitlements': {'com.apple.application-identifier': 'TEAM123456.ly.bleep.desktop',
-                             'beta-reports-active': True},
+            'Entitlements': {'com.apple.application-identifier': 'TEAM123456.ly.bleep.desktop'},
         }
 
     def validate(self):
@@ -52,10 +51,9 @@ class TestFlightProfileTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             self.validate()
 
-    def test_beta_reporting_is_required(self):
-        del self.profile['Entitlements']['beta-reports-active']
-        with self.assertRaises(ValueError):
-            self.validate()
+    def test_mac_store_profile_does_not_need_ios_beta_reporting_entitlement(self):
+        entitlements = self.validate()
+        self.assertNotIn('beta-reports-active', entitlements)
 
 
 if __name__ == '__main__':

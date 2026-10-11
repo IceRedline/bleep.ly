@@ -35,8 +35,6 @@ def validate_profile(profile, bundle_id, identity):
         raise ValueError('A device/development or Developer ID profile cannot be used for TestFlight')
     if entitlements.get('get-task-allow') or entitlements.get('com.apple.security.get-task-allow'):
         raise ValueError('A development profile cannot be used for TestFlight')
-    if not entitlements.get('beta-reports-active'):
-        raise ValueError('Profile does not enable TestFlight beta reporting')
     expires = profile.get('ExpirationDate')
     if not isinstance(expires, datetime) or expires.replace(tzinfo=timezone.utc) <= datetime.now(timezone.utc):
         raise ValueError('Provisioning profile is expired or has no expiration')
@@ -46,7 +44,6 @@ def validate_profile(profile, bundle_id, identity):
     return {
         'com.apple.application-identifier': identifier,
         'com.apple.developer.team-identifier': teams[0],
-        'beta-reports-active': True,
         'com.apple.security.app-sandbox': True,
         'com.apple.security.network.client': True,
         'com.apple.security.files.user-selected.read-write': True,
