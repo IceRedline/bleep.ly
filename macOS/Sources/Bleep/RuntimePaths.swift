@@ -57,6 +57,10 @@ enum RuntimePaths {
         result["HF_HUB_DISABLE_TELEMETRY"] = "1"
         result["DO_NOT_TRACK"] = "1"
         if isBundled(root) {
+            if SandboxFiles.enabled {
+                result["HOME"] = NSHomeDirectory()
+                result["TMPDIR"] = FileManager.default.temporaryDirectory.path
+            }
             // Finder launches must not depend on shell, Homebrew or a user's Python.
             for key in ["PYTHONHOME", "PYTHONPATH", "VIRTUAL_ENV", "DYLD_LIBRARY_PATH", "DYLD_FALLBACK_LIBRARY_PATH"] {
                 result.removeValue(forKey: key)

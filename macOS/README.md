@@ -90,6 +90,14 @@ Files with multiple audio tracks are analyzed independently in both modes. Advan
 
 ## Checks
 
+App Store Connect builds additionally retain security-scoped access to selected
+media and save a bookmark with the last review. Exports render in the app's
+container, then copy to the chosen destination without creating sibling files or
+overwriting existing files. Cancellation removes an incomplete copy. This path
+is enabled by the `BleepAppSandbox` bundle setting; direct-download builds keep
+their existing export path. The sandbox container has its own settings and model
+cache; the existing DMG installation's data is not migrated automatically.
+
 ```sh
 .venv/bin/python -m unittest discover -s tests -q
 CLANG_MODULE_CACHE_PATH="$PWD/.cache/clang" \
