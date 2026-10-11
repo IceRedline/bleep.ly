@@ -8,15 +8,19 @@ final class CensoredPreview {
     private var cached: [Data: URL] = [:]
     private var recentKeys: [Data] = []
     private var latest: [Data: URL] = [:]
-    private var sessionDirectory: URL?
+    private var session: PreviewSession?
+    private var playingOutput: URL?
+
+    init() { PreviewSession.cleanAbandoned() }
+
+    func protectPlayback(_ url: URL?) { playingOutput = url }
 
     func cancel() { bridge?.cancel() }
 
     func clear() {
         cancel()
-        for url in cached.values { try? FileManager.default.removeItem(at: url.deletingLastPathComponent()) }
-        if let sessionDirectory { try? FileManager.default.removeItem(at: sessionDirectory) }
-        sessionDirectory = nil
+        // In-flight workers retain the lease until cancellation has actually finished.
+        session = nil; playingOutput = nil
         cached.removeAll(); recentKeys.removeAll(); latest.removeAll()
     }
 
@@ -46,6 +50,7 @@ final class CensoredPreview {
     private func cachedAudio(key: Data) -> URL? {
         guard let url = cached[key], FileManager.default.fileExists(atPath: url.path) else { return nil }
         recentKeys.removeAll { $0 == key }; recentKeys.append(key)
+        try? FileManager.default.setAttributes([.modificationDate: Date()], ofItemAtPath: url.deletingLastPathComponent().path)
         return url
     }
 
@@ -59,13 +64,16 @@ final class CensoredPreview {
         let (key, contextKey, baseRequest) = try request(document: document, track: track, sound: sound, customSound: customSound)
         if let url = cachedAudio(key: key) { return url }
         var request = baseRequest
-        let session = sessionDirectory ?? FileManager.default.temporaryDirectory.appendingPathComponent("bleep-preview-\(UUID())")
-        sessionDirectory = session
-        let folder = session.appendingPathComponent(UUID().uuidString)
+        let lease = try session ?? PreviewSession()
+        session = lease
+        defer { withExtendedLifetime(lease) {} }
+        let folder = lease.directory.appendingPathComponent(UUID().uuidString)
         try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
         let output = folder.appendingPathComponent("censored.wav")
         request["output"] = output.path
-        request["preview_cache"] = session.appendingPathComponent("audio").path
+        request["preview_cache"] = lease.directory.appendingPathComponent("audio").path
+        request["managed_cache"] = true
+        if let playingOutput { request["playing_output"] = playingOutput.path }
         if let previous = latest[contextKey], FileManager.default.fileExists(atPath: previous.path) {
             request["previous_output"] = previous.path
         }
@@ -81,13 +89,14 @@ final class CensoredPreview {
             recentKeys.removeAll { $0 == key }; recentKeys.append(key)
             // Retain the three modes for two tracks, plus a little room for recent edits.
             while recentKeys.count > 8 {
-                let oldest = recentKeys.removeFirst()
-                if let url = cached.removeValue(forKey: oldest) { try? FileManager.default.removeItem(at: url.deletingLastPathComponent()) }
+                guard let index = recentKeys.firstIndex(where: { cached[$0] != playingOutput && cached[$0] != output }) else { break }
+                let oldest = recentKeys.remove(at: index)
+                // The worker evicts files under its lock, preserving active playback.
+                cached.removeValue(forKey: oldest)
             }
             return output
         } catch {
             try? FileManager.default.removeItem(at: folder)
-            if sessionDirectory != session { try? FileManager.default.removeItem(at: session) }
             throw error
         }
     }

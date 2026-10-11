@@ -193,10 +193,12 @@ final class AppModel: ObservableObject {
                 return
             }
             do {
-                var request: [String: Any] = ["operation": "analyze", "source": url.path,
+                var request: [String: Any] = ["operation": "analyze", "source": url.path, "managed_cache": true,
                     "cache_dir": supportDirectory.appendingPathComponent("cache").path,
                     "app_cache_identity": try RuntimePaths.recognitionCacheIdentity(),
-                    "history_dir": RuntimePaths.history(root: root, support: supportDirectory).path,
+                    "history_dir": (supportDirectory == Self.support
+                        ? RuntimePaths.history(root: root, support: supportDirectory)
+                        : supportDirectory.appendingPathComponent("recognition-history")).path,
                     "backend": recognitionBackend,
                     "model": selectedRecognitionModel,
                     "language": selectedLanguage.rawValue,
@@ -463,6 +465,10 @@ final class AppModel: ObservableObject {
         let playbackToken = previewGeneration
         player.pause()
         player.replaceCurrentItem(with: item)
+        if censored, let composition = item.asset as? AVComposition,
+           let audio = composition.tracks(withMediaType: .audio).first {
+            censoredPreview.protectPlayback(audio.segments.first(where: { !$0.isEmpty })?.sourceURL)
+        } else { censoredPreview.protectPlayback(nil) }
         loadedSource = document.source; loadedTrack = track
         playingCensoredPreview = censored
         let finished = await player.seek(to: CMTime(seconds: position, preferredTimescale: 600), toleranceBefore: .zero, toleranceAfter: .zero)
@@ -485,6 +491,7 @@ final class AppModel: ObservableObject {
         previewPreparation = playingCensoredPreview ? "Updating censored preview…" : "Preparing censored preview…"
         if loadedSource != document.source || loadedTrack != index {
             player.replaceCurrentItem(with: nil)
+            censoredPreview.protectPlayback(nil)
             playingCensoredPreview = false
         }
         loadingPlayer = true

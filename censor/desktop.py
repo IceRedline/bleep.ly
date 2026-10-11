@@ -159,6 +159,11 @@ def analyze_track(request):
         cache = Path(request["cache_dir"]) / f"{key}.json"
         words = None if request.get("bypass_cache", False) else load_cache(cache, info.duration)
         cache_hit = words is not None
+        if cache_hit and request.get("managed_cache"):
+            try:
+                os.utime(cache, None)
+            except OSError:
+                pass
         if words is None:
             with tempfile.TemporaryDirectory(prefix="bleep-speech-") as folder:
                 audio = Path(folder) / "speech.wav"
@@ -312,6 +317,12 @@ def export(request):
 
 
 def main():
+    from .cache_policy import lease
+    with lease(tempfile.gettempdir()):
+        return _main()
+
+
+def _main():
     # The app cancels this process group, including ffmpeg workers.
     if os.getpgrp() != os.getpid():
         os.setsid()
@@ -333,7 +344,12 @@ def main():
             from .preview import preview
             result = preview(request)
         else:
-            result = analyze(request) if operation == "analyze" else export(request)
+            if operation == "analyze":
+                from .cache_policy import recognition_cache
+                with recognition_cache(request):
+                    result = analyze(request)
+            else:
+                result = export(request)
         emit("result", **result)
         return 0
     except KeyboardInterrupt:
