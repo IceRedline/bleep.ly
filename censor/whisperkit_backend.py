@@ -10,6 +10,7 @@ import time
 from pathlib import Path
 
 from .models import WordTimestamp
+from .model_downloads import ModelDownloadRequired
 from .transcription import file_hash
 from .utils import CensorError, write_json
 
@@ -62,7 +63,7 @@ def prepare_assets(folder: Path, offline=True, progress=None):
         except (ValueError, OSError):
             pass
     if offline:
-        raise CensorError('WhisperKit model is not installed. Enable Allow first-time model download in Settings '
+        raise ModelDownloadRequired('WhisperKit model is not installed. Enable Allow first-time model download in Settings '
                           'or run scripts/prepare-whisperkit.py. It needs about 1.7 GB of disk space.')
     from huggingface_hub import HfApi, RepoFile, hf_hub_download
     import shutil

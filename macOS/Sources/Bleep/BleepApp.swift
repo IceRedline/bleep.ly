@@ -51,7 +51,8 @@ struct SettingsView: View {
     @AppStorage("pythonPath") private var pythonPath = ""
     @AppStorage("backend") private var backend = "faster-whisper"
     @AppStorage("recognitionModel") private var recognitionModel = RecognitionModel.largeV3.rawValue
-    @AppStorage("allowDownloads") private var allowDownloads = false
+    @AppStorage("allowDownloads") private var allowDownloads = true
+    @AppStorage("modelDownloadConsentAnswered") private var modelDownloadConsentAnswered = false
     @AppStorage("censorStyle") private var censorStyle = "middle"
     @AppStorage("videoLanguage") private var videoLanguage = "ru"
     @State private var showWordLists = false
@@ -85,7 +86,8 @@ struct SettingsView: View {
                     }
                 }
                 Toggle("Allow first-time model download", isOn: $allowDownloads)
-                Text("Runs locally. Applies to new files. With downloads off, the selected model must already be cached.")
+                    .onChange(of: allowDownloads) { _, _ in modelDownloadConsentAnswered = true }
+                Text("Before the first download, we ask for permission. Your choice applies to missing models. With downloads off, only downloaded models can be used. Recordings stay on your Mac.")
                     .font(.caption).foregroundStyle(.secondary)
             }
             .onChange(of: backend) { _, value in

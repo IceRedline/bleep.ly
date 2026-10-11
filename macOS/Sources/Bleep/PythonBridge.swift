@@ -58,6 +58,7 @@ final class PythonBridge {
                 var pending = Data()
                 var result: Data?
                 var failure: String?
+                var failureCode: String?
                 func consume(_ line: Data) {
                     guard let object = try? JSONSerialization.jsonObject(with: line) as? [String: Any],
                           object["version"] as? Int == 1 else { return }
@@ -71,7 +72,9 @@ final class PythonBridge {
                             progress(stage, min(1, max(0, fraction)))
                         }
                     case "result": result = line
-                    case "error": failure = object["message"] as? String
+                    case "error":
+                        failure = object["message"] as? String
+                        failureCode = object["code"] as? String
                     default: break
                     }
                 }
@@ -91,7 +94,7 @@ final class PythonBridge {
                     continuation.resume(returning: result)
                 } else {
                     let diagnostic = (try? String(contentsOf: errorURL, encoding: .utf8)) ?? ""
-                    continuation.resume(throwing: BridgeFailure(message: failure ??
+                    continuation.resume(throwing: BridgeFailure(code: failureCode, message: failure ??
                         (diagnostic.isEmpty ? "Processing stopped (\(child.terminationStatus))." : String(diagnostic.suffix(4000)))))
                 }
             }
