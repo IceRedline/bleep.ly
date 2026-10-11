@@ -23,7 +23,7 @@ def validate_segments(data, duration):
         speaker = item.get("speaker")
         if not isinstance(speaker, int) or isinstance(speaker, bool) or speaker < 0:
             raise CensorError("Speaker id must be a nonnegative integer.")
-        if not 0 <= start < end <= duration + .1:
+        if not 0 <= start < min(end, duration) or end > duration + .1:
             raise CensorError("Speaker segment is outside the audio timeline.")
         result.append(dict(start=start, end=min(end, duration), speaker=speaker))
     return sorted(result, key=lambda r: (r["start"], r["end"]))
