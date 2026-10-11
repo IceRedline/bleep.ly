@@ -1,6 +1,6 @@
 # macOS release
 
-Release **0.1.1** supports **Apple Silicon, macOS 15.0 or later**. MLX stays at
+Release **0.1.2** supports **Apple Silicon, macOS 15.0 or later**. MLX stays at
 0.32.3, but uses the official Sequoia wheels pinned by URL and SHA-256 in
 `requirements-mlx-macos15.lock`. A version-only pip pin on a Tahoe build host
 selects different wheels requiring macOS 26.2, which caused the 0.1.0 restriction.
@@ -50,7 +50,7 @@ overwrite existing release artifacts.
 ```sh
 bash scripts/build-macos.sh
 bash scripts/release/build-ffmpeg.sh
-python3 scripts/release/bundle-macos.py --version 0.1.1
+python3 scripts/release/bundle-macos.py --version 0.1.2
 python3 scripts/release/sign-macos.py --identity 'Developer ID Application: YOUR NAME (TEAM_ID)' build/release/bleep.ly.app
 python3 scripts/release/smoke-test.py build/release/bleep.ly.app
 ```
@@ -80,12 +80,12 @@ outer app. Python executables allow JIT and unsigned executable memory for Numba
 library validation stays enabled. Use the same Developer ID for all code.
 
 ```sh
-.cache/dmg-tools/bin/python scripts/release/build-dmg.py --version 0.1.1
-codesign --sign 'Developer ID Application: YOUR NAME (TEAM_ID)' --timestamp dist/bleep.ly-0.1.1-arm64.dmg
-xcrun notarytool submit dist/bleep.ly-0.1.1-arm64.dmg --keychain-profile bleep-ly-notary --wait
-xcrun stapler staple dist/bleep.ly-0.1.1-arm64.dmg
-xcrun stapler validate dist/bleep.ly-0.1.1-arm64.dmg
-spctl --assess --type open --context context:primary-signature --verbose=2 dist/bleep.ly-0.1.1-arm64.dmg
+.cache/dmg-tools/bin/python scripts/release/build-dmg.py --version 0.1.2
+codesign --sign 'Developer ID Application: YOUR NAME (TEAM_ID)' --timestamp dist/bleep.ly-0.1.2-arm64.dmg
+xcrun notarytool submit dist/bleep.ly-0.1.2-arm64.dmg --keychain-profile bleep-ly-notary --wait
+xcrun stapler staple dist/bleep.ly-0.1.2-arm64.dmg
+xcrun stapler validate dist/bleep.ly-0.1.2-arm64.dmg
+spctl --assess --type open --context context:primary-signature --verbose=2 dist/bleep.ly-0.1.2-arm64.dmg
 ```
 
 Apple's [distribution workflow](https://developer.apple.com/documentation/xcode/packaging-mac-software-for-distribution)
