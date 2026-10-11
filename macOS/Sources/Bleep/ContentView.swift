@@ -9,6 +9,7 @@ struct ContentView: View {
     @State private var dropTarget = false
     @State private var showInterval = false
     @State private var editingWord: ReviewWord?
+    @State private var sliderTravelInsets = SliderTravelInsets()
     @AppStorage("backend") private var backend = "faster-whisper"
     @AppStorage("recognitionModel") private var recognitionModel = RecognitionModel.largeV3.rawValue
 
@@ -128,8 +129,8 @@ struct ContentView: View {
                 soundControls
                 ZStack(alignment: .leading) {
                     VStack(alignment: .leading, spacing: 6) {
-                        Label("Saved next to your original", systemImage: "folder")
-                        Text("Video stays video. Audio becomes WAV.\nExisting files are never overwritten.")
+                        Label("Choose how to save", systemImage: "folder")
+                        Text("Save clean video or audio after analysis.\nYou choose where the file goes.")
                             .font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
                     }
                     .opacity(model.workflowMode == .fast ? 1 : 0)
@@ -185,8 +186,8 @@ struct ContentView: View {
                         Text(document.url.lastPathComponent).lineLimit(1).truncationMode(.middle)
                         Text("— \(clockText(document.duration))").foregroundStyle(.secondary)
                     }.font(.system(size: 25, weight: .semibold)).tracking(-0.5)
-                    Text(document.count == 0 ? "No words selected for censoring. Review the transcript or add an interval." :
-                            "Found \(document.count) potentially explicit \(document.count == 1 ? "word" : "words").")
+                    Text(document.reviewCount == 0 ? "No words selected for censoring. Review the transcript or add an interval." :
+                            "Found \(document.reviewCount) potentially explicit \(document.reviewCount == 1 ? "word" : "words") · \(document.count) selected.")
                         .foregroundStyle(.secondary)
                 }
                 Spacer()
@@ -262,7 +263,7 @@ struct ContentView: View {
                                     Image(systemName: "play.circle").foregroundStyle(.mint)
                                     VStack(alignment: .leading, spacing: 3) {
                                         Text(word.word).lineLimit(1)
-                                        Text("\(clockText(word.start)) · \(word.muteEnd - word.muteStart, specifier: "%.2f")s muted")
+                                        Text("\(clockText(word.start)) · \(word.profane ? String(format: "%.2fs muted", word.muteEnd - word.muteStart) : "Censoring off")")
                                             .font(.caption2).foregroundStyle(.secondary).monospacedDigit()
                                     }
                                     Spacer(minLength: 0)
@@ -287,7 +288,9 @@ struct ContentView: View {
     }
 
     private func timeline(_ document: ReviewDocument) -> some View {
-        VStack(spacing: 8) {
+        let trackLabelWidth: CGFloat = 100
+        let trackSpacing: CGFloat = 10
+        return VStack(spacing: 8) {
             HStack {
                 Text("CENSOR TIMELINE").font(.caption.weight(.semibold)).tracking(1.2)
                 Spacer()
@@ -295,9 +298,9 @@ struct ContentView: View {
                 Button("Add interval") { editingWord = nil; showInterval = true }.buttonStyle(.borderless)
             }.foregroundStyle(.secondary)
             ForEach(document.audioTracks) { track in
-                HStack(spacing: 10) {
+                HStack(spacing: trackSpacing) {
                     Button { model.selectAudioTrack(track.index) } label: {
-                        Text(track.title).lineLimit(1).frame(width: 100, alignment: .leading)
+                        Text(track.title).lineLimit(1).frame(width: trackLabelWidth, alignment: .leading)
                     }.buttonStyle(.plain).foregroundStyle(model.selectedAudioTrack == track.index ? Color.mint : Color.secondary)
                     GeometryReader { geo in
                 ZStack(alignment: .leading) {
@@ -320,15 +323,25 @@ struct ContentView: View {
                             .accessibilityLabel("Preview \(word.word) at \(clockText(word.start))")
                     }
                     Rectangle().fill(.white).frame(width: 1.5, height: 48)
-                        .offset(x: geo.size.width * min(1, model.playhead / document.duration)).allowsHitTesting(false)
+                        .background(GeometryReader { marker in
+                            Color.clear.preference(key: TimelinePlayheadFrameKey.self,
+                                                   value: [track.index: marker.frame(in: .global)])
+                        })
+                        .offset(x: geo.size.width * min(1, model.playhead / document.duration) - 0.75).allowsHitTesting(false)
                 }
                     }.frame(height: 48)
+                        .padding(.leading, sliderTravelInsets.leading)
+                        .padding(.trailing, sliderTravelInsets.trailing)
                 }
             }
-            Slider(value: Binding(get: { min(document.duration, model.playhead) }, set: { model.seek($0) }), in: 0...document.duration)
-                .accessibilityLabel("Playback position")
-            HStack { Text("0:00"); Spacer(); Text(clockText(document.duration)) }
-                .font(.caption2).monospacedDigit().foregroundStyle(.secondary)
+            VStack(spacing: 8) {
+                PlaybackSlider(value: Binding(get: { min(document.duration, model.playhead) }, set: { model.seek($0) }),
+                               duration: document.duration, travelInsets: $sliderTravelInsets)
+                HStack { Text("0:00"); Spacer(); Text(clockText(document.duration)) }
+                    .font(.caption2).monospacedDigit().foregroundStyle(.secondary)
+                    .padding(.leading, sliderTravelInsets.leading)
+                    .padding(.trailing, sliderTravelInsets.trailing)
+            }.padding(.leading, trackLabelWidth + trackSpacing)
         }
     }
 
@@ -346,22 +359,23 @@ struct ContentView: View {
             }
             if let url = model.exportURL {
                 Text(url.path).font(.caption).foregroundStyle(.secondary).textSelection(.enabled)
-                HStack(spacing: 12) {
-                    Button("Play result") { NSWorkspace.shared.open(url) }.buttonStyle(.borderedProminent)
-                    Button("Show in Finder") { NSWorkspace.shared.activateFileViewerSelecting([url]) }
-                }.controlSize(.large)
             } else {
-                Text("Your review is saved. Finish automatically or choose a different destination.")
+                Text("Choose a format, then choose where to save.")
                     .foregroundStyle(.secondary)
-                soundControls
-                HStack {
-                    Button("Finish automatically") { model.beginExport() }.buttonStyle(.borderedProminent)
-                    Button("Save as…", action: model.export)
-                }
             }
-            Button("Review in Advanced Mode") { model.selectMode(.advanced) }.buttonStyle(.borderless)
+            HStack(spacing: 12) {
+                if document.hasVideo {
+                    Button("Save as Video") { model.export(as: "video") }
+                        .buttonStyle(.borderedProminent).keyboardShortcut("e", modifiers: .command)
+                    Button("Save as Audio") { model.export(as: "audio") }
+                        .buttonStyle(.bordered)
+                } else {
+                    Button("Save as Audio") { model.export(as: "audio") }
+                        .buttonStyle(.borderedProminent).keyboardShortcut("e", modifiers: .command)
+                }
+            }.controlSize(.large)
+                .disabled(model.sound == "custom" && model.customSound == nil)
             Spacer()
-            Button("Process another file", action: model.startNewFile).controlSize(.large)
         }.frame(maxWidth: .infinity)
     }
 
@@ -382,11 +396,12 @@ struct ContentView: View {
                         .help("Original audio stays playable during preparation. Switch between prepared sounds from cache. Export is always censored.")
                 }
             }
-            CensorSoundPicker(selection: $model.sound, chooseCustomSound: model.chooseSound)
+            CensorSoundPicker(selection: $model.sound, hasCustomSound: model.customSound != nil, chooseCustomSound: model.chooseSound)
                 .frame(width: 250, height: 24)
             Button(action: model.chooseSound) {
                 Text(model.customSound?.lastPathComponent ?? "Drop a sound here or choose…").lineLimit(1).truncationMode(.middle)
             }.buttonStyle(.borderless).font(.caption)
+                .help("Choose a different custom sound")
                 .frame(width: 250, alignment: .leading)
                 .dropDestination(for: URL.self) { urls, _ in
                     guard urls.count == 1, let url = urls.first, url.isFileURL else { return false }
@@ -399,16 +414,17 @@ struct ContentView: View {
     private func exportControls(_ document: ReviewDocument) -> some View {
         HStack(alignment: .center, spacing: 22) {
             soundControls
+            Spacer(minLength: 0)
             VStack(alignment: .leading, spacing: 8) {
                 Text("Export as").font(.caption).foregroundStyle(.secondary)
                 Picker("Export format", selection: $model.exportFormat) {
                     Text("Audio Only").tag("audio")
                     if document.hasVideo { Text("Video").tag("video") }
-                }.labelsHidden().pickerStyle(.segmented).frame(width: 200)
+                }.labelsHidden().pickerStyle(.segmented)
+                    .fixedSize().frame(width: 200, alignment: .leading)
                 Text(model.exportFormat == "video" ? "Original video · no re-encoding" : "WAV · stereo mix of all tracks")
                     .font(.caption).foregroundStyle(.secondary)
             }
-            Spacer(minLength: 0)
             Button(action: model.export) { Label("Export", systemImage: "square.and.arrow.up").frame(minWidth: 96) }
                 .buttonStyle(.borderedProminent).controlSize(.large).keyboardShortcut("e", modifiers: .command)
                 .disabled(model.sound == "custom" && model.customSound == nil)

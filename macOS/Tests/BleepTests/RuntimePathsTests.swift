@@ -2,6 +2,37 @@ import XCTest
 @testable import Bleep
 
 final class RuntimePathsTests: XCTestCase {
+    func testRecognitionCacheSurvivesRelaunchAndMoveButNotReinstallation() throws {
+        let folder = FileManager.default.temporaryDirectory.appendingPathComponent("bleep-install-\(UUID())")
+        defer { try? FileManager.default.removeItem(at: folder) }
+        let app = folder.appendingPathComponent("bleep.ly.app")
+        let moved = folder.appendingPathComponent("Moved.app")
+        try FileManager.default.createDirectory(at: app, withIntermediateDirectories: true)
+        let info = ["CFBundleShortVersionString": "0.1.1", "CFBundleVersion": "7", "BleepBuildID": "build-a"]
+        let initial = try RuntimePaths.recognitionCacheIdentity(bundleURL: app, info: info)
+        XCTAssertEqual(try RuntimePaths.recognitionCacheIdentity(bundleURL: app, info: info), initial)
+        // An unrelated change to the directory's modification time is not an installation.
+        try Data().write(to: app.appendingPathComponent("unrelated-file"))
+        XCTAssertEqual(try RuntimePaths.recognitionCacheIdentity(bundleURL: app, info: info), initial)
+        try FileManager.default.moveItem(at: app, to: moved)
+        XCTAssertEqual(try RuntimePaths.recognitionCacheIdentity(bundleURL: moved, info: info), initial)
+        // Reinstall the exact same build at the original path, with a new directory identity.
+        try FileManager.default.copyItem(at: moved, to: app)
+        let reinstalled = try RuntimePaths.recognitionCacheIdentity(bundleURL: app, info: info)
+        XCTAssertNotEqual(reinstalled, initial)
+        XCTAssertEqual(try RuntimePaths.recognitionCacheIdentity(bundleURL: app, info: info), reinstalled)
+    }
+
+    func testRecognitionCacheChangesForVersionBuildAndRebuild() throws {
+        let info = ["CFBundleShortVersionString": "0.1.1", "CFBundleVersion": "7", "BleepBuildID": "build-a"]
+        let original = try RuntimePaths.recognitionCacheIdentity(info: info)
+        for (key, value) in [("CFBundleShortVersionString", "0.1.2"), ("CFBundleVersion", "8"), ("BleepBuildID", "build-b")] {
+            var updated = info
+            updated[key] = value
+            XCTAssertNotEqual(try RuntimePaths.recognitionCacheIdentity(info: updated), original)
+        }
+    }
+
     func testRelocatedBundleUsesItsOwnRuntimesAndWritableCaches() throws {
         let folder = FileManager.default.temporaryDirectory.appendingPathComponent("bleep-runtime-\(UUID())")
         defer { try? FileManager.default.removeItem(at: folder) }

@@ -158,6 +158,20 @@ class IntegrationTests(unittest.TestCase):
         self.assertTrue(data["words"][0]["profane"])
         self.assertFalse(self.source.with_name(self.source.stem + "_censored.mov").exists())
 
+    def test_transcript_created_during_serialization_is_never_overwritten(self):
+        output = self.work / "new-review.json"
+        original_dump = json.dump
+        def racing_dump(data, handle, **kwargs):
+            output.write_bytes(b"another process saved this review")
+            return original_dump(data, handle, **kwargs)
+        with patch("censor.utils.json.dump", side_effect=racing_dump), \
+             contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(io.StringIO()):
+            result = main([str(self.source), "--from-transcript", str(self.transcript),
+                           "--transcribe-only", "--transcript-output", str(output)])
+        self.assertEqual(output.read_bytes(), b"another process saved this review")
+        self.assertEqual(result, 1)
+        self.assertEqual(list(self.work.glob(".new-review.json.*")), [])
+
     def test_missing_audio_and_multiple_streams(self):
         from censor.utils import CensorError
         silent = self.work / "silent.mov"

@@ -1,10 +1,10 @@
 import AppKit
 import SwiftUI
 
-/// Custom is both a selection and an action, including when already selected.
-/// Commit the mode only after the file chooser has accepted a sound.
+/// Reuse a saved custom sound; ask for a file only when none has been saved.
 struct CensorSoundPicker: NSViewRepresentable {
     @Binding var selection: String
+    var hasCustomSound: Bool
     var chooseCustomSound: () -> Void
     private static let modes = ["beep", "silence", "custom"]
 
@@ -15,7 +15,7 @@ struct CensorSoundPicker: NSViewRepresentable {
         @objc func selectSound(_ control: NSSegmentedControl) {
             guard CensorSoundPicker.modes.indices.contains(control.selectedSegment) else { return }
             let mode = CensorSoundPicker.modes[control.selectedSegment]
-            if mode == "custom" {
+            if mode == "custom" && !parent.hasCustomSound {
                 parent.chooseCustomSound()
             } else {
                 parent.selection = mode

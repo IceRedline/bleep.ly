@@ -78,7 +78,7 @@ final class AppModel: ObservableObject {
         return path.isEmpty ? RuntimePaths.python(root: root) : URL(fileURLWithPath: path)
     }
     var visibleWords: [ReviewWord] {
-        (document?.words ?? []).filter { ($0.audioTrack ?? document?.audioStream ?? 0) == selectedAudioTrack && (showAllWords || $0.profane) &&
+        (document?.words ?? []).filter { ($0.audioTrack ?? document?.audioStream ?? 0) == selectedAudioTrack && (showAllWords || $0.isReviewCandidate) &&
             (search.isEmpty || $0.word.localizedCaseInsensitiveContains(search)) }
     }
 
@@ -150,8 +150,6 @@ final class AppModel: ObservableObject {
         }
         selectMode(selectedMode)
         let previousDocument = document
-        let selectedSound = sound
-        let selectedCustomSound = customSound
         let selectedBackend = WhisperKitExperiment.backend(defaults: defaults)
         let selectedLanguage = VideoLanguage.selected(defaults: defaults)
         let selectedWordLists = WordListPreferences.request(selectedLanguage, defaults: defaults)
@@ -180,13 +178,14 @@ final class AppModel: ObservableObject {
                 if returnHomeAfterCancel { returnHomeAfterCancel = false; startNewFile() }
             }
             if cancelling {
-                phase = document == nil ? .ready : .review
+                restoreReviewAfterOpenFailure()
                 cancelling = false
                 return
             }
             do {
                 var request: [String: Any] = ["operation": "analyze", "source": url.path,
                     "cache_dir": supportDirectory.appendingPathComponent("cache").path,
+                    "app_cache_identity": try RuntimePaths.recognitionCacheIdentity(),
                     "history_dir": RuntimePaths.history(root: root, support: supportDirectory).path,
                     "backend": recognitionBackend,
                     "model": selectedRecognitionModel,
@@ -223,20 +222,21 @@ final class AppModel: ObservableObject {
                 playhead = 0
                 if selectedMode == .advanced { preparePlayer() }
                 saveDraft()
-                if selectedMode == .fast, let document {
-                    let destination = document.automaticOutputURL()
-                    try await render(document, to: destination, format: document.hasVideo ? "video" : "audio",
-                                     sound: selectedSound, customSound: selectedCustomSound)
-                } else {
-                    phase = .review
-                }
+                phase = .review
             } catch {
                 if !cancelling { self.error = error.localizedDescription }
-                phase = document == nil ? .ready : .review
-                sourceName = document?.url.lastPathComponent ?? url.lastPathComponent
+                restoreReviewAfterOpenFailure()
             }
             cancelling = false
         }
+    }
+
+    private func restoreReviewAfterOpenFailure() {
+        phase = document == nil ? .ready : .review
+        guard let document else { return }
+        sourceName = document.url.lastPathComponent
+        // Opening cleared the player, but a failed/cancelled attempt retains the review.
+        if workflowMode == .advanced && !returnHomeAfterCancel { preparePlayer() }
     }
 
     func selectMode(_ mode: WorkflowMode) {
@@ -436,7 +436,7 @@ final class AppModel: ObservableObject {
         let cue = customSound
         let cached = censored ? try? censoredPreview.cachedAudio(document: document, track: index, sound: selectedSound, customSound: cue) : nil
         preparingPreview = censored && cached == nil
-        previewPreparation = "Preparing censored preview…"
+        previewPreparation = playingCensoredPreview ? "Updating censored preview…" : "Preparing censored preview…"
         if loadedSource != document.source || loadedTrack != index {
             player.replaceCurrentItem(with: nil)
             playingCensoredPreview = false
@@ -452,14 +452,14 @@ final class AppModel: ObservableObject {
                     await installPlayerItem(item, document: document, track: index, censored: true, generation: generation)
                     return
                 }
-                if player.currentItem == nil || playingCensoredPreview {
+                if player.currentItem == nil || (playingCensoredPreview && !censored) {
                     let original = try await makePlayerItem(document: document, track: index)
                     await installPlayerItem(original, document: document, track: index, censored: false, generation: generation)
                 }
                 guard !Task.isCancelled, playerGeneration == generation else { return }
                 loadingPlayer = false
                 guard censored else { return }
-                // Original audio is already playable while the selected mode is prepared.
+                // Keep current audio playable while preparing or patching the preview.
                 try await Task.sleep(nanoseconds: 150_000_000)
                 guard selectedSound != "custom" || cue != nil else {
                     throw BridgeFailure(message: "Choose a custom censor sound first.")
@@ -467,7 +467,7 @@ final class AppModel: ObservableObject {
                 let url = try await censoredPreview.audio(document: document, track: index,
                     sound: selectedSound, customSound: cue, root: root, python: python) { [weak self] _, fraction in
                         guard let self, self.playerGeneration == generation else { return }
-                        self.previewPreparation = "Preparing censored preview · \(Int(fraction * 100))%"
+                        self.previewPreparation = "Updating censored preview · \(Int(fraction * 100))%"
                     }
                 try Task.checkCancellation()
                 let item = try await makePlayerItem(document: document, track: index, audioURL: url)
@@ -475,6 +475,9 @@ final class AppModel: ObservableObject {
             } catch {
                 if !Task.isCancelled && playerGeneration == generation {
                     self.error = "Could not prepare censored preview: \(error.localizedDescription)"
+                    if playingCensoredPreview, let original = try? await makePlayerItem(document: document, track: index) {
+                        await installPlayerItem(original, document: document, track: index, censored: false, generation: generation)
+                    }
                 }
             }
         }
@@ -517,7 +520,10 @@ final class AppModel: ObservableObject {
     }
     func toggle(_ word: ReviewWord) {
         edit { value in
-            if let index = value.words.firstIndex(where: { $0.id == word.id }) { value.words[index].profane.toggle() }
+            if let index = value.words.firstIndex(where: { $0.id == word.id }) {
+                value.words[index].reviewCandidate = true
+                value.words[index].profane.toggle()
+            }
         }
     }
     func undo() {
@@ -575,10 +581,13 @@ final class AppModel: ObservableObject {
         }
     }
     func chooseSound() {
+        chooseSound { panel in panel.runModal() == .OK ? panel.url : nil }
+    }
+    func chooseSound(chooseFile: @MainActor (NSOpenPanel) -> URL?) {
         let panel = NSOpenPanel(); panel.allowedContentTypes = [.audio]
         panel.allowsMultipleSelection = false
         panel.canChooseDirectories = false
-        if panel.runModal() == .OK, let url = panel.url { setSound(url) }
+        if let url = chooseFile(panel) { setSound(url) }
     }
     func setSound(_ url: URL) {
         do {
@@ -589,28 +598,39 @@ final class AppModel: ObservableObject {
     }
 
     func export() {
-        guard !busy, let document else { return }
-        if sound == "custom" && customSound == nil { chooseSound(); return }
-        let panel = NSSavePanel()
-        let video = exportFormat == "video"
-        panel.allowedContentTypes = video ? [.quickTimeMovie, .mpeg4Movie, UTType(filenameExtension: "mkv") ?? .movie] : [.wav]
-        panel.nameFieldStringValue = document.url.deletingPathExtension().lastPathComponent + "_censored." + (video ? "mov" : "wav")
-        panel.message = video ? "The original video stream is copied without re-encoding." : "48 kHz · 24-bit stereo WAV"
-        guard panel.runModal() == .OK, let destination = panel.url else { return }
-        if FileManager.default.fileExists(atPath: destination.path) {
-            error = "Choose a new filename. Existing files are kept intact."; return
-        }
-        beginExport(to: destination)
+        export(as: exportFormat)
     }
 
     @discardableResult
-    func beginExport(to destination: URL? = nil) -> Task<Void, Never>? {
+    func export(as format: String, chooseDestination: @MainActor (NSSavePanel) -> URL? = { panel in
+        panel.runModal() == .OK ? panel.url : nil
+    }) -> Task<Void, Never>? {
+        guard !busy, let document else { return nil }
+        guard format == "audio" || (format == "video" && document.hasVideo) else {
+            error = "Choose an available export format."; return nil
+        }
+        if sound == "custom" && customSound == nil { chooseSound(); return nil }
+        let panel = NSSavePanel()
+        let video = format == "video"
+        panel.allowedContentTypes = video ? [.quickTimeMovie, .mpeg4Movie, UTType(filenameExtension: "mkv") ?? .movie] : [.wav]
+        panel.title = video ? "Save as Video" : "Save as Audio"
+        let suggested = document.suggestedOutputURL(format: format)
+        panel.directoryURL = suggested.deletingLastPathComponent()
+        panel.nameFieldStringValue = suggested.lastPathComponent
+        panel.message = video ? "The original video stream is copied without re-encoding." : "48 kHz · 24-bit stereo WAV"
+        guard let destination = chooseDestination(panel) else { return nil }
+        if FileManager.default.fileExists(atPath: destination.path) {
+            error = "Choose a new filename. Existing files are kept intact."; return nil
+        }
+        return beginExport(to: destination, format: format)
+    }
+
+    @discardableResult
+    func beginExport(to destination: URL, format: String) -> Task<Void, Never>? {
         guard !busy, let document else { return nil }
         guard sound != "custom" || customSound != nil else {
             error = "Choose a custom censor sound first."; return nil
         }
-        let output = destination ?? document.automaticOutputURL()
-        let format = destination == nil ? (document.hasVideo ? "video" : "audio") : exportFormat
         let selectedSound = sound
         let selectedCustomSound = customSound
         error = nil; exportURL = nil
@@ -624,7 +644,7 @@ final class AppModel: ObservableObject {
             }
             if cancelling { phase = .review; cancelling = false; return }
             do {
-                try await render(document, to: output, format: format, sound: selectedSound, customSound: selectedCustomSound)
+                try await render(document, to: destination, format: format, sound: selectedSound, customSound: selectedCustomSound)
             } catch {
                 if !cancelling { self.error = error.localizedDescription }
                 phase = .review

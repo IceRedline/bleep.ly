@@ -23,14 +23,18 @@ def timestamp(seconds: float) -> str:
     return f"{minutes:02d}:{millis // 1000:02d}.{millis % 1000:03d}"
 
 
-def write_json(path: Path, data: dict) -> None:
-    """Atomically update only application-owned JSON (caller checks collisions)."""
+def write_json(path: Path, data: dict, *, overwrite: bool = True) -> None:
+    """Publish complete JSON; user-selected outputs must use overwrite=False."""
     path.parent.mkdir(parents=True, exist_ok=True)
     fd, name = tempfile.mkstemp(dir=path.parent, prefix=f".{path.name}.")
     try:
         with os.fdopen(fd, "w", encoding="utf-8") as handle:
             json.dump(data, handle, ensure_ascii=False, indent=2, allow_nan=False)
             handle.write("\n")
-        os.replace(name, path)
+        if overwrite:
+            os.replace(name, path)
+        else:
+            # The existence check alone cannot protect against concurrent writers.
+            os.link(name, path)
     finally:
         Path(name).unlink(missing_ok=True)

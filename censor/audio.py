@@ -76,8 +76,13 @@ def filter_graph(info: MediaInfo, ranges: list[CensorRange], mode: str, duck_db:
     for i, item in enumerate(ranges):
         # Cue duration is independent of the unchanged mute/duck interval.
         duration = other_duration if indices[i] else source_duration
-        graph.append(f"[s{i}]{beep_filter(duration)},"
-                     f"adelay={samples(item.start)}S:all=1[b{i}]")
+        cue_filter = beep_filter(duration)
+        # A preview window can begin partway through a full cue. Preserve its
+        # original phase and fades rather than restarting it at the window edge.
+        if item.start < 0:
+            cue_filter += f",atrim=start_sample={-samples(item.start)},asetpts=N/SR/TB"
+        graph.append(f"[s{i}]{cue_filter},"
+                     f"adelay={max(0, samples(item.start))}S:all=1[b{i}]")
     inputs = "[bed]" + "".join(f"[b{i}]" for i in range(len(ranges)))
     graph.append(f"{inputs}amix=inputs={len(ranges) + 1}:duration=first:normalize=0,"
                  # No global attenuation; limiter catches peaks without adding latency.

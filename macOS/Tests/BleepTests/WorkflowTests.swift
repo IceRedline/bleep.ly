@@ -1,5 +1,6 @@
 import XCTest
 import AVFoundation
+import UniformTypeIdentifiers
 @testable import Bleep
 
 @MainActor
@@ -65,7 +66,7 @@ final class WorkflowTests: XCTestCase {
         XCTAssertEqual((model.player.currentItem?.asset as? AVURLAsset)?.url.resolvingSymlinksInPath(), source.resolvingSymlinksInPath())
     }
 
-    func testFastVideoExportsAutomaticallyAndAvoidsExistingFiles() async throws {
+    func testFastVideoWaitsForSaveAndExportsBothFormatsWithoutRecognition() async throws {
         let (model, source, transcript, defaults) = try fixture(video: true)
         defaults.set("full", forKey: "censorStyle")
         XCTAssertEqual(model.workflowMode, .fast)
@@ -74,13 +75,34 @@ final class WorkflowTests: XCTestCase {
         let sourceBytes = try Data(contentsOf: source)
         let task = try XCTUnwrap(model.open(source, transcript: transcript, workflow: .fast))
         XCTAssertTrue(model.busy)
-        // Mode changes are locked until the whole analysis/export operation finishes.
+        // Mode changes are locked during analysis.
         model.selectMode(.advanced)
         XCTAssertEqual(model.workflowMode, .fast)
         await task.value
         XCTAssertNil(model.error)
+        XCTAssertEqual(model.phase, .review)
+        XCTAssertNil(model.exportURL)
+        XCTAssertFalse(model.preparingPreview, "Fast waits for an explicit save")
+        let destination = source.deletingLastPathComponent().appendingPathComponent("видео_censored_2.mov")
+        XCTAssertFalse(FileManager.default.fileExists(atPath: destination.path))
+        XCTAssertNil(model.export(as: "audio") { panel in
+            XCTAssertEqual(panel.allowedContentTypes, [.wav])
+            XCTAssertEqual(panel.title, "Save as Audio")
+            return nil
+        })
+        XCTAssertEqual(model.phase, .review, "Cancelling the save panel must not render")
+        XCTAssertNil(model.exportURL)
+        // The format comes from the button even if Advanced last selected another one.
+        model.exportFormat = "audio"
+        await model.export(as: "video") { panel in
+            XCTAssertEqual(panel.title, "Save as Video")
+            XCTAssertTrue(panel.allowedContentTypes.contains(.quickTimeMovie))
+            XCTAssertEqual(panel.nameFieldStringValue, destination.lastPathComponent)
+            XCTAssertEqual(panel.directoryURL?.resolvingSymlinksInPath(), source.deletingLastPathComponent().resolvingSymlinksInPath())
+            return destination
+        }?.value
+        XCTAssertNil(model.error)
         XCTAssertEqual(model.phase, .done)
-        XCTAssertFalse(model.preparingPreview, "Fast exports directly without a redundant preview render")
         let result = try XCTUnwrap(model.exportURL)
         XCTAssertEqual(result.lastPathComponent, "видео_censored_2.mov")
         XCTAssertTrue(FileManager.default.fileExists(atPath: result.path))
@@ -92,12 +114,37 @@ final class WorkflowTests: XCTestCase {
         XCTAssertEqual(model.document?.words.first?.muteStart, 0.5)
         XCTAssertEqual(model.document?.words.first?.muteEnd, 1.5)
         XCTAssertEqual(defaults.string(forKey: "workflowMode"), "fast")
+        // Save audio from the same analysis after video, without reopening the source.
+        try FileManager.default.removeItem(at: transcript)
+        let audio = source.deletingLastPathComponent().appendingPathComponent("chosen-audio.wav")
+        model.exportFormat = "video"
+        await model.export(as: "audio") { _ in audio }?.value
+        XCTAssertNil(model.error)
+        XCTAssertEqual(model.exportURL, audio)
+        let audioTracks = try await AVURLAsset(url: audio).loadTracks(withMediaType: .audio)
+        let videoTracks = try await AVURLAsset(url: audio).loadTracks(withMediaType: .video)
+        XCTAssertEqual(audioTracks.count, 1)
+        XCTAssertTrue(videoTracks.isEmpty)
+        XCTAssertTrue(FileManager.default.fileExists(atPath: result.path))
+        XCTAssertNil(model.export(as: "video") { _ in existing })
+        XCTAssertEqual(try Data(contentsOf: existing), Data("keep".utf8))
     }
 
-    func testFastAudioDefaultsToWAVAndAdvancedKeepsReview() async throws {
+    func testFastAudioWaitsForSaveAndAdvancedKeepsReview() async throws {
         let (model, source, transcript, defaults) = try fixture()
         model.sound = "silence"
         await model.open(source, transcript: transcript, workflow: .fast)?.value
+        XCTAssertNil(model.error)
+        XCTAssertEqual(model.phase, .review)
+        XCTAssertNil(model.exportURL)
+        XCTAssertNil(model.export(as: "video") { _ in
+            XCTFail("Audio-only input cannot offer video export"); return nil
+        })
+        let destination = source.deletingLastPathComponent().appendingPathComponent("audio_censored.wav")
+        await model.export(as: "audio") { panel in
+            XCTAssertEqual(panel.allowedContentTypes, [.wav])
+            return destination
+        }?.value
         XCTAssertNil(model.error)
         XCTAssertEqual(model.exportURL?.pathExtension, "wav")
         XCTAssertEqual(model.phase, .done)
@@ -133,6 +180,9 @@ final class WorkflowTests: XCTestCase {
         try Data("not audio".utf8).write(to: invalidSound)
         model.setSound(invalidSound)
         await model.open(source, transcript: transcript, workflow: .fast)?.value
+        XCTAssertNil(model.error)
+        let destination = source.deletingLastPathComponent().appendingPathComponent("clean.wav")
+        await model.export(as: "audio") { _ in destination }?.value
         XCTAssertNotNil(model.error)
         XCTAssertNotNil(model.document)
         XCTAssertEqual(model.phase, .review)
@@ -140,13 +190,13 @@ final class WorkflowTests: XCTestCase {
         // The retry only renders the saved review (transcript can be removed).
         try FileManager.default.removeItem(at: transcript)
         model.sound = "beep"
-        await model.beginExport()?.value
+        await model.export(as: "audio") { _ in destination }?.value
         XCTAssertNil(model.error)
         XCTAssertEqual(model.phase, .done)
         XCTAssertNotNil(model.exportURL)
     }
 
-    func testImmediateCancellationDoesNotLaunchAutomaticExport() async throws {
+    func testImmediateCancellationDoesNotSaveAnything() async throws {
         let (model, source, transcript, _) = try fixture()
         let task = try XCTUnwrap(model.open(source, transcript: transcript, workflow: .fast))
         model.cancel()
@@ -157,6 +207,32 @@ final class WorkflowTests: XCTestCase {
         XCTAssertNil(model.exportURL)
         XCTAssertFalse(FileManager.default.fileExists(atPath: source.deletingLastPathComponent()
             .appendingPathComponent("audio_censored.wav").path))
+    }
+
+    func testFailedOrCancelledOpenRestoresPreviousReviewPlayback() async throws {
+        let (model, source, transcript, _) = try fixture()
+        await model.open(source, transcript: transcript, workflow: .advanced)?.value
+        await model.setPreviewCensorship(false)?.value
+        let previous = try XCTUnwrap(model.document)
+        XCTAssertNotNil(model.player.currentItem)
+
+        let missing = source.deletingLastPathComponent().appendingPathComponent("missing.wav")
+        await model.open(missing, transcript: transcript, workflow: .advanced)?.value
+        XCTAssertNotNil(model.error)
+        XCTAssertEqual(model.document, previous)
+        XCTAssertEqual(model.phase, .review)
+        for _ in 0..<100 where model.loadingPlayer { try await Task.sleep(nanoseconds: 20_000_000) }
+        XCTAssertNotNil(model.player.currentItem, "The retained review must remain playable after an error")
+
+        let task = try XCTUnwrap(model.open(missing, transcript: transcript, workflow: .advanced))
+        model.cancel()
+        await task.value
+        XCTAssertNil(model.error)
+        XCTAssertEqual(model.document, previous)
+        XCTAssertEqual(model.phase, .review)
+        XCTAssertEqual(model.sourceName, source.lastPathComponent)
+        for _ in 0..<100 where model.loadingPlayer { try await Task.sleep(nanoseconds: 20_000_000) }
+        XCTAssertNotNil(model.player.currentItem, "Cancelling before the worker starts must restore playback too")
     }
     func testHomeCancelsAndReturnsToEmptyWelcome() async throws {
         let (model, source, transcript, _) = try fixture()
@@ -176,7 +252,7 @@ final class WorkflowTests: XCTestCase {
         model.restoreDraft()
         XCTAssertEqual(model.phase, .review)
         XCTAssertNotNil(model.document)
-        let export = try XCTUnwrap(model.beginExport())
+        let export = try XCTUnwrap(model.beginExport(to: source.deletingLastPathComponent().appendingPathComponent("cancelled.wav"), format: "audio"))
         model.goHome()
         await export.value
         XCTAssertEqual(model.phase, .ready)

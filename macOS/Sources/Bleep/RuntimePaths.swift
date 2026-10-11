@@ -1,7 +1,28 @@
 import Foundation
+import CryptoKit
 
 /// Release bundles own their engine; mutable data always lives outside the app.
 enum RuntimePaths {
+    /// Stable across launches and moves, different for a new build or installed copy.
+    static func recognitionCacheIdentity(bundleURL: URL = Bundle.main.bundleURL,
+                                         info: [String: Any] = Bundle.main.infoDictionary ?? [:]) throws -> String {
+        let attributes = try FileManager.default.attributesOfItem(atPath: bundleURL.resolvingSymlinksInPath().path)
+        guard let device = attributes[.systemNumber] as? NSNumber,
+              let inode = attributes[.systemFileNumber] as? NSNumber,
+              let created = attributes[.creationDate] as? Date else {
+            throw BridgeFailure(message: "Cannot identify this app installation for the recognition cache.")
+        }
+        let identity: [String: String] = [
+            "version": info["CFBundleShortVersionString"] as? String ?? "development",
+            "build": info["CFBundleVersion"] as? String ?? "development",
+            "build_id": info["BleepBuildID"] as? String ?? "unpackaged",
+            "device": device.stringValue, "inode": inode.stringValue,
+            "created": String(created.timeIntervalSince1970)
+        ]
+        let data = try JSONSerialization.data(withJSONObject: identity, options: [.sortedKeys])
+        return SHA256.hash(data: data).map { String(format: "%02x", $0) }.joined()
+    }
+
     static var bundledRoot: URL? {
         guard let resources = Bundle.main.resourceURL else { return nil }
         let root = resources.appendingPathComponent("Engine", isDirectory: true)

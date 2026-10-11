@@ -100,7 +100,7 @@ def parse_words(data: dict, duration: float, require_flags: bool = True) -> list
             raise CensorError(f"Transcript word {i}: expected nonempty 'word'.")
         start = finite_number(item.get("start"), f"word {i} start")
         end = finite_number(item.get("end"), f"word {i} end")
-        if start < 0 or end <= start or end > duration + .1:
+        if start < 0 or start >= duration or end <= start or end > duration + .1:
             raise CensorError(f"Transcript word {i}: require 0 <= start < end <= video duration ({duration:.3f}s).")
         if (require_flags or "profane" in item) and not isinstance(item.get("profane"), bool):
             raise CensorError(f"Transcript word {i}: 'profane' must be true or false.")
@@ -127,8 +127,9 @@ def classify(words: list[WordTimestamp], matcher: ProfanityMatcher) -> list[Word
     return [replace(w, profane=matcher.matches(w.word)) for w in words]
 
 
-def save_transcript(path: Path, words: list[WordTimestamp], metadata: dict | None = None) -> None:
-    write_json(path, {"metadata": metadata or {}, "words": [asdict(w) for w in words]})
+def save_transcript(path: Path, words: list[WordTimestamp], metadata: dict | None = None,
+                    *, overwrite: bool = True) -> None:
+    write_json(path, {"metadata": metadata or {}, "words": [asdict(w) for w in words]}, overwrite=overwrite)
 
 
 def load_cache(path: Path, duration: float) -> list[WordTimestamp] | None:

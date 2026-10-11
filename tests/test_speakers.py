@@ -46,3 +46,10 @@ class SpeakerTests(unittest.TestCase):
                     [dict(start=1, end=2, speaker=True)]]:
             with self.assertRaises(CensorError):
                 validate_segments(bad, 3)
+
+    def test_end_tolerance_keeps_segments_inside_the_timeline(self):
+        for start in (3, 3.02):
+            with self.subTest(start=start), self.assertRaises(CensorError):
+                validate_segments([dict(start=start, end=3.05, speaker=0)], 3)
+        self.assertEqual(validate_segments([dict(start=2.9, end=3.05, speaker=0)], 3),
+                         [dict(start=2.9, end=3, speaker=0)])

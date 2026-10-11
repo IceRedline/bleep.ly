@@ -58,3 +58,10 @@ class RangeTests(unittest.TestCase):
         words = parse_words({"words": [{"word": "бля", "start": 0, "end": 1, "profane": False}]}, 10)
         self.assertFalse(words[0].profane)
         self.assertEqual(timestamp(59.9996), "01:00.000")
+
+    def test_end_tolerance_never_creates_empty_or_reversed_words(self):
+        for start in (10, 10.02):
+            with self.subTest(start=start), self.assertRaises(CensorError):
+                parse_words({"words": [dict(word="tail", start=start, end=10.05, profane=True)]}, 10)
+        words = parse_words({"words": [dict(word="tail", start=9.9, end=10.05, profane=True)]}, 10)
+        self.assertEqual((words[0].start, words[0].end), (9.9, 10))
