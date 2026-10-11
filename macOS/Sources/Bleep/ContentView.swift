@@ -383,11 +383,12 @@ struct ContentView: View {
                         .help("Original audio stays playable during preparation. Switch between prepared sounds from cache. Export is always censored.")
                 }
             }
-            CensorSoundPicker(selection: $model.sound, chooseCustomSound: model.chooseSound)
+            CensorSoundPicker(selection: $model.sound, hasCustomSound: model.customSound != nil, chooseCustomSound: model.chooseSound)
                 .frame(width: 250, height: 24)
             Button(action: model.chooseSound) {
                 Text(model.customSound?.lastPathComponent ?? "Drop a sound here or choose…").lineLimit(1).truncationMode(.middle)
             }.buttonStyle(.borderless).font(.caption)
+                .help("Choose a different custom sound")
                 .frame(width: 250, alignment: .leading)
                 .dropDestination(for: URL.self) { urls, _ in
                     guard urls.count == 1, let url = urls.first, url.isFileURL else { return false }

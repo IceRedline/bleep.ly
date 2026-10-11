@@ -4,12 +4,23 @@ import SwiftUI
 
 @MainActor
 final class CensorSoundPickerTests: XCTestCase {
+    private struct PickerHost: View {
+        @ObservedObject var model: AppModel
+        var chooseCustomSound: () -> Void
+
+        var body: some View {
+            CensorSoundPicker(selection: $model.sound, hasCustomSound: model.customSound != nil,
+                              chooseCustomSound: chooseCustomSound)
+                .frame(width: 250, height: 24)
+        }
+    }
+
     private func findControl(_ view: NSView) -> NSSegmentedControl? {
         if let control = view as? NSSegmentedControl { return control }
         return view.subviews.lazy.compactMap(findControl).first
     }
 
-    func testCustomOpensChooserAndCancellationRestoresPreviousNativeSegment() async throws {
+    func testCustomReusesSavedSoundAndOnlyPromptsWhenMissing() async throws {
         let folder = FileManager.default.temporaryDirectory.appendingPathComponent("sound-picker-\(UUID())")
         try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(at: folder) }
@@ -21,10 +32,10 @@ final class CensorSoundPickerTests: XCTestCase {
         try Data([1, 2, 3]).write(to: cue)
         var nextFile: URL?
         var chooserCount = 0
-        let host = NSHostingView(rootView: CensorSoundPicker(selection: Binding(get: { model.sound }, set: { model.sound = $0 })) {
+        let host = NSHostingView(rootView: PickerHost(model: model) {
             chooserCount += 1
             if let nextFile { model.setSound(nextFile) }
-        }.frame(width: 250, height: 24))
+        })
         let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 280, height: 60),
                               styleMask: [.titled], backing: .buffered, defer: false)
         window.contentView = host; window.orderFront(nil)
@@ -48,29 +59,49 @@ final class CensorSoundPickerTests: XCTestCase {
             XCTAssertNil(model.error)
         }
         XCTAssertEqual(chooserCount, 2)
+        nextFile = folder.appendingPathComponent("missing.wav")
+        click(2)
+        XCTAssertEqual(control.selectedSegment, 1)
+        XCTAssertEqual(model.sound, "silence")
+        XCTAssertNil(model.customSound)
+        XCTAssertNotNil(model.error)
         nextFile = cue
         click(2)
         XCTAssertEqual(control.selectedSegment, 2)
         XCTAssertEqual(model.sound, "custom")
         let saved = try XCTUnwrap(model.customSound)
         XCTAssertEqual(try Data(contentsOf: saved), Data([1, 2, 3]))
-        // Clicking an already-selected Custom still opens the chooser.
+        try await Task.sleep(nanoseconds: 100_000_000)
+        // Clicking an already-selected Custom must not ask for the same file again.
         nextFile = nil
         click(2)
         XCTAssertEqual(chooserCount, 4)
         XCTAssertEqual(control.selectedSegment, 2)
         XCTAssertEqual(model.customSound, saved)
-        // An existing saved file must not silently select Custom when the chooser is cancelled.
-        click(1); click(2)
-        XCTAssertEqual(control.selectedSegment, 1)
-        XCTAssertEqual(model.sound, "silence")
-        XCTAssertEqual(model.customSound, saved)
-        // A failed import also keeps the previous usable mode and saved cue.
-        nextFile = folder.appendingPathComponent("missing.wav")
-        click(2)
-        XCTAssertEqual(control.selectedSegment, 1)
-        XCTAssertEqual(model.sound, "silence")
-        XCTAssertEqual(model.customSound, saved)
-        XCTAssertNotNil(model.error)
+        // Switching back from either built-in mode reuses the saved file immediately.
+        for segment in [0, 1] {
+            click(segment); click(2)
+            XCTAssertEqual(control.selectedSegment, 2)
+            XCTAssertEqual(model.sound, "custom")
+            XCTAssertEqual(defaults.string(forKey: "censorSound"), "custom")
+            XCTAssertEqual(model.customSound, saved)
+            XCTAssertEqual(chooserCount, 4)
+            XCTAssertNil(model.error)
+        }
+        // The separate filename action still allows replacement; cancelling is harmless.
+        for segment in [0, 1, 2] {
+            click(segment)
+            let previous = model.sound
+            model.chooseSound { _ in nil }
+            XCTAssertEqual(model.sound, previous)
+            XCTAssertEqual(control.selectedSegment, segment)
+            XCTAssertEqual(model.customSound, saved)
+            XCTAssertEqual(defaults.string(forKey: "censorSound"), previous)
+        }
+        let replacement = folder.appendingPathComponent("replacement.wav")
+        try Data([4, 5, 6]).write(to: replacement)
+        model.chooseSound { _ in replacement }
+        XCTAssertEqual(model.sound, "custom")
+        XCTAssertEqual(try Data(contentsOf: XCTUnwrap(model.customSound)), Data([4, 5, 6]))
     }
 }
