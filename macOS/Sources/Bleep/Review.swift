@@ -9,6 +9,10 @@ struct ReviewWord: Codable, Identifiable, Equatable {
     var muteStart: Double
     var muteEnd: Double
     var audioTrack: Int?
+    // List membership is independent of whether censorship is currently on.
+    // Optional so reviews written before this field remain readable.
+    var reviewCandidate: Bool?
+    var isReviewCandidate: Bool { profane || reviewCandidate == true }
     var trackIndex: Int { audioTrack ?? 0 }
 
     func contextRange(duration: Double) -> ClosedRange<Double> {
@@ -16,7 +20,7 @@ struct ReviewWord: Codable, Identifiable, Equatable {
         return start...max(start, min(duration, end + 0.2))
     }
 
-    enum CodingKeys: String, CodingKey { case word, start, end, profane, muteStart, muteEnd, audioTrack }
+    enum CodingKeys: String, CodingKey { case word, start, end, profane, muteStart, muteEnd, audioTrack, reviewCandidate }
 }
 
 struct ReviewTrack: Codable, Identifiable, Equatable {
@@ -44,6 +48,7 @@ struct ReviewDocument: Codable, Equatable {
     var language: String?
 
     var count: Int { words.filter(\.profane).count }
+    var reviewCount: Int { words.filter(\.isReviewCandidate).count }
     var url: URL { URL(fileURLWithPath: source) }
 
     func validateInterval(start: Double, end: Double) -> Bool {

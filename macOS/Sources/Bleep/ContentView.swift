@@ -186,8 +186,8 @@ struct ContentView: View {
                         Text(document.url.lastPathComponent).lineLimit(1).truncationMode(.middle)
                         Text("— \(clockText(document.duration))").foregroundStyle(.secondary)
                     }.font(.system(size: 25, weight: .semibold)).tracking(-0.5)
-                    Text(document.count == 0 ? "No words selected for censoring. Review the transcript or add an interval." :
-                            "Found \(document.count) potentially explicit \(document.count == 1 ? "word" : "words").")
+                    Text(document.reviewCount == 0 ? "No words selected for censoring. Review the transcript or add an interval." :
+                            "Found \(document.reviewCount) potentially explicit \(document.reviewCount == 1 ? "word" : "words") · \(document.count) selected.")
                         .foregroundStyle(.secondary)
                 }
                 Spacer()
@@ -263,7 +263,7 @@ struct ContentView: View {
                                     Image(systemName: "play.circle").foregroundStyle(.mint)
                                     VStack(alignment: .leading, spacing: 3) {
                                         Text(word.word).lineLimit(1)
-                                        Text("\(clockText(word.start)) · \(word.muteEnd - word.muteStart, specifier: "%.2f")s muted")
+                                        Text("\(clockText(word.start)) · \(word.profane ? String(format: "%.2fs muted", word.muteEnd - word.muteStart) : "Censoring off")")
                                             .font(.caption2).foregroundStyle(.secondary).monospacedDigit()
                                     }
                                     Spacer(minLength: 0)

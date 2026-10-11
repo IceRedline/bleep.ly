@@ -82,9 +82,9 @@ final class BridgeTests: XCTestCase {
         let folder = root.appendingPathComponent(".cache/macos-previews")
         try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
         let model = AppModel()
-        for scenario in ["ready", "analyzing", "review", "done", "fast-video", "fast-audio"] {
+        for scenario in ["ready", "analyzing", "review", "review-unchecked", "done", "fast-video", "fast-audio"] {
             let phase = AppModel.Phase(rawValue: scenario) ?? .review
-            if phase == .review { model.phase = .ready; model.selectMode(.advanced) }
+            if phase == .review { model.document = nil; model.phase = .ready; model.selectMode(.advanced) }
             if phase == .ready { model.selectMode(.fast) }
             if phase == .done {
                 model.selectMode(.fast)
@@ -106,6 +106,10 @@ final class BridgeTests: XCTestCase {
                 model.exportURL = nil
                 model.document?.hasVideo = scenario == "fast-video"
                 model.document?.source = scenario == "fast-video" ? "/tmp/Podcast.mov" : "/tmp/Podcast.wav"
+            }
+            if scenario == "review-unchecked" {
+                model.document?.words[0].reviewCandidate = true
+                model.document?.words[0].profane = false
             }
             let view = NSHostingView(rootView: ContentView(model: model)
                 .environment(\.colorScheme, .dark).frame(width: 1120, height: 780))

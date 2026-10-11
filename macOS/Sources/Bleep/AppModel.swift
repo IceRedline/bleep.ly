@@ -78,7 +78,7 @@ final class AppModel: ObservableObject {
         return path.isEmpty ? RuntimePaths.python(root: root) : URL(fileURLWithPath: path)
     }
     var visibleWords: [ReviewWord] {
-        (document?.words ?? []).filter { ($0.audioTrack ?? document?.audioStream ?? 0) == selectedAudioTrack && (showAllWords || $0.profane) &&
+        (document?.words ?? []).filter { ($0.audioTrack ?? document?.audioStream ?? 0) == selectedAudioTrack && (showAllWords || $0.isReviewCandidate) &&
             (search.isEmpty || $0.word.localizedCaseInsensitiveContains(search)) }
     }
 
@@ -520,7 +520,10 @@ final class AppModel: ObservableObject {
     }
     func toggle(_ word: ReviewWord) {
         edit { value in
-            if let index = value.words.firstIndex(where: { $0.id == word.id }) { value.words[index].profane.toggle() }
+            if let index = value.words.firstIndex(where: { $0.id == word.id }) {
+                value.words[index].reviewCandidate = true
+                value.words[index].profane.toggle()
+            }
         }
     }
     func undo() {
