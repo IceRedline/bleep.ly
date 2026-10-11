@@ -7,6 +7,7 @@ from pathlib import Path
 import tempfile
 
 from .models import WordTimestamp
+from .model_downloads import ModelDownloadRequired
 from .transcription import file_hash
 from .utils import CensorError
 
@@ -33,7 +34,7 @@ def prepare(model, offline=True):
             _download_model(repo, str(folder))
             _download_tokenizer(repo, str(folder))
         if not all(path.is_file() for path in files):
-            raise CensorError("GigaAM weights are not cached. Enable first-time model download.")
+            raise ModelDownloadRequired("GigaAM weights are not cached. Enable first-time model download.")
         return [str(folder)]
     from huggingface_hub import snapshot_download
     assets = [(repo, revision)] + ([ALIGNER] if model == "qwen3-asr" else [])

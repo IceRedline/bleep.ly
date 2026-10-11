@@ -322,6 +322,7 @@ def main():
     def emit(event, **payload):
         print(json.dumps({"version": PROTOCOL, "event": event, **payload}, ensure_ascii=False,
                          allow_nan=False), file=protocol_output, flush=True)
+    request = {}
     try:
         request = json.loads(Path(sys.argv[1]).read_text())
         require_tools()
@@ -339,7 +340,14 @@ def main():
         emit("cancelled")
         return 130
     except Exception as exc:
-        emit("error", message=str(exc))
+        from .model_downloads import requires_model_download
+        if (isinstance(request, dict) and request.get("operation") == "analyze" and request.get("offline", True)
+                and requires_model_download(exc)):
+            emit("error", code="model_download_required",
+                 message="The selected model is not downloaded. Allow model downloads in Settings, "
+                         "then open your file again. Your recordings stay on your Mac.")
+        else:
+            emit("error", message=str(exc))
         return 1
 
 
