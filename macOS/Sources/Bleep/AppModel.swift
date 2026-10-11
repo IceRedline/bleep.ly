@@ -21,6 +21,8 @@ final class AppModel: ObservableObject {
     private var progressState = StageProgress()
     private var progressTask: Task<Void, Never>?
     @Published var error: String?
+    @Published private(set) var requestingModelDownload = false
+    private var modelDownloadContinuation: CheckedContinuation<Bool, Never>?
     @Published var sourceName = ""
     @Published var sound = "beep" {
         didSet {
@@ -200,7 +202,7 @@ final class AppModel: ObservableObject {
                     "language": selectedLanguage.rawValue,
                     "word_lists": selectedWordLists,
                     "censor_style": defaults.string(forKey: "censorStyle") ?? "middle",
-                    "offline": !defaults.bool(forKey: "allowDownloads")]
+                    "offline": ModelDownloadPermission.selected(defaults: defaults) != .allowed]
                 if let replacingTrack { request["audio_stream"] = replacingTrack }
                 if request["backend"] as? String == "whisperkit", transcript == nil {
                     request["whisperkit_executable"] = WhisperKitExperiment.helper.path
@@ -210,7 +212,25 @@ final class AppModel: ObservableObject {
                 if experimental && !FileManager.default.isExecutableFile(atPath: recognitionPython.path) {
                     throw BridgeFailure(message: "Install experimental GPU models with: bash scripts/setup-experimental-gpu.sh")
                 }
-                let result = try await bridge.run(root: root, python: recognitionPython, request: request, progress: updateProgress, timing: { self.progressState.duration = $0 })
+                let result: Data
+                do {
+                    result = try await bridge.run(root: root, python: recognitionPython, request: request, progress: updateProgress, timing: { self.progressState.duration = $0 })
+                } catch let failure as BridgeFailure where failure.code == "model_download_required" {
+                    guard !cancelling else { throw CancellationError() }
+                    guard ModelDownloadPermission.selected(defaults: defaults) == .ask else { throw failure }
+                    stage = "Waiting for model download permission"
+                    progressTask?.cancel(); progressTask = nil
+                    progressIsEstimated = false; stageRemaining = nil
+                    let allowed = await withCheckedContinuation { continuation in
+                        modelDownloadContinuation = continuation
+                        requestingModelDownload = true
+                    }
+                    guard allowed, !cancelling else { throw CancellationError() }
+                    request["offline"] = false
+                    stage = "Downloading model"
+                    beginProgressUpdates()
+                    result = try await bridge.run(root: root, python: recognitionPython, request: request, progress: updateProgress, timing: { self.progressState.duration = $0 })
+                }
                 let analyzed = try JSONDecoder.bridge.decode(ReviewDocument.self, from: result)
                 if let replacingTrack, var previous = previousDocument, previous.source == analyzed.source {
                     guard previous.fingerprint == analyzed.fingerprint else {
@@ -234,7 +254,7 @@ final class AppModel: ObservableObject {
                 saveDraft()
                 phase = .review
             } catch {
-                if !cancelling { self.error = error.localizedDescription }
+                if !cancelling && !(error is CancellationError) { self.error = error.localizedDescription }
                 restoreReviewAfterOpenFailure()
             }
             cancelling = false
@@ -345,7 +365,22 @@ final class AppModel: ObservableObject {
         if selected != id { selected = id }
     }
 
-    func cancel() { cancelling = true; stage = "Cancelling…"; bridge.cancel(); publicationTask?.cancel() }
+    func answerModelDownload(_ allowed: Bool) {
+        guard let continuation = modelDownloadContinuation else { return }
+        ModelDownloadPermission.save(allowed, defaults: defaults)
+        modelDownloadContinuation = nil
+        requestingModelDownload = false
+        continuation.resume(returning: allowed)
+    }
+
+    func cancel() {
+        cancelling = true; stage = "Cancelling…"; bridge.cancel(); publicationTask?.cancel()
+        // Closing the app/Home cancels the prompt without recording a decision.
+        let continuation = modelDownloadContinuation
+        modelDownloadContinuation = nil
+        requestingModelDownload = false
+        continuation?.resume(returning: false)
+    }
     func pause() { previewGeneration = UUID(); player.pause(); isPlaying = false; auditionEnd = nil }
     func seek(_ seconds: Double) {
         pause()

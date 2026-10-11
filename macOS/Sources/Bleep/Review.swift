@@ -81,6 +81,7 @@ func clockText(_ seconds: Double) -> String {
 }
 
 struct BridgeFailure: LocalizedError {
+    var code: String? = nil
     let message: String
     var errorDescription: String? { message }
 }

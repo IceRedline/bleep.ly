@@ -54,7 +54,7 @@ Optional Apple GPU recognition:
 .venv/bin/pip install -r requirements-mlx.txt
 ```
 
-Enable **Allow first-time model download** in Settings if the selected model is not installed. Downloads are disabled by default. Once installed, recognition works offline. Models use the repository's `.cache/huggingface` (or an inherited `HF_HOME`).
+In current source builds, opening a file with a missing model asks **Download model?**. Choose **OK** to allow missing-model downloads and continue automatically, or **No** to cancel without downloading. The choice is remembered and can be changed with **Allow first-time model download** in Settings. Cached models work offline without a prompt. Models use the repository's `.cache/huggingface` (or an inherited `HF_HOME`).
 
 ## App workflow
 
