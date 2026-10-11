@@ -1,6 +1,17 @@
 # bleep.ly for macOS
 
-Native SwiftUI front end for the existing Python engine. A self-contained Apple Silicon DMG is available through [GitHub Releases](https://github.com/IceRedline/bleep.ly/releases); that binary requires macOS 26.2+ for its bundled MLX version. The instructions below describe development builds. macOS 14+, Xcode/Swift 5.9+, Python 3.11+, and FFmpeg. The first version exports **Audio Only** (48 kHz, 24-bit stereo WAV) and **Video** (original video stream + AAC audio, no video re-encoding).
+Native SwiftUI front end for the Python engine. The signed, Apple-notarized
+[0.1.1 release](https://github.com/IceRedline/bleep.ly/releases/tag/v0.1.1) supports
+**Apple Silicon and macOS 15.0 or later**. It includes Python, FFmpeg and the
+recognition engines; only model weights download separately. Install it by
+dragging **bleep.ly** from the DMG to **Applications**.
+
+The instructions below describe development builds. The Swift app targets
+macOS 14+; its included WhisperKit helper requires Swift 5.10 or later. Use
+Xcode, Python 3.11 and FFmpeg 8. GPU Python dependencies can require a newer OS
+than the Swift app target; see the [release guide](../scripts/release/README.md)
+for the pinned macOS 15 build. Exports are **Audio Only** (48 kHz, 24-bit stereo
+WAV) and **Video** (original video stream + AAC audio, no video re-encoding).
 
 ## Build and launch
 
@@ -19,12 +30,27 @@ Set up the engine once if it is not already installed:
 ```sh
 python3.11 -m venv .venv
 .venv/bin/pip install -r requirements.txt
-brew install ffmpeg
+brew install ffmpeg@8
+brew link --force ffmpeg@8
 # Optional: existing Apple GPU engine
 .venv/bin/pip install -r requirements-mlx.txt
 ```
 
-The app defaults to the project's `.venv/bin/python`, CPU/faster-whisper, full `large-v3`, and Russian speech. The temporary **Model · testing** picker selects Large v3 or Large v3 Turbo for CPU and MLX. WhisperKit keeps its pinned Turbo model. Selection applies to new files, and each model has a separate recognition cache. Large v3 has its own initial download. Choose **Apple GPU · MLX** in Settings to use the existing MLX implementation. The same app includes **WhisperKit · Experimental** in the Engine picker; see [WhisperKit setup](../experiments/README.md). Model downloads are disabled by default; enable **Allow first-time model download** if your chosen engine's model is not cached. The app reuses the repository’s `.cache/huggingface` model cache (or an explicitly inherited `HF_HOME`). Recognition happens locally with all three engines. No recording is uploaded.
+With no saved preferences, the development app uses the project's `.venv/bin/python`, CPU/faster-whisper, full `large-v3`, and Russian speech. The temporary **Model · testing** picker selects Large v3 or Large v3 Turbo for CPU and MLX. WhisperKit keeps its pinned Turbo model. Selection applies to new files, and each model has a separate recognition cache. Large v3 has its own initial download. Choose **Apple GPU · MLX / MPS** in Settings to use the existing MLX implementation. The same app includes **WhisperKit · Experimental** in the Engine picker; see [WhisperKit setup](../experiments/README.md). Model downloads are disabled by default; enable **Allow first-time model download** if your chosen engine's model is not cached. The app reuses the repository’s `.cache/huggingface` model cache (or an explicitly inherited `HF_HOME`). Recognition happens locally with every engine. No recording is uploaded.
+
+Changing **Video language** selects a model preset: Russian selects GigaAM v3
+on Apple Silicon; English selects Whisper Large v3 Turbo and retains CPU if it
+was already selected. Selecting the same language or relaunching preserves
+manual model choices. GigaAM is unavailable for English. The GPU picker also
+includes Parakeet v3, Parakeet Ultra and Qwen3-ASR 1.7B. For development, install
+their separate runtime with `bash scripts/setup-experimental-gpu.sh`; release
+DMGs already contain it. See [recognition options](../README.md#recognition).
+
+Release builds store models in
+`~/Library/Application Support/bleep.ly/models/` and recognition history in
+`~/Library/Application Support/bleep.ly/recognition-history/`. Development
+builds use the repository's `.cache/` for models and
+`тесты bleep.ly/recognition-history/` for history.
 
 ## Fast Mode and Advanced Mode
 
