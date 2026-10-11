@@ -127,8 +127,9 @@ def classify(words: list[WordTimestamp], matcher: ProfanityMatcher) -> list[Word
     return [replace(w, profane=matcher.matches(w.word)) for w in words]
 
 
-def save_transcript(path: Path, words: list[WordTimestamp], metadata: dict | None = None) -> None:
-    write_json(path, {"metadata": metadata or {}, "words": [asdict(w) for w in words]})
+def save_transcript(path: Path, words: list[WordTimestamp], metadata: dict | None = None,
+                    *, overwrite: bool = True) -> None:
+    write_json(path, {"metadata": metadata or {}, "words": [asdict(w) for w in words]}, overwrite=overwrite)
 
 
 def load_cache(path: Path, duration: float) -> list[WordTimestamp] | None:

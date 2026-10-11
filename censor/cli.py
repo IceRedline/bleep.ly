@@ -231,7 +231,7 @@ def execute(args: argparse.Namespace) -> None:
             # All writes are preflighted before inference. No source JSON is rewritten.
             if transcript.exists():
                 raise CensorError(f"Transcript appeared during processing: {transcript}")
-            save_transcript(transcript, words, metadata)
+            save_transcript(transcript, words, metadata, overwrite=False)
             print(f"Transcript: {transcript}")
         occurrences = [w for w in words if w.profane]
         ranges = (middle_ranges(words, info.duration, sound_seconds) if args.censor_style == "middle" else
