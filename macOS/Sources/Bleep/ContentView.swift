@@ -407,7 +407,8 @@ struct ContentView: View {
                 Picker("Export format", selection: $model.exportFormat) {
                     Text("Audio Only").tag("audio")
                     if document.hasVideo { Text("Video").tag("video") }
-                }.labelsHidden().pickerStyle(.segmented).frame(width: 200)
+                }.labelsHidden().pickerStyle(.segmented)
+                    .fixedSize().frame(width: 200, alignment: .leading)
                 Text(model.exportFormat == "video" ? "Original video · no re-encoding" : "WAV · stereo mix of all tracks")
                     .font(.caption).foregroundStyle(.secondary)
             }
