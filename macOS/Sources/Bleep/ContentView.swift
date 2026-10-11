@@ -9,6 +9,7 @@ struct ContentView: View {
     @State private var dropTarget = false
     @State private var showInterval = false
     @State private var editingWord: ReviewWord?
+    @State private var sliderTravelInsets = SliderTravelInsets()
     @AppStorage("backend") private var backend = "faster-whisper"
     @AppStorage("recognitionModel") private var recognitionModel = RecognitionModel.largeV3.rawValue
 
@@ -322,16 +323,24 @@ struct ContentView: View {
                             .accessibilityLabel("Preview \(word.word) at \(clockText(word.start))")
                     }
                     Rectangle().fill(.white).frame(width: 1.5, height: 48)
-                        .offset(x: geo.size.width * min(1, model.playhead / document.duration)).allowsHitTesting(false)
+                        .background(GeometryReader { marker in
+                            Color.clear.preference(key: TimelinePlayheadFrameKey.self,
+                                                   value: [track.index: marker.frame(in: .global)])
+                        })
+                        .offset(x: geo.size.width * min(1, model.playhead / document.duration) - 0.75).allowsHitTesting(false)
                 }
                     }.frame(height: 48)
+                        .padding(.leading, sliderTravelInsets.leading)
+                        .padding(.trailing, sliderTravelInsets.trailing)
                 }
             }
             VStack(spacing: 8) {
-                Slider(value: Binding(get: { min(document.duration, model.playhead) }, set: { model.seek($0) }), in: 0...document.duration)
-                    .accessibilityLabel("Playback position")
+                PlaybackSlider(value: Binding(get: { min(document.duration, model.playhead) }, set: { model.seek($0) }),
+                               duration: document.duration, travelInsets: $sliderTravelInsets)
                 HStack { Text("0:00"); Spacer(); Text(clockText(document.duration)) }
                     .font(.caption2).monospacedDigit().foregroundStyle(.secondary)
+                    .padding(.leading, sliderTravelInsets.leading)
+                    .padding(.trailing, sliderTravelInsets.trailing)
             }.padding(.leading, trackLabelWidth + trackSpacing)
         }
     }
