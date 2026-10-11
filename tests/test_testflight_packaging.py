@@ -1,8 +1,11 @@
 from datetime import datetime, timedelta, timezone
 import hashlib
 import importlib.util
+import subprocess
 from pathlib import Path
 import unittest
+import sys
+import tempfile
 
 SPEC = importlib.util.spec_from_file_location('testflight_packaging', Path(__file__).resolve().parents[1]/'scripts/release/testflight-macos.py')
 packaging = importlib.util.module_from_spec(SPEC)
@@ -10,6 +13,22 @@ SPEC.loader.exec_module(packaging)
 
 
 class TestFlightProfileTests(unittest.TestCase):
+    @unittest.skipUnless(sys.platform == 'darwin', 'macOS quarantine metadata')
+    def test_quarantine_cleanup_preserves_read_only_file_modes(self):
+        with tempfile.TemporaryDirectory() as folder:
+            app = Path(folder)
+            for name, quarantined in [('LICENSE', False), ('download', True)]:
+                path = app/name
+                path.write_text('keep')
+                if quarantined:
+                    subprocess.run(['xattr', '-w', 'com.apple.quarantine', '0081;00000000;test;', str(path)], check=True)
+                path.chmod(0o444)
+            packaging.clear_quarantine(app)
+            for path in app.iterdir():
+                self.assertEqual(path.stat().st_mode & 0o777, 0o444)
+                self.assertEqual(path.read_text(), 'keep')
+                self.assertNotIn('com.apple.quarantine', subprocess.check_output(['xattr', str(path)], text=True))
+
     def setUp(self):
         certificate = b'fixture certificate bytes'
         self.identity = hashlib.sha1(certificate).hexdigest().upper()

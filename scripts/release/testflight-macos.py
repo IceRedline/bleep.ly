@@ -2,13 +2,16 @@
 """Prepare a separate macOS TestFlight candidate, then sign and package it."""
 import argparse
 import concurrent.futures
+import ctypes
 from datetime import datetime, timezone
 import hashlib
 import importlib.util
 import json
+import os
 from pathlib import Path
 import plistlib
 import shutil
+import stat
 import subprocess
 import uuid
 
@@ -20,6 +23,37 @@ spec.loader.exec_module(bundle)
 
 def command(*args):
     return subprocess.check_output(list(map(str, args)), text=True).strip()
+
+
+def clear_quarantine(app):
+    # Some bundled licenses are read-only. Avoid asking xattr to mutate every
+    # file, including those that have no quarantine attribute in the first place.
+    # Python exposes os.*xattr on Linux, but not on macOS. Use Darwin's API.
+    libc = ctypes.CDLL('/usr/lib/libSystem.B.dylib', use_errno=True)
+    libc.listxattr.argtypes = [ctypes.c_char_p, ctypes.c_void_p, ctypes.c_size_t, ctypes.c_int]
+    libc.listxattr.restype = ctypes.c_ssize_t
+    libc.removexattr.argtypes = [ctypes.c_char_p, ctypes.c_char_p, ctypes.c_int]
+    libc.removexattr.restype = ctypes.c_int
+    for path in [app, *app.rglob('*')]:
+        encoded = os.fsencode(path)
+        size = libc.listxattr(encoded, None, 0, 1)  # XATTR_NOFOLLOW
+        if size < 0:
+            raise OSError(ctypes.get_errno(), 'Cannot list extended attributes', str(path))
+        names = ctypes.create_string_buffer(size)
+        if libc.listxattr(encoded, names, size, 1) < 0:
+            raise OSError(ctypes.get_errno(), 'Cannot read extended attributes', str(path))
+        if b'com.apple.quarantine' not in names.raw.split(b'\0'):
+            continue
+        mode = stat.S_IMODE(path.lstat().st_mode)
+        writable = not path.is_symlink() and not mode & stat.S_IWUSR
+        try:
+            if writable:
+                path.chmod(mode | stat.S_IWUSR)
+            if libc.removexattr(encoded, b'com.apple.quarantine', 1) != 0:
+                raise OSError(ctypes.get_errno(), 'Cannot remove quarantine attribute', str(path))
+        finally:
+            if writable:
+                path.chmod(mode)
 
 
 def validate_profile(profile, bundle_id, identity):
@@ -101,6 +135,7 @@ def sign(args):
     entitlements = validate_profile(plistlib.loads(profile_bytes), info['CFBundleIdentifier'], args.identity)
     files, _ = bundle.audit(app)
     shutil.copy2(args.profile, app/'Contents/embedded.provisionprofile')
+    clear_quarantine(app)
     child = {'com.apple.security.app-sandbox': True, 'com.apple.security.inherit': True}
     python = {**child, 'com.apple.security.cs.allow-jit': True,
               'com.apple.security.cs.allow-unsigned-executable-memory': True}
@@ -124,8 +159,6 @@ def sign(args):
     subprocess.run(['codesign', '--force', '--sign', args.identity, '--options', 'runtime', '--timestamp',
                     '--entitlements', str(app.parent/'app.entitlements'), str(app)], check=True)
     subprocess.run(['codesign', '--verify', '--deep', '--strict', '--verbose=2', str(app)], check=True)
-    # TestFlight rejects quarantine metadata; clear it only on this generated copy.
-    subprocess.run(['xattr', '-r', '-d', 'com.apple.quarantine', str(app)], check=True)
     subprocess.run(['productbuild', '--component', str(app), '/Applications', '--sign', args.installer_identity,
                     str(args.pkg)], check=True)
     subprocess.run(['pkgutil', '--check-signature', str(args.pkg)], check=True)
