@@ -63,11 +63,11 @@ class ReleasePermissionsTests(unittest.TestCase):
             packaging.bundle.audit_package_permissions(fixed)
 
     def test_installer_bom_rejects_private_directories_resources_and_executables(self):
-        for mode in ['40700', '100600', '100744', '40744']:
+        for mode in ['40700', '100600', '100744', '40744', '0']:
             with self.subTest(mode=mode), self.assertRaisesRegex(RuntimeError, 'non-root'):
                 packaging.bundle.audit_bom('./App.app/payload\t' + mode)
         self.assertEqual(packaging.bundle.audit_bom(
-            './App.app\t40755\n./App.app/python\t100755\n./App.app/data\t100644'), 3)
+            '.\t0\n./App.app\t40755\n./App.app/python\t100755\n./App.app/data\t100644'), 3)
         with self.assertRaisesRegex(RuntimeError, 'Empty'):
             packaging.bundle.audit_bom('')
 

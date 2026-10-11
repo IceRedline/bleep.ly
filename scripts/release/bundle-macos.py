@@ -54,6 +54,10 @@ def audit_bom(listing):
     entries = 0
     for line in listing.splitlines():
         name, mode = line.rsplit('\t', 1)
+        # productbuild uses a zero-mode synthetic root for /Applications.
+        # It is not an installed app payload entry.
+        if name == '.' and int(mode, 8) == 0:
+            continue
         audit_mode(name, int(mode, 8))
         entries += 1
     if not entries:
