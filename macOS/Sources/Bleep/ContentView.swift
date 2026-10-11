@@ -287,7 +287,9 @@ struct ContentView: View {
     }
 
     private func timeline(_ document: ReviewDocument) -> some View {
-        VStack(spacing: 8) {
+        let trackLabelWidth: CGFloat = 100
+        let trackSpacing: CGFloat = 10
+        return VStack(spacing: 8) {
             HStack {
                 Text("CENSOR TIMELINE").font(.caption.weight(.semibold)).tracking(1.2)
                 Spacer()
@@ -295,9 +297,9 @@ struct ContentView: View {
                 Button("Add interval") { editingWord = nil; showInterval = true }.buttonStyle(.borderless)
             }.foregroundStyle(.secondary)
             ForEach(document.audioTracks) { track in
-                HStack(spacing: 10) {
+                HStack(spacing: trackSpacing) {
                     Button { model.selectAudioTrack(track.index) } label: {
-                        Text(track.title).lineLimit(1).frame(width: 100, alignment: .leading)
+                        Text(track.title).lineLimit(1).frame(width: trackLabelWidth, alignment: .leading)
                     }.buttonStyle(.plain).foregroundStyle(model.selectedAudioTrack == track.index ? Color.mint : Color.secondary)
                     GeometryReader { geo in
                 ZStack(alignment: .leading) {
@@ -325,10 +327,12 @@ struct ContentView: View {
                     }.frame(height: 48)
                 }
             }
-            Slider(value: Binding(get: { min(document.duration, model.playhead) }, set: { model.seek($0) }), in: 0...document.duration)
-                .accessibilityLabel("Playback position")
-            HStack { Text("0:00"); Spacer(); Text(clockText(document.duration)) }
-                .font(.caption2).monospacedDigit().foregroundStyle(.secondary)
+            VStack(spacing: 8) {
+                Slider(value: Binding(get: { min(document.duration, model.playhead) }, set: { model.seek($0) }), in: 0...document.duration)
+                    .accessibilityLabel("Playback position")
+                HStack { Text("0:00"); Spacer(); Text(clockText(document.duration)) }
+                    .font(.caption2).monospacedDigit().foregroundStyle(.secondary)
+            }.padding(.leading, trackLabelWidth + trackSpacing)
         }
     }
 
