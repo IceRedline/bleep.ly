@@ -7,6 +7,7 @@ import os
 from pathlib import Path
 import plistlib
 import shutil
+import stat
 import subprocess
 import sys
 import tempfile
@@ -25,8 +26,61 @@ def macho_files(folder):
                     yield path
 
 
+def normalize_permissions(app):
+    """Normalize distributable payloads before signing, without following symlinks."""
+    for path in [app, *app.rglob('*')]:
+        mode = path.lstat().st_mode
+        if stat.S_ISLNK(mode):
+            continue
+        if not (stat.S_ISDIR(mode) or stat.S_ISREG(mode)):
+            raise RuntimeError(f'Unsupported payload file: {path}')
+        path.chmod(0o755 if stat.S_ISDIR(mode) or mode & 0o111 else 0o644)
+
+
+def audit_mode(name, mode):
+    if stat.S_ISLNK(mode):
+        return
+    required = 0o555 if stat.S_ISDIR(mode) or mode & 0o111 else 0o444
+    if mode & required != required:
+        raise RuntimeError(f'Payload inaccessible to non-root users: {name} ({mode:o})')
+
+
+def audit_permissions(app):
+    for path in [app, *app.rglob('*')]:
+        audit_mode(path, path.lstat().st_mode)
+
+
+def audit_bom(listing):
+    entries = 0
+    for line in listing.splitlines():
+        name, mode = line.rsplit('\t', 1)
+        # productbuild uses a zero-mode synthetic root for /Applications.
+        # It is not an installed app payload entry.
+        if name == '.' and int(mode, 8) == 0:
+            continue
+        audit_mode(name, int(mode, 8))
+        entries += 1
+    if not entries:
+        raise RuntimeError('Empty installer bill of materials')
+    return entries
+
+
+def audit_package_permissions(pkg):
+    # Extract only BOM metadata, not gigabytes of compressed runtime payloads.
+    with tempfile.TemporaryDirectory(prefix='bleep-pkg-audit-') as folder:
+        members = subprocess.check_output(['xar', '-tf', str(pkg)], text=True).splitlines()
+        boms = [m for m in members if m.endswith('/Bom') or m == 'Bom']
+        if not boms or any(Path(m).is_absolute() or '..' in Path(m).parts for m in boms):
+            raise RuntimeError('Missing or unsafe installer bill of materials')
+        subprocess.run(['xar', '-xf', str(pkg.resolve()), '-C', folder, *boms], check=True)
+        entries = sum(audit_bom(subprocess.check_output(
+            ['lsbom', '-p', 'fm', str(Path(folder)/bom)], text=True)) for bom in boms)
+    print(f'Installer permissions verified: {entries} BOM entries', flush=True)
+
+
 def audit(app):
     """Reject developer-machine dependencies and incompatible deployment targets."""
+    audit_permissions(app)
     minimum = (14, 0)
     files = list(macho_files(app))
     def inspect(path):
@@ -64,7 +118,7 @@ def audit(app):
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument('--version', default='0.1.2')
+    parser.add_argument('--version', default='0.1.4')
     parser.add_argument('--python', type=Path, default=ROOT/'.cache/release-python/cpython-3.11.15-macos-aarch64-none')
     parser.add_argument('--audit-only', type=Path)
     args = parser.parse_args()
@@ -158,6 +212,7 @@ print(json.dumps(files))
     for package in (ROOT/'.cache/whisperkit-build/checkouts').glob('*'):
         for license_file in package.glob('LICENSE*'):
             if license_file.is_file(): shutil.copy2(license_file, licenses/f'{package.name}-{license_file.name}')
+    normalize_permissions(app)
     files, minimum = audit(app)
     manifest = dict(version=args.version, source_commit=subprocess.check_output(['git','rev-parse','HEAD'],cwd=ROOT,text=True).strip(),
                     architecture='arm64', python='3.11.15', ffmpeg='8.1.2', minimum_macos=minimum)
@@ -165,7 +220,7 @@ print(json.dumps(files))
     info_path = app/'Contents/Info.plist'
     info = plistlib.loads(info_path.read_bytes())
     info.pop('BleepProjectRoot', None)
-    info.update(CFBundleShortVersionString=args.version, CFBundleVersion='10', LSMinimumSystemVersion=minimum,
+    info.update(CFBundleShortVersionString=args.version, CFBundleVersion='13', LSMinimumSystemVersion=minimum,
                 BleepBuildID=str(uuid.uuid4()))
     info_path.write_bytes(plistlib.dumps(info))
     print(json.dumps(dict(app=str(app), native_files=len(files), **manifest), indent=2))

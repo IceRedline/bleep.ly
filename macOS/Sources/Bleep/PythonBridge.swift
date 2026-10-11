@@ -31,9 +31,9 @@ final class PythonBridge {
             throw BridgeFailure(message: "Python was not found. Select the project's .venv/bin/python in Settings.")
         }
         cancelled = false
-        let folder = FileManager.default.temporaryDirectory.appendingPathComponent("bleep-request-\(UUID())")
-        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
-        defer { try? FileManager.default.removeItem(at: folder) }
+        let storage = try PreviewSession(kind: .request)
+        let folder = storage.directory
+        defer { withExtendedLifetime(storage) {} }
         let requestURL = folder.appendingPathComponent("request.json")
         try JSONSerialization.data(withJSONObject: request).write(to: requestURL, options: .atomic)
         let errorURL = folder.appendingPathComponent("stderr.log")
@@ -47,6 +47,8 @@ final class PythonBridge {
         child.currentDirectoryURL = root
         child.environment = RuntimePaths.environment(root: root, python: python, support: AppModel.support,
                                                      inherited: ProcessInfo.processInfo.environment)
+        // All worker scratch audio is scoped to this request, including force-cancelled inference.
+        child.environment?["TMPDIR"] = folder.path
         child.standardOutput = output
         child.standardError = errors
         child.standardInput = FileHandle.nullDevice

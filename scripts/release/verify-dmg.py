@@ -2,10 +2,15 @@
 """Verify Finder metadata and every byte copied into the read-only disk image."""
 import argparse
 import hashlib
+import importlib.util
 from pathlib import Path
 import plistlib
 import subprocess
 from ds_store import DSStore
+
+spec = importlib.util.spec_from_file_location('bundle', Path(__file__).with_name('bundle-macos.py'))
+bundle = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(bundle)
 
 parser = argparse.ArgumentParser()
 parser.add_argument('dmg', type=Path)
@@ -33,6 +38,8 @@ try:
             assert window[panel] is False, f'{panel} must be hidden in the installer'
     source = args.source_app.resolve()
     target = volume/source.name
+    bundle.audit_permissions(source)
+    bundle.audit_permissions(target)
     expected = {p.relative_to(source) for p in source.rglob('*') if p.is_file() or p.is_symlink()}
     actual = {p.relative_to(target) for p in target.rglob('*') if p.is_file() or p.is_symlink()}
     assert actual == expected, f'DMG contents differ: missing={expected-actual}, extra={actual-expected}'

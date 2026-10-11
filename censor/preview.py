@@ -86,6 +86,12 @@ def _regions(old, new, duration, cue_duration):
 
 
 def preview(request):
+    from .cache_policy import preview_worker
+    with preview_worker(request):
+        return _preview(request)
+
+
+def _preview(request):
     # Import here because desktop dispatches this operation after initialization.
     from .desktop import MUTE_CAP, emit, fingerprint, reviewed_ranges
 
@@ -118,6 +124,22 @@ def preview(request):
     cue = None
     cue_duration = 0
     decoded = False
+    if request.get("managed_cache"):
+        from .cache_policy import reserve_preview
+        session = Path(request["preview_cache"]).parent
+        # Budget the largest possible patch as well as new decoded/base/output WAVs.
+        # Counting logical bytes is conservative on APFS, where snapshots share blocks.
+        frames = samples(info.duration)
+        missing_source = 0 if pcm.exists() else frames * 8 + 4096
+        has_cue = mode != "silence" and bool(ranges)
+        base_path = cache / ("limited.wav" if has_cue else "plain.wav")
+        missing_base = 0 if base_path.exists() else frames * 6 + 4096
+        cue_bytes = samples(sound_duration(custom) if custom else MUTE_CAP) * 8 + 4096 if has_cue else 0
+        protected = {cache, output.parent}
+        for name in ("previous_output", "playing_output"):
+            if request.get(name):
+                protected.add(Path(request[name]).parent)
+        reserve_preview(session, protected, missing_source + missing_base + frames * 12 + cue_bytes + 65536)
     emit("progress", stage="Preparing preview audio", fraction=0)
     # Cancellation releases flock automatically. A replacement request can reuse
     # completed assets, but never see half-written source/cue files.

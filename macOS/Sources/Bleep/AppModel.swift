@@ -58,6 +58,10 @@ final class AppModel: ObservableObject {
     private var previewGeneration = UUID()
     private var undoDocuments: [ReviewDocument] = []
     private var pendingSource: URL?
+    private var sourceAccess: SecurityScopedFile?
+    private var pendingSourceAccess: SecurityScopedFile?
+    private var exportAccess: SecurityScopedFile?
+    private var publicationTask: Task<Void, Error>?
     private var returnHomeAfterCancel = false
     private var playerLoadTask: Task<Void, Never>?
     private var playerGeneration = UUID()
@@ -167,6 +171,9 @@ final class AppModel: ObservableObject {
         censoredPreview.clear(); preparingPreview = false; loadingPlayer = false; playingCensoredPreview = false
         loadedSource = nil; loadedTrack = nil
         pendingSource = url
+        let access = SecurityScopedFile(url)
+        pendingSourceAccess = access
+        let transcriptAccess = transcript.map(SecurityScopedFile.init)
         sourceName = url.lastPathComponent
         stage = "Reading media"
         fraction = 0
@@ -176,6 +183,7 @@ final class AppModel: ObservableObject {
         beginProgressUpdates()
         return Task {
             defer {
+                withExtendedLifetime(transcriptAccess) {}
                 progressTask?.cancel(); progressTask = nil; progressIsEstimated = false; stageElapsed = 0; stageRemaining = nil
                 if returnHomeAfterCancel { returnHomeAfterCancel = false; startNewFile() }
             }
@@ -185,10 +193,12 @@ final class AppModel: ObservableObject {
                 return
             }
             do {
-                var request: [String: Any] = ["operation": "analyze", "source": url.path,
+                var request: [String: Any] = ["operation": "analyze", "source": url.path, "managed_cache": true,
                     "cache_dir": supportDirectory.appendingPathComponent("cache").path,
                     "app_cache_identity": try RuntimePaths.recognitionCacheIdentity(),
-                    "history_dir": RuntimePaths.history(root: root, support: supportDirectory).path,
+                    "history_dir": (supportDirectory == Self.support
+                        ? RuntimePaths.history(root: root, support: supportDirectory)
+                        : supportDirectory.appendingPathComponent("recognition-history")).path,
                     "backend": recognitionBackend,
                     "model": selectedRecognitionModel,
                     "language": selectedLanguage.rawValue,
@@ -233,6 +243,8 @@ final class AppModel: ObservableObject {
                     previous.words += analyzed.words
                     document = previous
                 } else { document = analyzed }
+                sourceAccess = access
+                pendingSourceAccess = nil
                 selectedAudioTrack = replacingTrack ?? document?.audioTracks.first?.index ?? 0
                 undoDocuments = []
                 hasEdits = false
@@ -299,6 +311,7 @@ final class AppModel: ObservableObject {
         selectedAudioTrack = 0
         document = nil; selected = nil; exportURL = nil; error = nil
         undoDocuments = []; pendingSource = nil; sourceName = ""
+        sourceAccess = nil; pendingSourceAccess = nil; exportAccess = nil
         search = ""; showAllWords = false; hasEdits = false
         fraction = 0; stage = "Preparing"; playhead = 0
         phase = .ready
@@ -363,7 +376,7 @@ final class AppModel: ObservableObject {
     }
 
     func cancel() {
-        cancelling = true; stage = "Cancelling…"; bridge.cancel()
+        cancelling = true; stage = "Cancelling…"; bridge.cancel(); publicationTask?.cancel()
         // Closing the app/Home cancels the prompt without recording a decision.
         let continuation = modelDownloadContinuation
         modelDownloadContinuation = nil
@@ -452,6 +465,10 @@ final class AppModel: ObservableObject {
         let playbackToken = previewGeneration
         player.pause()
         player.replaceCurrentItem(with: item)
+        if censored, let composition = item.asset as? AVComposition,
+           let audio = composition.tracks(withMediaType: .audio).first {
+            censoredPreview.protectPlayback(audio.segments.first(where: { !$0.isEmpty })?.sourceURL)
+        } else { censoredPreview.protectPlayback(nil) }
         loadedSource = document.source; loadedTrack = track
         playingCensoredPreview = censored
         let finished = await player.seek(to: CMTime(seconds: position, preferredTimescale: 600), toleranceBefore: .zero, toleranceAfter: .zero)
@@ -474,6 +491,7 @@ final class AppModel: ObservableObject {
         previewPreparation = playingCensoredPreview ? "Updating censored preview…" : "Preparing censored preview…"
         if loadedSource != document.source || loadedTrack != index {
             player.replaceCurrentItem(with: nil)
+            censoredPreview.protectPlayback(nil)
             playingCensoredPreview = false
         }
         loadingPlayer = true
@@ -585,6 +603,9 @@ final class AppModel: ObservableObject {
         guard let document else { return }
         do {
             try FileManager.default.createDirectory(at: supportDirectory, withIntermediateDirectories: true)
+            if SandboxFiles.enabled, let sourceAccess {
+                try SandboxFiles.saveBookmark(for: sourceAccess.url, to: supportDirectory.appendingPathComponent("last-source.bookmark"))
+            }
             try JSONEncoder.bridge.encode(document).write(to: supportDirectory.appendingPathComponent("last-review.json"), options: .atomic)
         } catch { self.error = "Could not save your review: \(error.localizedDescription)" }
     }
@@ -593,10 +614,14 @@ final class AppModel: ObservableObject {
         do {
             let data = try Data(contentsOf: supportDirectory.appendingPathComponent("last-review.json"))
             let restored = try JSONDecoder.bridge.decode(ReviewDocument.self, from: data)
+            let access = try SandboxFiles.enabled
+                ? SandboxFiles.restoreBookmark(from: supportDirectory.appendingPathComponent("last-source.bookmark"), expected: restored.url)
+                : SecurityScopedFile(restored.url)
             guard FileManager.default.fileExists(atPath: restored.source) else {
                 throw BridgeFailure(message: "The original media has moved. Open it again.")
             }
             selectMode(.advanced)
+            sourceAccess = access
             pause(); document = restored; undoDocuments = []; selected = nil
             sourceName = restored.url.lastPathComponent
             selectedAudioTrack = restored.audioTracks.first?.index ?? 0
@@ -668,18 +693,21 @@ final class AppModel: ObservableObject {
         }
         let selectedSound = sound
         let selectedCustomSound = customSound
+        let destinationAccess = SecurityScopedFile(destination)
         error = nil; exportURL = nil
         // Set busy synchronously so two clicks cannot launch competing exports.
         pause(); phase = .exporting; cancelling = false
         beginProgressUpdates()
         return Task {
             defer {
+                withExtendedLifetime(destinationAccess) {}
                 progressTask?.cancel(); progressTask = nil; progressIsEstimated = false; stageElapsed = 0; stageRemaining = nil
                 if returnHomeAfterCancel { returnHomeAfterCancel = false; startNewFile() }
             }
             if cancelling { phase = .review; cancelling = false; return }
             do {
                 try await render(document, to: destination, format: format, sound: selectedSound, customSound: selectedCustomSound)
+                exportAccess = destinationAccess
             } catch {
                 if !cancelling { self.error = error.localizedDescription }
                 phase = .review
@@ -694,11 +722,24 @@ final class AppModel: ObservableObject {
         playerLoadTask?.cancel(); playerGeneration = UUID(); censoredPreview.cancel(); preparingPreview = false; loadingPlayer = false
         phase = .exporting
         updateProgress("Preparing export", 0)
-        var request: [String: Any] = ["operation": "export", "output": destination.path,
+        let staging = FileManager.default.temporaryDirectory.appendingPathComponent("bleep-save-\(UUID())")
+        if SandboxFiles.enabled { try FileManager.default.createDirectory(at: staging, withIntermediateDirectories: true) }
+        defer { if SandboxFiles.enabled { try? FileManager.default.removeItem(at: staging) } }
+        let output = SandboxFiles.enabled ? staging.appendingPathComponent(destination.lastPathComponent) : destination
+        var request: [String: Any] = ["operation": "export", "output": output.path,
             "format": format, "sound": sound,
             "document": try JSONSerialization.jsonObject(with: JSONEncoder.bridge.encode(document))]
         if let customSound { request["custom_sound"] = customSound.path }
         _ = try await bridge.run(root: root, python: python, request: request, progress: updateProgress, timing: { self.progressState.duration = $0 })
+        if SandboxFiles.enabled {
+            try Task.checkCancellation()
+            if cancelling { throw CancellationError() }
+            updateProgress("Saving export", 0)
+            let task = Task.detached { try SandboxFiles.publish(output, to: destination) }
+            publicationTask = task
+            defer { publicationTask = nil }
+            try await task.value
+        }
         exportURL = destination; phase = .done
     }
 }

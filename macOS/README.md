@@ -1,7 +1,7 @@
 # bleep.ly for macOS
 
 Native SwiftUI front end for the Python engine. The signed, Apple-notarized
-[0.1.2 release](https://github.com/IceRedline/bleep.ly/releases/tag/v0.1.2) supports
+[0.1.4 release](https://github.com/IceRedline/bleep.ly/releases/tag/v0.1.4) supports
 **Apple Silicon and macOS 15.0 or later**. It includes Python, FFmpeg and the
 recognition engines; only model weights download separately. Install it by
 dragging **bleep.ly** from the DMG to **Applications**.
@@ -75,7 +75,7 @@ In Settings → Censoring, choose **Word middle (default)** or **Whole word**. T
 
 Default automatic mute intervals use the same middle-word rule and 0.383021s cap as the approved `beep_trimmed.wav` reference. Switching sounds does not recalculate these intervals. Manual intervals use your exact boundaries. The original CLI and local reviewed media remain untouched.
 
-Reviews autosave to `~/Library/Application Support/bleep.ly/last-review.json`; **Resume Last Review** reopens the latest successful review. Word timestamps and classifications are cached separately under `cache/` in that folder. The last review is replaced when a new source finishes analysis. Clicking **Custom** activates the saved custom sound immediately. If no sound has been saved yet, it opens the audio file chooser; cancelling or a failed import keeps the previous selection. Click the filename below the sound selector to choose a replacement, or drop a new sound there. Cancelling replacement keeps the current mode and saved sound. The sound mode and custom audio are retained across launches. Custom audio is copied into `Custom Sounds/` in the app support directory; it remains available if the original cue is moved or deleted. Replacing it keeps only the new saved copy. Export checks source size/modification time and refuses changed media. Preview audio is a temporary session cache of decoded source audio and up to eight recent variants, cleared on Home, a new source, or normal app exit. APFS snapshots use copy-on-write so small edits do not copy an entire long WAV; other filesystems fall back to a file copy, but still process only the changed audio windows. It contains audio only, though long uncompressed WAV files can still be large.
+Reviews autosave to `~/Library/Application Support/bleep.ly/last-review.json`; **Resume Last Review** reopens the latest successful review. Word timestamps and classifications are cached separately under `cache/` in that folder. The last review is replaced when a new source finishes analysis. Clicking **Custom** activates the saved custom sound immediately. If no sound has been saved yet, it opens the audio file chooser; cancelling or a failed import keeps the previous selection. Click the filename below the sound selector to choose a replacement, or drop a new sound there. Cancelling replacement keeps the current mode and saved sound. The sound mode and custom audio are retained across launches. Custom audio is copied into `Custom Sounds/` in the app support directory; it remains available if the original cue is moved or deleted. Replacing it keeps only the new saved copy. Export checks source size/modification time and refuses changed media. Preview audio is a temporary session cache of decoded source audio and up to eight recent variants, cleared on Home, a new source, or normal app exit. APFS snapshots use copy-on-write so small edits do not copy an entire long WAV; other filesystems fall back to a file copy, but still process only the changed audio windows. It contains audio only and has a 4 GiB session budget. Older variants and decoded tracks are evicted first, keeping current playback and update inputs. If a preview cannot fit the budget or leave 1 GiB free on disk, the app explains the limit; original playback and export remain available. Abandoned processing and preview folders are cleaned up after a crash, with leases protecting live app instances and workers. Recognition cache and history share a 256 MiB budget and a 30-day retention period; cleanup runs before and after analysis, and reuse refreshes a transcript’s retention date. Models, original recordings, exports, custom sounds, and the saved review are excluded from cleanup. Settings → Storage explains these limits.
 
 **Import Reviewed Transcript…** reuses an existing word-level transcript for the currently opened source, with its manual flags preserved and no inference. This is also available after an analysis error. It derives the initial middle-word intervals using the approved cap. It does not modify the supplied transcript.
 
@@ -89,6 +89,14 @@ manual work; reopen the source to apply recognition fixes from an update.
 Files with multiple audio tracks are analyzed independently in both modes. Advanced shows a timeline row for each track; select a row or use the track picker to listen and edit that track. Video exports keep the processed audio tracks separate. Audio Only mixes them into one stereo WAV. Import Reviewed Transcript applies to the selected track when multiple tracks are present. For audio-only sources the Video option is hidden. An empty/no-profanity review can still be exported.
 
 ## Checks
+
+App Store Connect builds additionally retain security-scoped access to selected
+media and save a bookmark with the last review. Exports render in the app's
+container, then copy to the chosen destination without creating sibling files or
+overwriting existing files. Cancellation removes an incomplete copy. This path
+is enabled by the `BleepAppSandbox` bundle setting; direct-download builds keep
+their existing export path. The sandbox container has its own settings and model
+cache; the existing DMG installation's data is not migrated automatically.
 
 ```sh
 .venv/bin/python -m unittest discover -s tests -q

@@ -120,6 +120,12 @@ struct SettingsView: View {
                         .font(.caption).foregroundStyle(.secondary)
                 }
             }
+            Section("Storage") {
+                Text("Preview audio is limited to 4 GB per session. Recognition cache and history are limited to 256 MB and 30 days. Older data is removed automatically.")
+                    .font(.caption).foregroundStyle(.secondary)
+                Text("Models, original recordings, exports and your saved review are kept.")
+                    .font(.caption).foregroundStyle(.secondary)
+            }
             Section("Audio tracks") {
                 Text("All audio tracks are processed separately. Advanced shows each track for review; Video export keeps them separate. Audio Only exports a stereo mix.")
                     .font(.caption).foregroundStyle(.secondary)

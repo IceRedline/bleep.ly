@@ -16,6 +16,7 @@ class ReleaseCompatibilityTests(unittest.TestCase):
     def audit_fixture(self, build, dependency='/usr/lib/libSystem.B.dylib'):
         with tempfile.TemporaryDirectory() as temporary:
             folder = Path(temporary)
+            folder.chmod(0o755)
             library = folder / 'libtest.dylib'
             library.write_bytes(b'\xcf\xfa\xed\xfe')
 
