@@ -593,7 +593,7 @@ final class AppModel: ObservableObject {
     }
 
     @discardableResult
-    func export(as format: String, chooseDestination: (NSSavePanel) -> URL? = { panel in
+    func export(as format: String, chooseDestination: @MainActor (NSSavePanel) -> URL? = { panel in
         panel.runModal() == .OK ? panel.url : nil
     }) -> Task<Void, Never>? {
         guard !busy, let document else { return nil }
