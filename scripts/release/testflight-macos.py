@@ -1,0 +1,163 @@
+#!/usr/bin/env python3
+"""Prepare a separate macOS TestFlight candidate, then sign and package it."""
+import argparse
+import concurrent.futures
+from datetime import datetime, timezone
+import hashlib
+import importlib.util
+import json
+from pathlib import Path
+import plistlib
+import shutil
+import subprocess
+import uuid
+
+ROOT = Path(__file__).resolve().parents[2]
+spec = importlib.util.spec_from_file_location('bundle', Path(__file__).with_name('bundle-macos.py'))
+bundle = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(bundle)
+
+
+def command(*args):
+    return subprocess.check_output(list(map(str, args)), text=True).strip()
+
+
+def validate_profile(profile, bundle_id, identity):
+    """Fail before modifying the app if a signing asset cannot serve TestFlight."""
+    entitlements = profile.get('Entitlements', {})
+    teams = profile.get('TeamIdentifier', [])
+    identifier = entitlements.get('com.apple.application-identifier', '')
+    if len(teams) != 1 or identifier != f'{teams[0]}.{bundle_id}':
+        raise ValueError('Profile must match this explicit macOS Bundle ID and team')
+    if 'OSX' not in profile.get('Platform', []):
+        raise ValueError('Select a Mac App Store Connect provisioning profile')
+    if profile.get('ProvisionedDevices') or profile.get('ProvisionsAllDevices'):
+        raise ValueError('A device/development or Developer ID profile cannot be used for TestFlight')
+    if entitlements.get('get-task-allow') or entitlements.get('com.apple.security.get-task-allow'):
+        raise ValueError('A development profile cannot be used for TestFlight')
+    if not entitlements.get('beta-reports-active'):
+        raise ValueError('Profile does not enable TestFlight beta reporting')
+    expires = profile.get('ExpirationDate')
+    if not isinstance(expires, datetime) or expires.replace(tzinfo=timezone.utc) <= datetime.now(timezone.utc):
+        raise ValueError('Provisioning profile is expired or has no expiration')
+    fingerprints = [hashlib.sha1(cert).hexdigest().upper() for cert in profile.get('DeveloperCertificates', [])]
+    if identity.upper() not in fingerprints:
+        raise ValueError('Application signing identity SHA-1 must match a certificate in the profile')
+    return {
+        'com.apple.application-identifier': identifier,
+        'com.apple.developer.team-identifier': teams[0],
+        'beta-reports-active': True,
+        'com.apple.security.app-sandbox': True,
+        'com.apple.security.network.client': True,
+        'com.apple.security.files.user-selected.read-write': True,
+        'com.apple.security.files.bookmarks.app-scope': True,
+    }
+
+
+def prepare(args):
+    source = args.source_app.resolve()
+    output = args.output.resolve()
+    if output.exists():
+        raise ValueError('Output already exists; choose a new candidate directory')
+    info = plistlib.loads((source/'Contents/Info.plist').read_bytes())
+    if info.get('CFBundleIdentifier') != 'ly.bleep.desktop' or info.get('BleepAppSandbox'):
+        raise ValueError('Source must be the original bleep.ly direct-download release')
+    if not args.executable.is_file():
+        raise ValueError('Build the Swift app before preparing the candidate')
+    if not args.build_number.isdecimal() or int(args.build_number) <= int(info['CFBundleVersion']):
+        raise ValueError('Build number must be an integer greater than the source release build')
+    # Never stamp a source revision that omits tracked implementation edits.
+    subprocess.run(['git', 'diff', '--exit-code', 'HEAD', '--', 'macOS', 'scripts/release'], cwd=ROOT, check=True)
+    sdk_version = command('xcrun', '--sdk', 'macosx', '--show-sdk-version')
+    sdk_build = command('xcrun', '--sdk', 'macosx', '--show-sdk-build-version')
+    xcode = command('xcodebuild', '-version').splitlines()
+    xcode_parts = xcode[0].split()[-1].split('.')
+    xcode_number = xcode_parts[0] + ''.join((xcode_parts[1:] + ['0', '0'])[:2])
+    output.mkdir(parents=True)
+    app = output/'bleep.ly.app'
+    subprocess.run(['cp', '-cR', str(source), str(app)], check=True)
+    shutil.copy2(args.executable, app/'Contents/MacOS/Bleep')
+    info.update(CFBundleVersion=args.build_number, BleepBuildID=str(uuid.uuid4()), BleepAppSandbox=True,
+                LSApplicationCategoryType='public.app-category.video',
+                NSHumanReadableCopyright=args.copyright, CFBundleSupportedPlatforms=['MacOSX'],
+                DTPlatformName='macosx', DTPlatformVersion=sdk_version, DTPlatformBuild=sdk_build,
+                DTSDKName=f'macosx{sdk_version}', DTSDKBuild=sdk_build,
+                DTXcode=xcode_number, DTXcodeBuild=xcode[1].split()[-1],
+                DTCompiler='com.apple.compilers.llvm.clang.1_0', BuildMachineOSBuild=command('sw_vers', '-buildVersion'))
+    (app/'Contents/Info.plist').write_bytes(plistlib.dumps(info))
+    manifest = dict(source_app=str(source), app_source_commit=command('git', '-C', ROOT, 'rev-parse', 'HEAD'),
+                    engine=json.loads((app/'Contents/Resources/Engine/runtime.json').read_text()),
+                    build=args.build_number, version=info['CFBundleShortVersionString'],
+                    executable_sha256=hashlib.sha256((app/'Contents/MacOS/Bleep').read_bytes()).hexdigest())
+    (output/'preparation.json').write_text(json.dumps(manifest, indent=2)+'\n')
+    print(f'Prepared unsigned candidate: {app}\nSign and validate before uploading.')
+
+
+def sign(args):
+    app = args.app.resolve()
+    if args.pkg.exists():
+        raise ValueError('Package already exists; existing artifacts are never replaced')
+    info = plistlib.loads((app/'Contents/Info.plist').read_bytes())
+    if not info.get('BleepAppSandbox') or not (app.parent/'preparation.json').is_file():
+        raise ValueError('Only a separately prepared TestFlight candidate may be signed')
+    profile_bytes = subprocess.check_output(['security', 'cms', '-D', '-i', str(args.profile)])
+    entitlements = validate_profile(plistlib.loads(profile_bytes), info['CFBundleIdentifier'], args.identity)
+    files, _ = bundle.audit(app)
+    shutil.copy2(args.profile, app/'Contents/embedded.provisionprofile')
+    child = {'com.apple.security.app-sandbox': True, 'com.apple.security.inherit': True}
+    python = {**child, 'com.apple.security.cs.allow-jit': True,
+              'com.apple.security.cs.allow-unsigned-executable-memory': True}
+    for name, values in [('app', entitlements), ('child', child), ('python', python)]:
+        (app.parent/f'{name}.entitlements').write_bytes(plistlib.dumps(values))
+    main = app/'Contents/MacOS/Bleep'
+
+    def sign_file(path):
+        options = []
+        if path.name.startswith('python') and path.parent.name == 'bin':
+            options = ['--entitlements', str(app.parent/'python.entitlements')]
+        elif 'EXECUTE' in command('otool', '-hv', path):
+            options = ['--entitlements', str(app.parent/'child.entitlements')]
+        subprocess.run(['codesign', '--force', '--sign', args.identity, '--options', 'runtime', '--timestamp',
+                        *options, str(path)], check=True, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE)
+
+    with concurrent.futures.ThreadPoolExecutor(max_workers=4) as pool:
+        for index, _ in enumerate(pool.map(sign_file, [p for p in files if p != main]), 1):
+            if index % 50 == 0:
+                print(f'Signed {index} nested binaries', flush=True)
+    subprocess.run(['codesign', '--force', '--sign', args.identity, '--options', 'runtime', '--timestamp',
+                    '--entitlements', str(app.parent/'app.entitlements'), str(app)], check=True)
+    subprocess.run(['codesign', '--verify', '--deep', '--strict', '--verbose=2', str(app)], check=True)
+    # TestFlight rejects quarantine metadata; clear it only on this generated copy.
+    subprocess.run(['xattr', '-r', '-d', 'com.apple.quarantine', str(app)], check=True)
+    subprocess.run(['productbuild', '--component', str(app), '/Applications', '--sign', args.installer_identity,
+                    str(args.pkg)], check=True)
+    subprocess.run(['pkgutil', '--check-signature', str(args.pkg)], check=True)
+    print(f'Package ready for App Store Connect validation: {args.pkg}')
+
+
+def main():
+    parser = argparse.ArgumentParser(description=__doc__)
+    commands = parser.add_subparsers(dest='operation', required=True)
+    prep = commands.add_parser('prepare', help='Clone a release without modifying its signed artifacts')
+    prep.add_argument('--source-app', type=Path, default=ROOT/'build/release/bleep.ly.app')
+    prep.add_argument('--executable', type=Path, default=ROOT/'.cache/swift-build/release/Bleep')
+    prep.add_argument('--output', type=Path, required=True)
+    prep.add_argument('--build-number', required=True)
+    prep.add_argument('--copyright', required=True)
+    prep.set_defaults(action=prepare)
+    signing = commands.add_parser('sign', help='Sign a prepared candidate and create an upload package')
+    signing.add_argument('--app', type=Path, required=True)
+    signing.add_argument('--profile', type=Path, required=True)
+    signing.add_argument('--identity', required=True, help='Application certificate SHA-1 from security find-identity')
+    signing.add_argument('--installer-identity', required=True)
+    signing.add_argument('--pkg', type=Path, required=True)
+    signing.set_defaults(action=sign)
+    args = parser.parse_args()
+    try:
+        args.action(args)
+    except (ValueError, OSError, subprocess.CalledProcessError) as error:
+        parser.exit(1, f'{error}\n')
+
+
+if __name__ == '__main__':
+    main()

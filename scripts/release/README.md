@@ -1,5 +1,58 @@
 # macOS release
 
+## TestFlight preparation
+
+The notarized DMG cannot be uploaded directly to TestFlight. Create the macOS app
+record for `ly.bleep.desktop` in App Store Connect. In Xcode's account settings,
+create **Apple Distribution** and **Mac Installer Distribution** certificates.
+Create and download a **Mac App Store Connect** provisioning profile for the
+explicit Bundle ID and the distribution certificate. Keep profiles and keys out
+of Git. An app-specific password or App Store Connect API credentials are also
+needed by the chosen upload tool; do not place them in source or shell history.
+
+Build and test the Swift app, then commit the source before preparing a candidate:
+
+```sh
+python3 scripts/release/testflight-macos.py prepare \
+  --output build/testflight-0.1.2-9 --build-number 9 \
+  --copyright 'Copyright © 2026 YOUR NAME'
+```
+
+This clones the existing release and replaces its Swift executable with
+`.cache/swift-build/release/Bleep`. The Python engine and runtimes remain from the
+source release; `preparation.json` records both origins. Source DMGs and apps are
+never modified. The resulting candidate is unsigned until the next step. Use a
+new, monotonically increasing build number for every upload.
+
+```sh
+security find-identity -v -p codesigning
+python3 scripts/release/testflight-macos.py sign \
+  --app build/testflight-0.1.2-9/bleep.ly.app \
+  --profile /path/to/bleep-ly-store.provisionprofile \
+  --identity APPLICATION_CERTIFICATE_SHA1 \
+  --installer-identity '3rd Party Mac Developer Installer: YOUR NAME (TEAM_ID)' \
+  --pkg build/testflight-0.1.2-9/bleep.ly-0.1.2-9.pkg
+```
+
+Signing checks the profile's app, platform, expiration and certificate before
+changing the candidate. Child executables inherit App Sandbox; Python retains
+its JIT entitlements. The parent grants network access for model downloads and
+access to user-selected files, plus persistent bookmarks. Packaging verifies
+signatures locally; it does **not** mean Apple has accepted the build. Validate
+and upload the PKG with Transporter or Apple's command-line tools, then wait for
+processing in App Store Connect before assigning it to a TestFlight group.
+
+Before distribution, test file selection, drag and drop, restored reviews, custom
+sounds, downloads, preview and export from the signed sandboxed app. Its container
+has separate preferences and model caches from the DMG build. The release smoke
+script must run as a child of a sandboxed host when checking inherited helper
+entitlements; executing a helper with `com.apple.security.inherit` directly from
+a normal shell is not a valid sandbox test. Local runtime probes cover library
+imports, Metal/MPS, JIT and transcript-driven exports, but do not replace Apple
+validation or a TestFlight installation test.
+
+## Direct-download release
+
 Release **0.1.2** supports **Apple Silicon, macOS 15.0 or later**. MLX stays at
 0.32.3, but uses the official Sequoia wheels pinned by URL and SHA-256 in
 `requirements-mlx-macos15.lock`. A version-only pip pin on a Tahoe build host
