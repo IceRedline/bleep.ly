@@ -19,8 +19,9 @@ python3 scripts/release/testflight-macos.py prepare \
 ```
 
 This clones the existing release and replaces its Swift executable with
-`.cache/swift-build/release/Bleep`. The Python engine and runtimes remain from the
-source release; `preparation.json` records both origins. Source DMGs and apps are
+`.cache/swift-build/release/Bleep`. Python engine source and word lists come from
+the same committed checkout; only the pinned runtimes remain from the source
+release. `preparation.json` records both origins. Source DMGs and apps are
 never modified. The resulting candidate is unsigned until the next step. Use a
 new, monotonically increasing build number for every upload.
 

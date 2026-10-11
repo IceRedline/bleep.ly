@@ -85,6 +85,19 @@ def validate_profile(profile, bundle_id, identity):
     }
 
 
+def refresh_engine(app, source_commit, project=ROOT):
+    """Reuse pinned runtimes, but ship Python source from the same checkout as Swift."""
+    engine = app/'Contents/Resources/Engine'
+    runtime_origin = json.loads((engine/'runtime.json').read_text())
+    shutil.rmtree(engine/'censor')
+    shutil.copytree(project/'censor', engine/'censor', ignore=shutil.ignore_patterns('__pycache__', '*.pyc'))
+    for name in ['profanity.txt', 'profanity.en.txt']:
+        shutil.copy2(project/name, engine/name)
+    manifest = {**runtime_origin, 'source_commit': source_commit}
+    (engine/'runtime.json').write_text(json.dumps(manifest, indent=2)+'\n')
+    return runtime_origin
+
+
 def prepare(args):
     source = args.source_app.resolve()
     output = args.output.resolve()
@@ -98,7 +111,8 @@ def prepare(args):
     if not args.build_number.isdecimal() or int(args.build_number) <= int(info['CFBundleVersion']):
         raise ValueError('Build number must be an integer greater than the source release build')
     # Never stamp a source revision that omits tracked implementation edits.
-    subprocess.run(['git', 'diff', '--exit-code', 'HEAD', '--', 'macOS', 'scripts/release'], cwd=ROOT, check=True)
+    subprocess.run(['git', 'diff', '--exit-code', 'HEAD', '--', 'macOS', 'censor', 'profanity.txt', 'profanity.en.txt', 'scripts/release'], cwd=ROOT, check=True)
+    source_commit = command('git', '-C', ROOT, 'rev-parse', 'HEAD')
     sdk_version = command('xcrun', '--sdk', 'macosx', '--show-sdk-version')
     sdk_build = command('xcrun', '--sdk', 'macosx', '--show-sdk-build-version')
     xcode = command('xcodebuild', '-version').splitlines()
@@ -108,6 +122,7 @@ def prepare(args):
     app = output/'bleep.ly.app'
     subprocess.run(['cp', '-cR', str(source), str(app)], check=True)
     shutil.copy2(args.executable, app/'Contents/MacOS/Bleep')
+    runtime_origin = refresh_engine(app, source_commit)
     info.update(CFBundleVersion=args.build_number, BleepBuildID=str(uuid.uuid4()), BleepAppSandbox=True,
                 LSApplicationCategoryType='public.app-category.video',
                 NSHumanReadableCopyright=args.copyright, CFBundleSupportedPlatforms=['MacOSX'],
@@ -116,7 +131,7 @@ def prepare(args):
                 DTXcode=xcode_number, DTXcodeBuild=xcode[1].split()[-1],
                 DTCompiler='com.apple.compilers.llvm.clang.1_0', BuildMachineOSBuild=command('sw_vers', '-buildVersion'))
     (app/'Contents/Info.plist').write_bytes(plistlib.dumps(info))
-    manifest = dict(source_app=str(source), app_source_commit=command('git', '-C', ROOT, 'rev-parse', 'HEAD'),
+    manifest = dict(source_app=str(source), app_source_commit=source_commit, runtime_origin=runtime_origin,
                     engine=json.loads((app/'Contents/Resources/Engine/runtime.json').read_text()),
                     build=args.build_number, version=info['CFBundleShortVersionString'],
                     executable_sha256=hashlib.sha256((app/'Contents/MacOS/Bleep').read_bytes()).hexdigest())

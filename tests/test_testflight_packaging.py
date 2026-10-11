@@ -1,5 +1,6 @@
 from datetime import datetime, timedelta, timezone
 import hashlib
+import json
 import importlib.util
 import subprocess
 from pathlib import Path
@@ -13,6 +14,29 @@ SPEC.loader.exec_module(packaging)
 
 
 class TestFlightProfileTests(unittest.TestCase):
+    def test_candidate_refreshes_engine_without_carrying_old_modules_or_caches(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            project = root/'project'
+            source = project/'censor'
+            (source/'__pycache__').mkdir(parents=True)
+            (source/'desktop.py').write_text('current engine')
+            (source/'model_downloads.py').write_text('new consent feature')
+            (source/'__pycache__/desktop.pyc').write_bytes(b'cache')
+            for name in ['profanity.txt', 'profanity.en.txt']:
+                (project/name).write_text('current words')
+            app = root/'candidate.app'
+            engine = app/'Contents/Resources/Engine'
+            (engine/'censor').mkdir(parents=True)
+            (engine/'censor/obsolete.py').write_text('old module')
+            origin = {'source_commit': 'old', 'python': '3.11.15'}
+            (engine/'runtime.json').write_text(json.dumps(origin))
+            self.assertEqual(packaging.refresh_engine(app, 'current', project), origin)
+            self.assertEqual((engine/'censor/model_downloads.py').read_text(), 'new consent feature')
+            self.assertFalse((engine/'censor/obsolete.py').exists())
+            self.assertFalse((engine/'censor/__pycache__').exists())
+            self.assertEqual(json.loads((engine/'runtime.json').read_text()), {**origin, 'source_commit': 'current'})
+
     @unittest.skipUnless(sys.platform == 'darwin', 'macOS quarantine metadata')
     def test_quarantine_cleanup_preserves_read_only_file_modes(self):
         with tempfile.TemporaryDirectory() as folder:
