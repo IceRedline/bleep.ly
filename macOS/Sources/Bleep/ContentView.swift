@@ -128,8 +128,8 @@ struct ContentView: View {
                 soundControls
                 ZStack(alignment: .leading) {
                     VStack(alignment: .leading, spacing: 6) {
-                        Label("Saved next to your original", systemImage: "folder")
-                        Text("Video stays video. Audio becomes WAV.\nExisting files are never overwritten.")
+                        Label("Choose how to save", systemImage: "folder")
+                        Text("Save clean video or audio after analysis.\nYou choose where the file goes.")
                             .font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
                     }
                     .opacity(model.workflowMode == .fast ? 1 : 0)
@@ -346,22 +346,23 @@ struct ContentView: View {
             }
             if let url = model.exportURL {
                 Text(url.path).font(.caption).foregroundStyle(.secondary).textSelection(.enabled)
-                HStack(spacing: 12) {
-                    Button("Play result") { NSWorkspace.shared.open(url) }.buttonStyle(.borderedProminent)
-                    Button("Show in Finder") { NSWorkspace.shared.activateFileViewerSelecting([url]) }
-                }.controlSize(.large)
             } else {
-                Text("Your review is saved. Finish automatically or choose a different destination.")
+                Text("Choose a format, then choose where to save.")
                     .foregroundStyle(.secondary)
-                soundControls
-                HStack {
-                    Button("Finish automatically") { model.beginExport() }.buttonStyle(.borderedProminent)
-                    Button("Save as…", action: model.export)
-                }
             }
-            Button("Review in Advanced Mode") { model.selectMode(.advanced) }.buttonStyle(.borderless)
+            HStack(spacing: 12) {
+                if document.hasVideo {
+                    Button("Save as Video") { model.export(as: "video") }
+                        .buttonStyle(.borderedProminent).keyboardShortcut("e", modifiers: .command)
+                    Button("Save as Audio") { model.export(as: "audio") }
+                        .buttonStyle(.bordered)
+                } else {
+                    Button("Save as Audio") { model.export(as: "audio") }
+                        .buttonStyle(.borderedProminent).keyboardShortcut("e", modifiers: .command)
+                }
+            }.controlSize(.large)
+                .disabled(model.sound == "custom" && model.customSound == nil)
             Spacer()
-            Button("Process another file", action: model.startNewFile).controlSize(.large)
         }.frame(maxWidth: .infinity)
     }
 

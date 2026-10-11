@@ -82,7 +82,8 @@ final class BridgeTests: XCTestCase {
         let folder = root.appendingPathComponent(".cache/macos-previews")
         try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
         let model = AppModel()
-        for phase in [AppModel.Phase.ready, .analyzing, .review, .done] {
+        for scenario in ["ready", "analyzing", "review", "done", "fast-video", "fast-audio"] {
+            let phase = AppModel.Phase(rawValue: scenario) ?? .review
             if phase == .review { model.phase = .ready; model.selectMode(.advanced) }
             if phase == .ready { model.selectMode(.fast) }
             if phase == .done {
@@ -100,6 +101,12 @@ final class BridgeTests: XCTestCase {
                                           profane: true, muteStart: start + 0.1, muteEnd: start + 0.4)
                     })
             }
+            if scenario.hasPrefix("fast-") {
+                model.selectMode(.fast)
+                model.exportURL = nil
+                model.document?.hasVideo = scenario == "fast-video"
+                model.document?.source = scenario == "fast-video" ? "/tmp/Podcast.mov" : "/tmp/Podcast.wav"
+            }
             let view = NSHostingView(rootView: ContentView(model: model)
                 .environment(\.colorScheme, .dark).frame(width: 1120, height: 780))
             let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 1120, height: 780),
@@ -114,7 +121,7 @@ final class BridgeTests: XCTestCase {
             view.cacheDisplay(in: view.bounds, to: bitmap)
             window.orderOut(nil)
             let png = try XCTUnwrap(bitmap.representation(using: .png, properties: [:]))
-            try png.write(to: folder.appendingPathComponent("\(phase.rawValue).png"))
+            try png.write(to: folder.appendingPathComponent("\(scenario).png"))
         }
     }
 }

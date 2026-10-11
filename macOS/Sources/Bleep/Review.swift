@@ -87,9 +87,9 @@ enum WorkflowMode: String, CaseIterable {
 extension ReviewDocument {
     /// Match supported source containers; use MKV for other video formats.
     /// The renderer still publishes atomically and refuses a racing overwrite.
-    func automaticOutputURL() -> URL {
+    func suggestedOutputURL(format: String) -> URL {
         let sourceExtension = url.pathExtension.lowercased()
-        let ext = hasVideo ? (["mov", "mp4", "mkv"].contains(sourceExtension) ? sourceExtension : "mkv") : "wav"
+        let ext = format == "video" ? (["mov", "mp4", "mkv"].contains(sourceExtension) ? sourceExtension : "mkv") : "wav"
         let stem = url.deletingPathExtension().lastPathComponent + "_censored"
         let folder = url.deletingLastPathComponent()
         var counter = 1

@@ -44,6 +44,10 @@ final class MultiTrackWorkflowTests: XCTestCase {
         let model = AppModel(defaults: defaults, supportDirectory: support)
         await model.open(source, workflow: .fast)?.value
         XCTAssertNil(model.error)
+        XCTAssertEqual(model.phase, .review)
+        XCTAssertNil(model.exportURL)
+        await model.export(as: "video") { _ in folder.appendingPathComponent("clean.mov") }?.value
+        XCTAssertNil(model.error)
         XCTAssertEqual(model.phase, .done)
         XCTAssertEqual(model.document?.audioTracks.count, 2)
         XCTAssertEqual(model.document?.cacheHit, true)

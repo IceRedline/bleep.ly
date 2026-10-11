@@ -150,8 +150,6 @@ final class AppModel: ObservableObject {
         }
         selectMode(selectedMode)
         let previousDocument = document
-        let selectedSound = sound
-        let selectedCustomSound = customSound
         let selectedBackend = WhisperKitExperiment.backend(defaults: defaults)
         let selectedLanguage = VideoLanguage.selected(defaults: defaults)
         let selectedWordLists = WordListPreferences.request(selectedLanguage, defaults: defaults)
@@ -224,13 +222,7 @@ final class AppModel: ObservableObject {
                 playhead = 0
                 if selectedMode == .advanced { preparePlayer() }
                 saveDraft()
-                if selectedMode == .fast, let document {
-                    let destination = document.automaticOutputURL()
-                    try await render(document, to: destination, format: document.hasVideo ? "video" : "audio",
-                                     sound: selectedSound, customSound: selectedCustomSound)
-                } else {
-                    phase = .review
-                }
+                phase = .review
             } catch {
                 if !cancelling { self.error = error.localizedDescription }
                 restoreReviewAfterOpenFailure()
@@ -597,28 +589,39 @@ final class AppModel: ObservableObject {
     }
 
     func export() {
-        guard !busy, let document else { return }
-        if sound == "custom" && customSound == nil { chooseSound(); return }
-        let panel = NSSavePanel()
-        let video = exportFormat == "video"
-        panel.allowedContentTypes = video ? [.quickTimeMovie, .mpeg4Movie, UTType(filenameExtension: "mkv") ?? .movie] : [.wav]
-        panel.nameFieldStringValue = document.url.deletingPathExtension().lastPathComponent + "_censored." + (video ? "mov" : "wav")
-        panel.message = video ? "The original video stream is copied without re-encoding." : "48 kHz · 24-bit stereo WAV"
-        guard panel.runModal() == .OK, let destination = panel.url else { return }
-        if FileManager.default.fileExists(atPath: destination.path) {
-            error = "Choose a new filename. Existing files are kept intact."; return
-        }
-        beginExport(to: destination)
+        export(as: exportFormat)
     }
 
     @discardableResult
-    func beginExport(to destination: URL? = nil) -> Task<Void, Never>? {
+    func export(as format: String, chooseDestination: (NSSavePanel) -> URL? = { panel in
+        panel.runModal() == .OK ? panel.url : nil
+    }) -> Task<Void, Never>? {
+        guard !busy, let document else { return nil }
+        guard format == "audio" || (format == "video" && document.hasVideo) else {
+            error = "Choose an available export format."; return nil
+        }
+        if sound == "custom" && customSound == nil { chooseSound(); return nil }
+        let panel = NSSavePanel()
+        let video = format == "video"
+        panel.allowedContentTypes = video ? [.quickTimeMovie, .mpeg4Movie, UTType(filenameExtension: "mkv") ?? .movie] : [.wav]
+        panel.title = video ? "Save as Video" : "Save as Audio"
+        let suggested = document.suggestedOutputURL(format: format)
+        panel.directoryURL = suggested.deletingLastPathComponent()
+        panel.nameFieldStringValue = suggested.lastPathComponent
+        panel.message = video ? "The original video stream is copied without re-encoding." : "48 kHz · 24-bit stereo WAV"
+        guard let destination = chooseDestination(panel) else { return nil }
+        if FileManager.default.fileExists(atPath: destination.path) {
+            error = "Choose a new filename. Existing files are kept intact."; return nil
+        }
+        return beginExport(to: destination, format: format)
+    }
+
+    @discardableResult
+    func beginExport(to destination: URL, format: String) -> Task<Void, Never>? {
         guard !busy, let document else { return nil }
         guard sound != "custom" || customSound != nil else {
             error = "Choose a custom censor sound first."; return nil
         }
-        let output = destination ?? document.automaticOutputURL()
-        let format = destination == nil ? (document.hasVideo ? "video" : "audio") : exportFormat
         let selectedSound = sound
         let selectedCustomSound = customSound
         error = nil; exportURL = nil
@@ -632,7 +635,7 @@ final class AppModel: ObservableObject {
             }
             if cancelling { phase = .review; cancelling = false; return }
             do {
-                try await render(document, to: output, format: format, sound: selectedSound, customSound: selectedCustomSound)
+                try await render(document, to: destination, format: format, sound: selectedSound, customSound: selectedCustomSound)
             } catch {
                 if !cancelling { self.error = error.localizedDescription }
                 phase = .review
