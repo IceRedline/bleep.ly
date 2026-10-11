@@ -17,7 +17,10 @@ args = parser.parse_args()
 folder = ROOT/'build/release'
 folder.mkdir(parents=True, exist_ok=True)
 scale = 2
-image = Image.new('RGB', (1440, 960))
+# Finder can restore its path/status bars despite the per-window preferences.
+# Reserve vertical space for that chrome as well as the installation captions.
+window_size = (720, 560)
+image = Image.new('RGB', tuple(value * scale for value in window_size))
 pixels = image.load()
 for y in range(image.height):
     for x in range(image.width):
@@ -42,7 +45,7 @@ text(360, 375, 'Drag bleep.ly into Applications', 20, '#252c1e', bold=True, anch
 text(360, 412, 'Local processing. Your recordings stay on your Mac.', 13, '#717868', anchor='ma')
 background = folder/'dmg-background.tiff'
 image.save(background, dpi=(144,144), compression='tiff_lzw')
-image.resize((720,480), Image.Resampling.LANCZOS).save(folder/'dmg-background.png')
+image.resize(window_size, Image.Resampling.LANCZOS).save(folder/'dmg-background.png')
 if args.background_only:
     raise SystemExit()
 app = folder/'bleep.ly.app'
@@ -58,10 +61,11 @@ dmgbuild.build_dmg(str(out/f'bleep.ly-{args.version}-arm64.dmg'), f'bleep.ly {ar
     'format': 'UDZO', 'filesystem': 'HFS+', 'size': '4g',
     'files': [str(app)], 'symlinks': {'Applications': '/Applications'},
     'background': str(background), 'badge_icon': str(app/'Contents/Resources/AppIcon.icns'),
-    'window_rect': ((180,180),(720,480)), 'default_view': 'icon-view',
+    'window_rect': ((180,180),window_size), 'default_view': 'icon-view',
     'icon_locations': {'bleep.ly.app': (202,236), 'Applications': (518,236)},
     'icon_size': 96, 'text_size': 13,
     'show_toolbar': False, 'show_status_bar': False, 'show_sidebar': False,
+    'show_pathbar': False, 'show_tab_view': False,
 })
 subprocess.run([sys.executable, str(Path(__file__).with_name('verify-dmg.py')),
                 str(out/f'bleep.ly-{args.version}-arm64.dmg'), str(app)], check=True)

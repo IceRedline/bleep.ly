@@ -27,6 +27,10 @@ try:
         assert tuple(store['bleep.ly.app']['Iloc'])[:2] == (202,236)
         assert tuple(store['Applications']['Iloc'])[:2] == (518,236)
         assert store['.']['icvp']['backgroundType'] == 2
+        window = store['.']['bwsp']
+        assert window['WindowBounds'] == '{{180, 180}, {720, 560}}', window
+        for panel in ['ShowToolbar', 'ShowStatusBar', 'ShowPathbar', 'ShowSidebar', 'ShowTabView']:
+            assert window[panel] is False, f'{panel} must be hidden in the installer'
     source = args.source_app.resolve()
     target = volume/source.name
     expected = {p.relative_to(source) for p in source.rglob('*') if p.is_file() or p.is_symlink()}
@@ -39,6 +43,6 @@ try:
         else:
             assert a.stat().st_size == b.stat().st_size and digest(a) == digest(b), relative
     subprocess.run(['codesign','--verify','--deep','--strict',str(target)], check=True)
-    print(f'DMG verified: Applications link, icon positions, background and {len(expected)} identical files', flush=True)
+    print(f'DMG verified: window bounds, hidden panels, Applications link, icon positions, background and {len(expected)} identical files', flush=True)
 finally:
     subprocess.run(['hdiutil','detach',str(volume)], check=True)

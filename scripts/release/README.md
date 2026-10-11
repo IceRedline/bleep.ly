@@ -97,3 +97,6 @@ slow on the current network, pass `--no-s3-acceleration` to `notarytool submit`.
 Never rebuild or alter a signed/notarized app after submission. Generate SHA256SUMS
 only after the final DMG is stapled. Review the notarization log, verify the
 mounted image and Finder layout, then publish the matching tag and release.
+The installer uses a 720 × 560 window with extra vertical space for Finder chrome.
+Check that both footer lines remain visible with Finder's path and status bars
+shown: Finder can restore those global preferences despite the DMG settings.
