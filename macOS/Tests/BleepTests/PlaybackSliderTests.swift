@@ -40,7 +40,7 @@ final class PlaybackSliderTests: XCTestCase {
                 for track in [0, 1] {
                     let marker = try XCTUnwrap(markers[track])
                     XCTAssertEqual(marker.midX, thumb.midX, accuracy: 0.5,
-                                   "width=\(width) time=\(position) insets=\(slider.travelInsets)")
+                                   "width=\(width) time=\(position) insets=\(slider.travelInsets) frame=\(slider.frame) alignment=\(slider.alignmentRectInsets)")
                 }
             }
         }

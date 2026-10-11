@@ -24,16 +24,19 @@ struct PlaybackSlider: NSViewRepresentable {
 
         var travelInsets: SliderTravelInsets {
             guard bounds.width > 0, let cell = cell as? NSSliderCell else { return .init() }
-            // A copied cell recalculated against bounds loses AppKit's actual drawing
-            // geometry on macOS 15. Measure the installed cell without sending actions
-            // or displaying the temporary values, then restore the playback position.
+            // Measure the installed cell without sending actions or displaying the
+            // temporary values, then restore the playback position.
             let position = cell.doubleValue
             defer { cell.doubleValue = position }
             cell.doubleValue = minValue
             let start = cell.knobRect(flipped: isFlipped).midX
             cell.doubleValue = maxValue
             let end = cell.knobRect(flipped: isFlipped).midX
-            return .init(leading: start - bounds.minX, trailing: bounds.maxX - end)
+            // SwiftUI positions this representable by its alignment rect. AppKit's
+            // slider bounds extend beyond it on macOS 15, so bounds-relative insets
+            // would shift the timeline inward at both ends.
+            let alignment = alignmentRect(forFrame: bounds)
+            return .init(leading: start - alignment.minX, trailing: alignment.maxX - end)
         }
 
         override func layout() {
