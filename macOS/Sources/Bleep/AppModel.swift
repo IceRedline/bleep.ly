@@ -187,6 +187,7 @@ final class AppModel: ObservableObject {
             do {
                 var request: [String: Any] = ["operation": "analyze", "source": url.path,
                     "cache_dir": supportDirectory.appendingPathComponent("cache").path,
+                    "app_cache_identity": try RuntimePaths.recognitionCacheIdentity(),
                     "history_dir": RuntimePaths.history(root: root, support: supportDirectory).path,
                     "backend": recognitionBackend,
                     "model": selectedRecognitionModel,

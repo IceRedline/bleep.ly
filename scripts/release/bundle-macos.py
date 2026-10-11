@@ -10,6 +10,7 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import uuid
 
 ROOT = Path(__file__).resolve().parents[2]
 MAGIC = {b'\xcf\xfa\xed\xfe', b'\xce\xfa\xed\xfe', b'\xfe\xed\xfa\xcf', b'\xca\xfe\xba\xbe', b'\xbe\xba\xfe\xca'}
@@ -164,7 +165,8 @@ print(json.dumps(files))
     info_path = app/'Contents/Info.plist'
     info = plistlib.loads(info_path.read_bytes())
     info.pop('BleepProjectRoot', None)
-    info.update(CFBundleShortVersionString=args.version, CFBundleVersion='7', LSMinimumSystemVersion=minimum)
+    info.update(CFBundleShortVersionString=args.version, CFBundleVersion='7', LSMinimumSystemVersion=minimum,
+                BleepBuildID=str(uuid.uuid4()))
     info_path.write_bytes(plistlib.dumps(info))
     print(json.dumps(dict(app=str(app), native_files=len(files), **manifest), indent=2))
 

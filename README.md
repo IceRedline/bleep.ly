@@ -76,6 +76,13 @@ Language is recorded in reviews and recognition history, and English/Russian run
 separate caches. Existing Russian benchmark caches remain reusable (WhisperKit helper
 changes still invalidate its cache). Changing language applies to the next file.
 
+The app reuses recognition results across normal relaunches of the same installed
+build. Updating, rebuilding, or reinstalling the app (even the same version)
+starts a new recognition cache, so old transcripts cannot hide fixes in the new
+app. Previously downloaded models remain available. **Resume Last Review** and
+explicit transcript imports preserve saved manual edits; open the source media
+again to obtain a fresh transcript after an update.
+
 - **Fast Mode:** select Beep, Silence, or custom audio, then drop a file. Recognition and export run automatically. The result is saved beside the source as `NAME_censored.ext`; existing files receive a numbered alternative and are never overwritten.
 - **Advanced:** review detections on the timeline, uncheck false positives, flag other transcript words, add missing intervals, and adjust mute boundaries. `⌘Z` undoes review edits. **Listen in Context** plays the word with **0.2 seconds before and 0.2 seconds after**, clipped at the file boundaries. **Choose Beep, Silence, or Custom before dropping media.** Preview with censorship is enabled by default and prepares automatically after analysis. The original stays playable during preparation; the player switches to censored audio at the current position when ready. Both Play and Listen in Context use it; turn the checkbox off to hear the original. During playback, Review Words highlights and scrolls to each censored word on the selected track, keeping the last heard word highlighted between intervals.
 - **Multiple audio tracks:** both modes analyze each track independently. Advanced shows separate timeline rows and a track selector for listening and editing. Video export preserves separate processed audio tracks.

@@ -21,6 +21,7 @@ bash scripts/build-icon.sh "$APP/Contents/Resources/AppIcon.icns"
 /usr/bin/python3 - "$APP" "$ROOT" <<'PY'
 import plistlib
 import sys
+import uuid
 from pathlib import Path
 app, root = sys.argv[1:]
 with (Path(app) / 'Contents/Info.plist').open('wb') as file:
@@ -33,6 +34,7 @@ with (Path(app) / 'Contents/Info.plist').open('wb') as file:
         'CFBundleIconFile': 'AppIcon',
         'CFBundleShortVersionString': '0.4.0',
         'CFBundleVersion': '5',
+        'BleepBuildID': str(uuid.uuid4()),
         'LSMinimumSystemVersion': '14.0',
         'NSHighResolutionCapable': True,
         'BleepProjectRoot': root,

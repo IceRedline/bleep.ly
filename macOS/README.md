@@ -77,6 +77,13 @@ Reviews autosave to `~/Library/Application Support/bleep.ly/last-review.json`; *
 
 **Import Reviewed Transcript…** reuses an existing word-level transcript for the currently opened source, with its manual flags preserved and no inference. This is also available after an analysis error. It derives the initial middle-word intervals using the approved cap. It does not modify the supplied transcript.
 
+Recognition caches belong to an app build and installation. Normal relaunches
+reuse them; a new build or a reinstallation (including the same version) requires
+fresh recognition when media is opened again. Both development and release
+packaging generate a new build identifier. Downloaded models, recognition history,
+and the last saved review are retained. **Resume Last Review** deliberately keeps
+manual work; reopen the source to apply recognition fixes from an update.
+
 Files with multiple audio tracks are analyzed independently in both modes. Advanced shows a timeline row for each track; select a row or use the track picker to listen and edit that track. Video exports keep the processed audio tracks separate. Audio Only mixes them into one stereo WAV. Import Reviewed Transcript applies to the selected track when multiple tracks are present. For audio-only sources the Video option is hidden. An empty/no-profanity review can still be exported.
 
 ## Checks

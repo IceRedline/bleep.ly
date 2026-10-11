@@ -4,6 +4,7 @@ Run `python -m censor.desktop REQUEST.json`. Stdout is a versioned event stream;
 third-party diagnostics go to stderr. Requests and sessions belong to the app.
 """
 import contextlib
+import hashlib
 import json
 import logging
 import os
@@ -147,6 +148,14 @@ def analyze_track(request):
         else:
             key, metadata = cache_key(source, model, language, compute, info.audio_index,
                                       tracking("Reading media", source.stat().st_size), backend=backend)
+        if "app_cache_identity" in request:
+            identity = request["app_cache_identity"]
+            if not isinstance(identity, str) or not identity:
+                raise CensorError("Invalid app recognition cache identity.")
+            metadata["app_cache_identity"] = identity
+            # All recognizers share the same build/installation boundary. Legacy
+            # CLI/benchmark caches remain available only to unscoped requests.
+            key = hashlib.sha256(json.dumps([key, identity]).encode()).hexdigest()
         cache = Path(request["cache_dir"]) / f"{key}.json"
         words = None if request.get("bypass_cache", False) else load_cache(cache, info.duration)
         cache_hit = words is not None

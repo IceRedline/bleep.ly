@@ -77,6 +77,53 @@ class DesktopTests(unittest.TestCase):
             with self.assertRaisesRegex(CensorError, 'Russian or English'):
                 analyze(dict(source=str(self.source), language='de'))
 
+    def test_app_updates_and_reinstalls_invalidate_every_recognizer_cache(self):
+        from censor.experimental_gpu import MODELS
+        choices = [('faster-whisper', 'large-v3'), ('mlx', 'large-v3'),
+                   ('whisperkit', 'large-v3-turbo')]
+        choices += [(backend, model) for model, (backend, _, _) in MODELS.items()]
+        for backend, model in choices:
+            with self.subTest(model=model, backend=backend), contextlib.ExitStack() as stack:
+                stack.enter_context(contextlib.redirect_stdout(io.StringIO()))
+                cpu = stack.enter_context(patch('censor.desktop.FasterWhisperBackend.transcribe'))
+                mlx = stack.enter_context(patch('censor.desktop.MLXWhisperBackend.transcribe'))
+                gpu = stack.enter_context(patch('censor.desktop.ExperimentalGPUBackend.transcribe'))
+                stack.enter_context(patch('censor.experimental_gpu.prepare', return_value=['/cached']))
+                stack.enter_context(patch('censor.experimental_gpu.importlib.metadata.version', return_value='test'))
+                stack.enter_context(patch('censor.whisperkit_backend.prepare_assets'))
+                stack.enter_context(patch('censor.whisperkit_backend.cache_identity', return_value=('wk-key', {})))
+                native = stack.enter_context(patch('censor.whisperkit_backend.WhisperKitBackend'))
+                native.return_value.metrics = {}
+                engine = {'faster-whisper': cpu, 'mlx': mlx, 'whisperkit': native.return_value.transcribe}.get(backend, gpu)
+                engine.side_effect = [[WordTimestamp(word, 1, 1.3)]
+                                      for word in ('legacy', 'first', 'fixed', 'reinstalled')]
+                request = dict(source=str(self.source), backend=backend, model=model,
+                               cache_dir=str(self.work / f'{backend}-{model}'),
+                               whisperkit_executable='/mock', whisperkit_model_folder='/mock')
+                analyze(request)  # An old, unscoped cache must never satisfy an app request.
+                for identity, expected in [('build1-install1', 'first'), ('build2-install1', 'fixed'),
+                                           ('build2-install2', 'reinstalled')]:
+                    current = {**request, 'app_cache_identity': identity}
+                    fresh = analyze(current)
+                    self.assertFalse(fresh['cache_hit'])
+                    self.assertEqual(fresh['words'][0]['word'], expected)
+                    self.assertTrue(analyze(current)['cache_hit'], 'Relaunching the same install keeps the cache')
+                self.assertEqual(engine.call_count, 4)
+                caches = [json.loads(path.read_text()) for path in Path(request['cache_dir']).glob('*.json')]
+                self.assertEqual({data['metadata'].get('app_cache_identity') for data in caches},
+                                 {None, 'build1-install1', 'build2-install1', 'build2-install2'})
+
+    def test_app_update_preserves_explicitly_imported_review(self):
+        self.transcript.write_text(json.dumps({'words': [dict(word='бля', start=1, end=1.3, profane=False)]}))
+        before = self.transcript.read_bytes()
+        with patch('censor.desktop.FasterWhisperBackend.transcribe') as engine:
+            for identity in ('build1-install1', 'build2-install2'):
+                document = analyze(dict(source=str(self.source), transcript=str(self.transcript),
+                                        app_cache_identity=identity))
+                self.assertFalse(document['words'][0]['profane'])
+            engine.assert_not_called()
+        self.assertEqual(self.transcript.read_bytes(), before)
+
     def test_custom_lists_reclassify_cached_speech_and_log_the_effective_rules(self):
         with patch('censor.desktop.FasterWhisperBackend.transcribe', return_value=[
             WordTimestamp('fuck', 1, 1.3), WordTimestamp('banana', 2, 2.3)]) as engine, contextlib.redirect_stdout(io.StringIO()):

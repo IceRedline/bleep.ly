@@ -48,6 +48,7 @@ final class RecognitionModelTests: XCTestCase {
             XCTAssertEqual(lists["allow"], ["бляха"])
             XCTAssertEqual(request["model"] as? String, expected)
             XCTAssertEqual(request["backend"] as? String, engine)
+            XCTAssertEqual(request["app_cache_identity"] as? String, try RuntimePaths.recognitionCacheIdentity())
             XCTAssertEqual(request["history_dir"] as? String, folder.appendingPathComponent("тесты bleep.ly/recognition-history").path)
             XCTAssertEqual(defaults.string(forKey: "recognitionModel"), choice, "WhisperKit must not overwrite the CPU/MLX choice")
         }
