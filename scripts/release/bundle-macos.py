@@ -64,7 +64,7 @@ def audit(app):
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument('--version', default='0.1.1')
+    parser.add_argument('--version', default='0.1.2')
     parser.add_argument('--python', type=Path, default=ROOT/'.cache/release-python/cpython-3.11.15-macos-aarch64-none')
     parser.add_argument('--audit-only', type=Path)
     args = parser.parse_args()
@@ -165,7 +165,7 @@ print(json.dumps(files))
     info_path = app/'Contents/Info.plist'
     info = plistlib.loads(info_path.read_bytes())
     info.pop('BleepProjectRoot', None)
-    info.update(CFBundleShortVersionString=args.version, CFBundleVersion='7', LSMinimumSystemVersion=minimum,
+    info.update(CFBundleShortVersionString=args.version, CFBundleVersion='8', LSMinimumSystemVersion=minimum,
                 BleepBuildID=str(uuid.uuid4()))
     info_path.write_bytes(plistlib.dumps(info))
     print(json.dumps(dict(app=str(app), native_files=len(files), **manifest), indent=2))
