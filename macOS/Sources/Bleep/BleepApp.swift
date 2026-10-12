@@ -121,7 +121,7 @@ struct SettingsView: View {
                 }
             }
             Section("Storage") {
-                Text("Preview audio is limited to 4 GB per session. Recognition cache and history are limited to 256 MB and 30 days. Older data is removed automatically.")
+                Text("Preview audio is limited to 7 GiB per session. Recognition cache and history are limited to 256 MB and 30 days. Older data is removed automatically.")
                     .font(.caption).foregroundStyle(.secondary)
                 Text("Models, original recordings, exports and your saved review are kept.")
                     .font(.caption).foregroundStyle(.secondary)
