@@ -92,7 +92,7 @@ final class RecognitionModelTests: XCTestCase {
         defaults.removeObject(forKey: "pythonPath")
         defaults.set("mlx", forKey: "backend")
         defaults.set("parakeet-v3", forKey: "recognitionModel")
-        let experimentalPython = folder.appendingPathComponent(".cache/asr-env/bin/python")
+        let experimentalPython = folder.appendingPathComponent(".runtime/asr-env/bin/python")
         try FileManager.default.createDirectory(at: experimentalPython.deletingLastPathComponent(), withIntermediateDirectories: true)
         // macOS /usr/bin/python3 is an argv[0]-sensitive shim, not a symlinkable Python binary.
         let launcher = Data("#!/bin/sh\nexec /usr/bin/python3 \"$@\"\n".utf8)

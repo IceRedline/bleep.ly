@@ -49,6 +49,28 @@ class CachePolicyTests(unittest.TestCase):
         self.assertTrue(playing.exists())
         self.assertEqual(sum(path.exists() for path in variants), 8)
 
+    def test_77_minute_preview_fits_initial_render_and_edit_with_playback(self):
+        from types import SimpleNamespace
+        frames = 77 * 60 * 48000
+        with patch('censor.cache_policy.shutil.disk_usage', return_value=SimpleNamespace(free=20 * 1024**3)):
+            # First render: float32 source, PCM24 baseline, output and a full-length patch.
+            reserve_preview(self.root, set(), frames * (8 + 6 + 6 + 6) + 65536)
+            source = self.root / 'audio' / ('a' * 64)
+            playing = self.root / str(uuid.uuid4())
+            old = self.root / str(uuid.uuid4())
+            for path, size in [(source / 'source.wav', frames * 8),
+                               (source / 'limited.wav', frames * 6),
+                               (playing / 'censored.wav', frames * 6),
+                               (old / 'censored.wav', frames * 6)]:
+                path.parent.mkdir(parents=True, exist_ok=True)
+                # Sparse fixtures account for realistic sizes without writing gigabytes.
+                with path.open('wb') as handle:
+                    handle.truncate(size)
+            reserve_preview(self.root, {source, playing}, frames * 12 + 65536)
+            self.assertFalse(old.exists())
+            self.assertTrue((source / 'source.wav').exists())
+            self.assertTrue((playing / 'censored.wav').exists())
+
     def test_preview_checks_free_disk_space(self):
         from types import SimpleNamespace
         with patch('censor.cache_policy.shutil.disk_usage', return_value=SimpleNamespace(free=100)):

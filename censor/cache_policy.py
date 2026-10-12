@@ -8,7 +8,7 @@ import time
 
 from .utils import CensorError
 
-MEDIA_LIMIT = 4 * 1024**3
+MEDIA_LIMIT = 7 * 1024**3
 RECOGNITION_LIMIT = 256 * 1024**2
 MAX_AGE = 30 * 86400
 HEADROOM = 1024**3
@@ -51,7 +51,7 @@ def reserve_preview(session, protected, needed, limit=MEDIA_LIMIT):
         if UUID.fullmatch(folder.name):
             variants -= 1
     if used + needed > limit:
-        raise CensorError('This preview would exceed the 4 GB temporary audio limit. '
+        raise CensorError('This preview would exceed the 7 GiB temporary audio limit. '
                           'Original playback and export remain available. Open a shorter recording for censored preview.')
     if shutil.disk_usage(session).free < needed + HEADROOM:
         raise CensorError('Not enough free disk space for preview audio. Free some space and try again. '

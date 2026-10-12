@@ -38,7 +38,7 @@ enum RuntimePaths {
             return root.appendingPathComponent("../Runtime/\(experimental ? "PythonGPU" : "Python")/bin/python3.11")
                 .standardizedFileURL
         }
-        return root.appendingPathComponent(experimental ? ".cache/asr-env/bin/python" : ".venv/bin/python")
+        return root.appendingPathComponent(experimental ? ".runtime/asr-env/bin/python" : ".venv/bin/python")
     }
 
     static func models(root: URL, support: URL) -> URL {
