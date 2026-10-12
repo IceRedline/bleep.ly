@@ -15,7 +15,8 @@ import time
 from dataclasses import asdict, replace
 from pathlib import Path
 
-from .audio import (RATE, bed_filter, filter_graph, new_output, prepare_sound)
+from .audio import RATE, new_output, prepare_sound
+from .stream_mix import cue_samples, render_track
 from .ffmpeg import extract_audio, input_args, media_info, probe, require_tools, run, sound_duration
 from .mlx_backend import MLXWhisperBackend, resolve_model
 from .models import CensorRange
@@ -281,38 +282,41 @@ def export(request):
                 run(["ffmpeg", "-v", "error", "-nostdin", "-n", "-f", "lavfi", "-i",
                      f"sine=frequency=1000:sample_rate={RATE}:duration={MUTE_CAP}", str(raw)])
                 prepare_sound(raw, cue, MUTE_CAP)
-        graph = work / "mix.ffgraph"
-        graphs = []
-        cue_tracks = [i for i, values in enumerate(track_ranges) if cue and values]
-        if cue_tracks:
-            graphs.append(f"[1:a:0]asplit={len(cue_tracks)}" + ''.join(f"[cue{i}]" for i in cue_tracks))
-        outputs = []
-        import re
-        for i, (track_info, values) in enumerate(zip(infos, track_ranges)):
-            track_graph = (filter_graph(track_info, values, "mute", -30, sound_duration(cue)) if cue and values else
-                           f"[0:{track_info.audio_index}]{bed_filter(track_info, values, 'mute', -30)}[out]")
-            track_graph = track_graph.replace('[1:a:0]', f'[cue{i}]')
-            track_graph = re.sub(r'\[(bed|out|s\d+|b\d+)\]', lambda m: f'[t{i}{m[1]}]', track_graph)
-            graphs.append(track_graph)
-            outputs.append(f'[t{i}out]')
-        if kind == 'audio' and len(outputs) > 1:
-            graphs.append(''.join(outputs) + f'amix=inputs={len(outputs)}:duration=longest:normalize=1[out]')
-            outputs = ['[out]']
-        graph.write_text(';\n'.join(graphs))
-        audio_maps = [arg for label in outputs for arg in ('-map', label)]
-        metadata = ([arg for i, index in enumerate(indices) for arg in
-                     (f'-map_metadata:s:a:{i}', f'0:s:a:{index}')]
-                    if kind == 'video' else [])
-        with new_output(output) as staged:
-            run(["ffmpeg", "-hide_banner", "-loglevel", "error", "-nostdin", "-n",
-                 *input_args(source, info), *(["-i", str(cue)] if cue else []),
-                 "-filter_complex_script", str(graph),
-                 *(["-map", f"0:{info.video_index}", "-c:v", "copy"] if kind == "video" else []),
-                 *audio_maps, "-map_metadata", "0", *metadata,
-                 *(["-c:a", "aac", "-b:a", "320k", "-avoid_negative_ts", "disabled"] if kind == "video"
-                   else ["-c:a", "pcm_s24le", "-rf64", "auto"]),
-                 "-ar", str(RATE), "-t", f"{info.duration:.9f}", str(staged)],
-                progress("Exporting video" if kind == "video" else "Exporting audio", info.duration))
+        with cue_samples(cue, work) as cue_pcm:
+            if kind == "audio" and len(infos) == 1:
+                with new_output(output) as staged:
+                    render_track(source, staged, info, track_ranges[0], cue_pcm,
+                                 progress("Exporting audio", duration))
+            else:
+                # Preserve float precision until the final mix/encode. Each track
+                # uses a constant-size mixer, independent of the number of words.
+                update = progress("Exporting video" if kind == "video" else "Exporting audio",
+                                  duration * (len(infos) + 1))
+                prepared = []
+                for i, (track_info, values) in enumerate(zip(infos, track_ranges)):
+                    track = work / f"track-{i}.wav"
+                    render_track(source, track, track_info, values, cue_pcm,
+                                 lambda seconds, i=i: update(i * duration + seconds), floating=True)
+                    prepared.append(track)
+                inputs = [arg for track in prepared for arg in ("-i", str(track))]
+                if kind == "audio":
+                    graph = ''.join(f'[{i + 1}:a:0]' for i in range(len(prepared)))
+                    graph += f'amix=inputs={len(prepared)}:duration=longest:normalize=1[out]'
+                    audio_maps = ["-filter_complex", graph, "-map", "[out]"]
+                else:
+                    audio_maps = [arg for i in range(len(prepared)) for arg in ('-map', f'{i + 1}:a:0')]
+                metadata = ([arg for i, index in enumerate(indices) for arg in
+                             (f'-map_metadata:s:a:{i}', f'0:s:a:{index}')]
+                            if kind == 'video' else [])
+                with new_output(output) as staged:
+                    run(["ffmpeg", "-hide_banner", "-loglevel", "error", "-nostdin", "-n",
+                         *input_args(source, info), *inputs,
+                         *(["-map", f"0:{info.video_index}", "-c:v", "copy"] if kind == "video" else []),
+                         *audio_maps, "-map_metadata", "0", *metadata,
+                         *(["-c:a", "aac", "-b:a", "320k", "-avoid_negative_ts", "disabled"] if kind == "video"
+                           else ["-c:a", "pcm_s24le", "-rf64", "auto"]),
+                         "-ar", str(RATE), "-t", f"{duration:.9f}", str(staged)],
+                        lambda seconds: update(len(infos) * duration + seconds))
     return {"output": str(output)}
 
 
