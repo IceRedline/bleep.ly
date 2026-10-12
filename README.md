@@ -126,7 +126,7 @@ The **Apple GPU · MLX / MPS** option also offers experimental **Parakeet v3**,
 **Parakeet Ultra**, **Qwen3-ASR 1.7B**, and **GigaAM v3 RNNT**. Their runtime is
 already included in the DMG. For a source build, install it with
 `bash scripts/setup-experimental-gpu.sh`. The development app selects
-`.cache/asr-env/bin/python` automatically for these models unless a custom Python
+`.runtime/asr-env/bin/python` automatically for these models unless a custom Python
 executable is configured. The standard development runtime remains in `.venv`;
 the release selects its bundled runtimes automatically.
 Model weights download on first use only when downloads are enabled. The new

@@ -55,7 +55,7 @@ def main():
             failed |= previous["status"] != "ok"
             continue
         backend = MODELS[model][0] if model in MODELS else "mlx"
-        python = ROOT / (".cache/asr-env/bin/python" if model in MODELS else ".venv/bin/python")
+        python = ROOT / (".runtime/asr-env/bin/python" if model in MODELS else ".venv/bin/python")
         request = dict(operation="analyze", source=str(args.source.resolve()), backend=backend,
                        model=model, language=args.language, offline=True, bypass_cache=True,
                        cache_dir=str(output / "cache"),

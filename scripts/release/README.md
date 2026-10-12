@@ -77,7 +77,7 @@ model weights, developer settings or signing keys belong in the app or Git.
 Use an Apple Silicon Mac with Xcode, uv, and the two project Python environments.
 Their installed dependencies must match `requirements-core.lock` and
 `requirements-gpu.lock`; the bundler refuses a mismatch. To recreate them, create
-Python 3.11 environments at `.venv` and `.cache/asr-env`, then install the matching
+Python 3.11 environments at `.venv` and `.runtime/asr-env`, then install the matching
 lockfile. The latter includes a pinned GigaAM source revision.
 
 ```sh

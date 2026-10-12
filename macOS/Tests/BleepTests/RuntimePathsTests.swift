@@ -57,12 +57,25 @@ final class RuntimePathsTests: XCTestCase {
         XCTAssertEqual(RuntimePaths.history(root: root, support: support).path, support.appendingPathComponent("recognition-history").path)
     }
 
-    func testDevelopmentBuildRetainsExistingPathsAndHFOverride() {
+    func testDevelopmentRuntimeSurvivesCacheDeletion() throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent("bleep-cache-removal-\(UUID())")
+        defer { try? FileManager.default.removeItem(at: root) }
+        let python = RuntimePaths.python(root: root, experimental: true)
+        try FileManager.default.createDirectory(at: python.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try Data("runtime fixture".utf8).write(to: python)
+        let cache = RuntimePaths.models(root: root, support: root)
+        try FileManager.default.createDirectory(at: cache, withIntermediateDirectories: true)
+        try Data().write(to: cache.appendingPathComponent("model.bin"))
+        try FileManager.default.removeItem(at: cache)
+        XCTAssertEqual(try Data(contentsOf: RuntimePaths.python(root: root, experimental: true)), Data("runtime fixture".utf8))
+    }
+
+    func testDevelopmentBuildUsesPersistentRuntimeAndHFOverride() {
         let root = URL(fileURLWithPath: "/tmp/bleep-development-source")
         let support = URL(fileURLWithPath: "/tmp/bleep-support")
         let python = RuntimePaths.python(root: root)
         XCTAssertEqual(python.path, root.appendingPathComponent(".venv/bin/python").path)
-        XCTAssertEqual(RuntimePaths.python(root: root, experimental: true).path, root.appendingPathComponent(".cache/asr-env/bin/python").path)
+        XCTAssertEqual(RuntimePaths.python(root: root, experimental: true).path, root.appendingPathComponent(".runtime/asr-env/bin/python").path)
         XCTAssertEqual(RuntimePaths.models(root: root, support: support).path, root.appendingPathComponent(".cache").path)
         XCTAssertEqual(RuntimePaths.environment(root: root, python: python, support: support,
             inherited: ["HF_HOME": "/custom/models"])["HF_HOME"], "/custom/models")

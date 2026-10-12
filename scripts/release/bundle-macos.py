@@ -136,7 +136,7 @@ def main():
     shutil.copytree(ROOT/'censor', engine/'censor', ignore=shutil.ignore_patterns('__pycache__', '*.pyc'))
     for name in ['profanity.txt', 'profanity.en.txt']:
         shutil.copy2(ROOT/name, engine/name)
-    for name, environment, lock in [('Python', '.venv', 'core'), ('PythonGPU', '.cache/asr-env', 'gpu')]:
+    for name, environment, lock in [('Python', '.venv', 'core'), ('PythonGPU', '.runtime/asr-env', 'gpu')]:
         source = ROOT/environment
         actual = subprocess.check_output([str(source/'bin/python'), '-m', 'pip', 'freeze'], text=True)
         expected = (ROOT/f'scripts/release/requirements-{lock}.lock').read_text()

@@ -13,7 +13,11 @@ bash scripts/setup-experimental-gpu.sh
 bash scripts/build-macos.sh
 ```
 
-Dependencies are isolated in `.cache/asr-env`; Whisper still runs in `.venv`.
+Dependencies are isolated in `.runtime/asr-env`; Whisper still runs in `.venv`.
+These are installed runtimes, not disposable caches. Clearing `.cache` may remove
+model weights, but no longer removes the GPU Python environment. If upgrading
+from the old `.cache/asr-env` layout, rerun the setup script to create the new
+environment before removing the old one. Packaged apps embed both runtimes.
 A custom Python executable in Settings overrides automatic runtime selection
 and must have the experimental dependencies installed. Weights stay under
 `.cache/huggingface` and `.cache/gigaam`, never in Git. Enable first-time model
@@ -45,7 +49,7 @@ Audio decoding, VAD and bookkeeping can still use CPU, as in the Whisper pipelin
 
 ```sh
 HF_HOME="$PWD/.cache/huggingface" HF_HUB_DISABLE_TELEMETRY=1 \
-  .cache/asr-env/bin/python scripts/benchmark-gpu-models.py 'стрим.m4v' \
+  .runtime/asr-env/bin/python scripts/benchmark-gpu-models.py 'стрим.m4v' \
   --prepare --output 'тесты bleep.ly/gpu-comparison-new'
 ```
 
@@ -61,7 +65,7 @@ GigaAM is excluded from the default list and explicitly requesting it is rejecte
 For example:
 
 ```sh
-.cache/asr-env/bin/python scripts/benchmark-gpu-models.py english.mp4 \
+.runtime/asr-env/bin/python scripts/benchmark-gpu-models.py english.mp4 \
   --language en --models parakeet-v3 parakeet-ultra qwen3-asr large-v3-turbo large-v3 \
   --output 'тесты bleep.ly/english-comparison-new'
 ```
