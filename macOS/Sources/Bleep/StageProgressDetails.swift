@@ -11,7 +11,8 @@ struct StageProgressDetails: View {
         Group {
             if StageProgress.isReadingMedia(stage) {
                 ProgressView().controlSize(.small)
-            } else if StageProgress.usesEstimates(stage) || StageProgress.isDownloading(stage) || fraction > 0 {
+            } else if StageProgress.usesEstimates(stage) || fraction > 0 ||
+                        (StageProgress.isDownloading(stage) && !StageProgress.isIndeterminate(stage, fraction: fraction)) {
                 HStack(spacing: 16) {
                     metric("Progress", value: StageProgress.isIndeterminate(stage, fraction: fraction) ? "—"
                            : "\(StageProgress.usesEstimates(stage) && fraction < 1 ? "≈" : "")\(Int(fraction * 100))%")

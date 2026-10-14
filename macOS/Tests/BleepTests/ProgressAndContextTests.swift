@@ -41,12 +41,27 @@ final class ProgressAndContextTests: XCTestCase {
         XCTAssertNil(progress.remaining(now: 34))
     }
 
+    func testNetworkDownloadBytesKeepTimerWithoutInventingPercentOrETA() {
+        var progress = StageProgress()
+        for (time, bytes) in [(10.0, "0.0"), (15.0, "25.4"), (20.0, "61.2")] {
+            let label = "Track 1/2 · Downloading Qwen ForcedAligner — \(bytes) MB downloaded"
+            progress.report(label, fraction: 0, now: time)
+            progress.advance(now: time + 2)
+            XCTAssertEqual(progress.started, 10)
+            XCTAssertTrue(StageProgress.isDownloading(label))
+            XCTAssertTrue(StageProgress.isIndeterminate(label, fraction: progress.displayed))
+            XCTAssertEqual(StageProgress.downloadDetail(label), "\(bytes) MB downloaded")
+            XCTAssertEqual(progress.displayed, 0)
+            XCTAssertNil(progress.remaining(now: time + 2))
+        }
+    }
+
     @MainActor
     func testDownloadAndPreparationLayoutKeepsSpaceForVisibleProgress() throws {
         let samples: [(String, Double, Double, Double?)] = [
             ("Checking GigaAM model", 0, 15, nil),
             ("Downloading GigaAM — 204.5 / 448.9 MB", 0.455, 34, 60),
-            ("Downloading Qwen ForcedAligner — 1411.2 / 1833.8 MB", 0.77, 200, 60),
+            ("Downloading Qwen ForcedAligner — 541.2 MB downloaded", 0, 200, nil),
             ("Loading word alignment model", 0, 12, nil)
         ]
         var expected: NSSize?

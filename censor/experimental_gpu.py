@@ -65,14 +65,14 @@ def prepare_hub_asset(repo, revision, name, offline, notify):
         return snapshot_download(repo, local_files_only=True, **options)
     # A local snapshot directory may contain only files from an interrupted
     # download. Online mode must check the pinned file list before using it.
-    # Fix the byte denominator before parallel transfers start; Hub's aggregate
-    # total grows as files connect and would otherwise jump backwards.
-    notify(f"Checking {name} download size", 0)
-    plan = snapshot_download(repo, dry_run=True, tqdm_class=byte_progress_bar('', lambda *_: None), **options)
-    pending = [item for item in plan if item.will_download]
-    total = sum(item.file_size for item in pending) if all(item.file_size is not None for item in pending) else 0
+    # The pinned Hub SDK reports network bytes separately from buffered disk
+    # reconstruction. Xet compression means the transfer total is not known.
     notify(f"Connecting to download {name}", 0)
-    path = snapshot_download(repo, tqdm_class=byte_progress_bar(f"Downloading {name}", notify, total), **options)
+    progress_bar = byte_progress_bar(f"Downloading {name}", notify, network_only=True)
+    try:
+        path = snapshot_download(repo, tqdm_class=progress_bar, **options)
+    finally:
+        progress_bar.finish()
     notify(f"{name} model ready", 1)
     return path
 

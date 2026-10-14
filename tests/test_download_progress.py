@@ -46,22 +46,27 @@ class ModelDownloadProgressTests(unittest.TestCase):
             retry.update(20)
         self.assertEqual(events[-1][1], .2)
 
-    def test_hub_uses_pending_bytes_and_marks_ready_only_after_success(self):
+    def test_hub_reports_network_bytes_despite_large_disk_flushes_and_only_finishes_on_success(self):
         for failure in [False, True]:
             events = []
             def download(repo, **kwargs):
                 self.assertEqual(kwargs['revision'], 'pinned')
                 if kwargs.get('local_files_only'):
                     return '/partial/snapshot'  # A directory is not proof of completeness.
-                if kwargs.get('dry_run'):
-                    return [SimpleNamespace(will_download=False, file_size=500),
-                            SimpleNamespace(will_download=True, file_size=1000)]
-                with kwargs['tqdm_class'](total=200, unit='B', desc='Reconstructing') as bar:
-                    bar.update(200)
+                self.assertNotIn('dry_run', kwargs)
+                bar_type = kwargs['tqdm_class']
+                with bar_type(total=1_000_000_000, unit='B', desc='Downloading bytes', name='hub.transfer') as transfer, \
+                        bar_type(total=1_000_000_000, initial=500_000_000, unit='B', desc='Reconstructing') as disk:
+                    transfer.update(10_000_000)
+                    self.assertEqual(events[-1], ('Downloading Qwen — 10.0 MB downloaded', 0))
+                    before = list(events)
+                    disk.update(400_000_000)  # Includes cached/resumed bytes and a buffered flush.
+                    self.assertEqual(events, before)
+                    transfer.update(20_000_000)
                     if failure:
                         raise OSError('connection lost')
-                    bar.total = 1000
-                    bar.update(800)
+                    transfer.total = transfer.n  # Hub finalizes its synthetic terminal-bar total.
+                    transfer.refresh()
                 return '/cached/model'
             with patch('huggingface_hub.snapshot_download', side_effect=download):
                 if failure:
@@ -69,10 +74,38 @@ class ModelDownloadProgressTests(unittest.TestCase):
                         prepare_hub_asset('repo', 'pinned', 'Qwen', False, lambda *e: events.append(e))
                 else:
                     self.assertEqual(prepare_hub_asset('repo', 'pinned', 'Qwen', False, lambda *e: events.append(e)), '/cached/model')
-            self.assertTrue(any(value == .2 for _, value in events))
+            self.assertIn(('Downloading Qwen — 30.0 MB downloaded', 0), events)
+            self.assertTrue(all(value == 0 and ' / ' not in label for label, value in events if label.startswith('Downloading ')))
             self.assertEqual(any(value == 1 for _, value in events), not failure)
             if not failure:
                 self.assertEqual(events[-1], ('Qwen model ready', 1))
+
+    def test_network_counter_flushes_last_bytes_once_and_cannot_complete_on_close(self):
+        events = []
+        with patch('censor.download_progress.time.monotonic', return_value=10):
+            bar_type = byte_progress_bar('Downloading Qwen', lambda *e: events.append(e), network_only=True)
+            bar = bar_type(total=100_000_000, unit='B', name='hub.transfer')
+            bar.update(5_000_000)  # Throttled; close must still report these bytes.
+            bar.close()
+            self.assertEqual(events[-1], ('Downloading Qwen — 5.0 MB downloaded', 0))
+            before = list(events)
+            bar.close()
+            self.assertEqual(events, before, 'Destructor must not emit progress after the result event')
+
+    def test_hub_finalization_blocks_delayed_callbacks_and_destructors(self):
+        events = []
+        with patch('censor.download_progress.time.monotonic', return_value=10):
+            bar_type = byte_progress_bar('Downloading Qwen', lambda *e: events.append(e), network_only=True)
+            bar = bar_type(total=100_000_000, unit='B', name='hub.transfer')
+            bar.update(8_000_000)
+            bar_type.finish()
+            self.assertEqual(events[-1], ('Downloading Qwen — 8.0 MB downloaded', 0))
+            before = list(events)
+            bar.update(1_000_000)
+            bar.refresh()
+            bar.close()
+            bar_type.finish()
+            self.assertEqual(events, before)
 
     def test_gigaam_reports_both_files_and_restores_downloader_on_failure(self):
         from tqdm import tqdm
