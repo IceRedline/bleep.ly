@@ -7,6 +7,7 @@ from pathlib import Path
 import tempfile
 
 from .models import WordTimestamp
+from .speech_chunks import CONTEXT_SECONDS, append_window_words, speech_windows
 from .model_downloads import ModelDownloadRequired
 from .transcription import file_hash
 from .utils import CensorError
@@ -66,6 +67,8 @@ def cache_identity(source, model, audio_index, progress=None, language="ru"):
         metadata.update(aligner_model=ALIGNER[0], aligner_revision=ALIGNER[1])
     if backend == "gigaam-mps":
         metadata["backend_revision"] = "7447938d791c4f3e643386ee22c33777004293a5"
+        metadata.update(adapter_version=2, context_seconds=CONTEXT_SECONDS,
+                        overlap_seconds=2 * CONTEXT_SECONDS, stitching="midpoint-ownership-v1")
     # Keep existing Russian benchmark caches usable; separate English detection runs.
     if language != "ru" and backend == "parakeet-mlx":
         metadata["detection_language"] = language
@@ -138,11 +141,12 @@ class ExperimentalGPUBackend:
         words = []
         with tempfile.TemporaryDirectory(prefix="bleep-gigaam-") as folder:
             path = Path(folder) / "chunk.wav"
-            for chunk in chunks:
-                sf.write(path, data[chunk["start"]:chunk["end"]], 16000, subtype="FLOAT")
+            for window in speech_windows(chunks, len(data)):
+                sf.write(path, data[window.start:window.end], 16000, subtype="FLOAT")
                 result = model.transcribe(str(path), word_timestamps=True)
-                offset = chunk["start"] / 16000
-                words.extend(WordTimestamp(w.text, w.start + offset, w.end + offset) for w in result.words or [])
-                progress(chunk["end"] / 16000)
+                offset = window.start / 16000
+                current = [WordTimestamp(w.text, w.start + offset, w.end + offset) for w in result.words or []]
+                append_window_words(words, current, window)
+                progress(window.own_end)
         torch.mps.synchronize()
         return words
