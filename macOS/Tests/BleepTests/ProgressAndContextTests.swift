@@ -122,19 +122,22 @@ final class ProgressAndContextTests: XCTestCase {
     }
 
     @MainActor
-    func testDownloadAndPreparationLayoutKeepsSpaceForVisibleProgress() throws {
+    func testProcessingInformationKeepsSameSizeAcrossStages() throws {
         let samples: [(String, Double, Double, Double?)] = [
             ("Checking GigaAM model", 0, 15, nil),
             ("Downloading GigaAM — 204.5 / 448.9 MB", 0.455, 34, 60),
             ("Downloading Qwen ForcedAligner — 541.2 / 1840.0 MB", 0.294, 200, 60),
-            ("Loading word alignment model", 0, 12, nil)
+            ("Loading word alignment model", 0, 12, nil),
+            ("Reading media", 0, 2, nil),
+            ("Recognizing speech", 0, 1, nil),
+            ("Recognizing speech", 0.45, 35, 60),
+            ("Exporting audio", 0.65, 35, 30)
         ]
         var expected: NSSize?
         for (stage, fraction, elapsed, remaining) in samples {
-            XCTAssertTrue(StageProgress.isModelPreparation(stage))
             let host = NSHostingView(rootView: StageProgressIndicator(stage: stage, fraction: fraction, elapsed: elapsed, remaining: remaining))
             let size = host.fittingSize
-            XCTAssertEqual(size.height, 112)
+            XCTAssertEqual(size.height, 88)
             if let expected { XCTAssertEqual(size, expected) } else { expected = size }
         }
         for name in ["Whisper Large v3", "WhisperKit", "Parakeet v3", "Qwen3 ASR", "GigaAM tokenizer"] {
@@ -148,9 +151,9 @@ final class ProgressAndContextTests: XCTestCase {
                 let item = samples[index]
                 StageProgressIndicator(stage: item.0, fraction: item.1, elapsed: item.2, remaining: item.3)
             }
-        }.padding(32).frame(width: 560, height: 640).background(Color(red: 0.06, green: 0.09, blue: 0.14))
+        }.padding(32).frame(width: 560, height: 1040).background(Color(red: 0.06, green: 0.09, blue: 0.14))
             .environment(\.colorScheme, .dark))
-        host.frame = NSRect(x: 0, y: 0, width: 560, height: 640)
+        host.frame = NSRect(x: 0, y: 0, width: 560, height: 1040)
         host.layoutSubtreeIfNeeded()
         let bitmap = try XCTUnwrap(host.bitmapImageRepForCachingDisplay(in: host.bounds))
         host.cacheDisplay(in: host.bounds, to: bitmap)

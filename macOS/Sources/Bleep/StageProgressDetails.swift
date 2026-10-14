@@ -9,8 +9,11 @@ struct StageProgressDetails: View {
 
     var body: some View {
         Group {
-            if StageProgress.isModelPreparation(stage) || StageProgress.isReadingMedia(stage) {
-                Color.clear.frame(width: 320).accessibilityHidden(true)
+            if let preparationDetail {
+                Text(preparationDetail)
+                    .font(.callout).foregroundStyle(.secondary)
+                    .multilineTextAlignment(.center)
+                    .frame(width: 320)
             } else if StageProgress.usesEstimates(stage) || fraction > 0 {
                 HStack(spacing: 16) {
                     metric("Progress", value: StageProgress.isIndeterminate(stage, fraction: fraction) ? "—"
@@ -29,6 +32,26 @@ struct StageProgressDetails: View {
         .transaction { $0.animation = nil }
     }
 
+    private var preparationDetail: String? {
+        if StageProgress.isReadingMedia(stage) {
+            return "Checking your media before processing.\nYour original file stays unchanged."
+        }
+        guard StageProgress.isModelPreparation(stage) else { return nil }
+        if stage.localizedCaseInsensitiveContains("download size") {
+            return "Checking which model files are needed\nand how much needs to be downloaded."
+        }
+        if stage.localizedCaseInsensitiveContains("Connecting") {
+            return "Connecting to the model download server.\nThe transfer will begin automatically."
+        }
+        if stage.localizedCaseInsensitiveContains("Checking") {
+            return "Checking saved model files.\nProcessing will continue automatically."
+        }
+        if stage.localizedCaseInsensitiveContains("Loading") {
+            return "Loading the model into memory.\nProcessing will continue automatically."
+        }
+        return "Preparing the model for local processing.\nThis can take a moment."
+    }
+
     private func metric(_ label: String, value: String) -> some View {
         VStack(spacing: 4) {
             Text(value).monospacedDigit().fontWeight(.medium)
@@ -37,6 +60,7 @@ struct StageProgressDetails: View {
     }
 }
 
+/// Preparation copy, download bytes and processing metrics share one fixed slot.
 /// The lower section owns the download bar only; all other stages use the upper ring.
 struct StageProgressIndicator: View {
     let stage: String
@@ -45,21 +69,25 @@ struct StageProgressIndicator: View {
     var remaining: Double? = nil
 
     var body: some View {
-        VStack(spacing: 8) {
-            Text(StageProgress.title(stage)).font(.headline)
+        VStack(spacing: 12) {
+            Text(stage.isEmpty ? "Preparing your media" : StageProgress.title(stage))
+                .font(.headline).multilineTextAlignment(.center).lineLimit(2)
+                .frame(height: 32, alignment: .bottom)
             Group {
                 if StageProgress.isDownloading(stage) {
-                    ProgressView(value: StageProgress.isIndeterminate(stage, fraction: fraction) ? nil : fraction)
-                        .progressViewStyle(.linear)
-                        .accessibilityIdentifier("processing-progress-linear")
+                    VStack(spacing: 8) {
+                        ProgressView(value: StageProgress.isIndeterminate(stage, fraction: fraction) ? nil : fraction)
+                            .progressViewStyle(.linear).tint(.mint)
+                            .accessibilityIdentifier("processing-progress-linear")
+                            .accessibilityLabel(StageProgress.title(stage))
+                        Text(StageProgress.downloadDetail(stage) ?? "Starting download…")
+                            .font(.caption).monospacedDigit().foregroundStyle(.secondary)
+                    }.frame(width: 320)
                 } else {
-                    Color.clear.frame(height: 4).accessibilityHidden(true)
+                    StageProgressDetails(stage: stage, fraction: fraction, elapsed: elapsed, remaining: remaining)
                 }
-            }.tint(.mint).frame(width: 320).accessibilityLabel(StageProgress.title(stage))
-            Text(StageProgress.downloadDetail(stage) ?? " ")
-                .font(.caption).monospacedDigit().foregroundStyle(.secondary)
-            StageProgressDetails(stage: stage, fraction: fraction, elapsed: elapsed, remaining: remaining)
-        }.frame(height: 112)
+            }.frame(height: 44)
+        }.frame(width: 360)
     }
 }
 

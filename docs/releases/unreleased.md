@@ -7,3 +7,4 @@
 - Use standard HTTP streaming for Qwen, Parakeet and all Whisper model files so the received bytes and known file sizes share the same units. Report small incoming chunks against a stable manifest total, exclude already cached files where supported, and avoid counting the downloader's duplicate counters. Preserve pinned revisions and download validation; mark the model ready only after success.
 - Report CPU and MLX Whisper downloads as model preparation with byte counters, rather than displaying recognition timing while their weights are still downloading. Preserve backend model aliases, file filters, cache and offline behavior.
 - Move the processing privacy and media-preservation notes below Cancel, using smaller secondary text to keep progress and its action together.
+- Use one compact information area for preparation explanations, model download bytes and processing metrics, keeping Cancel in a fixed position as stages change.
