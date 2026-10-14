@@ -9,6 +9,7 @@ import tempfile
 from .models import WordTimestamp
 from .speech_chunks import CONTEXT_SECONDS, append_window_words, speech_windows
 from .model_downloads import ModelDownloadRequired
+from .download_progress import byte_progress_bar, download_snapshot
 from .transcription import file_hash
 from .utils import CensorError
 
@@ -23,28 +24,43 @@ BACKENDS = {value[0] for value in MODELS.values()}
 ROOT = Path(__file__).resolve().parents[1]
 
 
-def prepare(model, offline=True):
+def prepare(model, offline=True, progress=None):
     """Resolve pinned assets before inference; all runtime loaders receive local paths."""
+    notify = progress or (lambda label, fraction: None)
     backend, repo, revision = MODELS[model]
     if backend == "gigaam-mps":
+        notify("Checking GigaAM model", 0)
         os.environ["PYTORCH_ENABLE_MPS_FALLBACK"] = "0"
         folder = Path(os.environ.get("BLEEP_MODEL_CACHE", str(ROOT / ".cache"))) / "gigaam"
         files = [folder / f"{repo}.ckpt", folder / f"{repo}_tokenizer.model"]
         if not offline:
-            from gigaam import _download_model, _download_tokenizer
-            _download_model(repo, str(folder))
-            _download_tokenizer(repo, str(folder))
+            import gigaam
+            # GigaAM's pinned downloader exposes its byte counts through module tqdm.
+            # Each desktop worker prepares one model at a time; restore on every exit.
+            for path, name, download in [(files[0], "GigaAM", gigaam._download_model),
+                                         (files[1], "GigaAM tokenizer", gigaam._download_tokenizer)]:
+                if path.is_file():
+                    continue
+                notify(f"Connecting to download {name}", 0)
+                original = gigaam.tqdm
+                try:
+                    gigaam.tqdm = byte_progress_bar(f"Downloading {name}", notify)
+                    download(repo, str(folder))
+                finally:
+                    gigaam.tqdm = original
         if not all(path.is_file() for path in files):
             raise ModelDownloadRequired("GigaAM weights are not cached. Enable first-time model download.")
-        from huggingface_hub import snapshot_download
-        aligner = snapshot_download(ALIGNER[0], revision=ALIGNER[1], local_files_only=offline,
-                                   allow_patterns=["*.json", "*.safetensors", "*.txt", "*.model", "*.vocab"])
+        aligner = prepare_hub_asset(*ALIGNER, "Qwen ForcedAligner", offline, notify)
         return [str(folder), aligner]
+    name = {"parakeet-v3": "Parakeet v3", "parakeet-ultra": "Parakeet Ultra", "qwen3-asr": "Qwen3 ASR"}[model]
+    assets = [(repo, revision, name)] + ([(*ALIGNER, "Qwen ForcedAligner")] if model == "qwen3-asr" else [])
+    return [prepare_hub_asset(repo, rev, name, offline, notify) for repo, rev, name in assets]
+
+
+def prepare_hub_asset(repo, revision, name, offline, notify):
     from huggingface_hub import snapshot_download
-    assets = [(repo, revision)] + ([ALIGNER] if model == "qwen3-asr" else [])
-    return [snapshot_download(name, revision=rev, local_files_only=offline,
-                              allow_patterns=["*.json", "*.safetensors", "*.txt", "*.model", "*.vocab"])
-            for name, rev in assets]
+    return download_snapshot(snapshot_download, repo, name, offline, notify, revision=revision,
+                             allow_patterns=["*.json", "*.safetensors", "*.txt", "*.model", "*.vocab"])
 
 
 def cache_identity(source, model, audio_index, progress=None, language="ru"):
@@ -99,13 +115,14 @@ def merge_subwords(tokens):
 
 
 class ExperimentalGPUBackend:
-    def __init__(self, model, assets, language="ru"):
+    def __init__(self, model, assets, language="ru", stage=None):
         if language not in {"ru", "en"} or (model == "gigaam-v3" and language != "ru"):
             raise CensorError("Unsupported language for this model.")
         self.language = language
         self.model = model
         self.assets = assets
         self.metrics = {}
+        self.stage = stage or (lambda _: None)
 
     def transcribe(self, audio, progress):
         if self.model == "gigaam-v3":
@@ -117,12 +134,15 @@ class ExperimentalGPUBackend:
         mx.random.seed(0)
         with mx.stream(mx.gpu):
             if self.model.startswith("parakeet-"):
+                self.stage("Loading Parakeet model")
                 from parakeet_mlx import from_pretrained
                 model = from_pretrained(self.assets[0], dtype=mx.bfloat16)
+                self.stage("Recognizing speech")
                 result = model.transcribe(audio, chunk_duration=120, overlap_duration=15,
                                           chunk_callback=lambda current, total: progress(current / 16000))
                 return merge_subwords(result.tokens)
             from mlx_qwen3_asr import transcribe
+            self.stage("Loading Qwen model")
             result = transcribe(str(audio), model=self.assets[0], forced_aligner=self.assets[1],
                                 language={"ru": "Russian", "en": "English"}[self.language], return_timestamps=True, return_chunks=True,
                                 on_progress=lambda event: progress(event.get("processed_audio_sec", 0)))
@@ -142,12 +162,16 @@ class ExperimentalGPUBackend:
         if not torch.backends.mps.is_available():
             raise CensorError("Apple MPS GPU is unavailable; no CPU fallback is used.")
         torch.manual_seed(0)
+        self.stage("Loading GigaAM model")
         model = gigaam.load_model("v3_e2e_rnnt", device="mps", fp16_encoder=False,
                                   use_flash=False, download_root=self.assets[0])
+        self.stage("Loading word alignment model")
         aligner = WordAligner(self.assets[1])
+        self.stage("Preparing speech detection")
         data = decode_audio(str(audio), sampling_rate=16000)
         chunks = get_speech_timestamps(data, VadOptions(max_speech_duration_s=20))
         words = []
+        self.stage("Recognizing speech")
         with tempfile.TemporaryDirectory(prefix="bleep-gigaam-") as folder:
             path = Path(folder) / "chunk.wav"
             for window in speech_windows(chunks, len(data)):

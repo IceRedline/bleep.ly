@@ -77,6 +77,50 @@ class DesktopTests(unittest.TestCase):
             with self.assertRaisesRegex(CensorError, 'Russian or English'):
                 analyze(dict(source=str(self.source), language='de'))
 
+    def test_model_download_and_loading_progress_stay_on_protocol_output(self):
+        from censor import desktop
+        def prepare(*args, **kwargs):
+            kwargs['progress']('Downloading GigaAM — 40 / 100 MB', .4)
+            return ['/cached', '/aligner']
+        def transcribe(engine, audio, progress):
+            print('Library diagnostic')
+            engine.stage('Loading word alignment model')
+            progress(1)
+            return [WordTimestamp('бля', 1, 1.3)]
+        request = self.work / 'gpu-request.json'
+        request.write_text(json.dumps(dict(operation='analyze', source=str(self.source),
+            backend='gigaam-mps', model='gigaam-v3', cache_dir=str(self.work/'cache'))))
+        with patch('censor.experimental_gpu.prepare', side_effect=prepare), \
+                patch('censor.experimental_gpu.importlib.metadata.version', return_value='test'), \
+                patch('censor.desktop.ExperimentalGPUBackend.transcribe', autospec=True, side_effect=transcribe), \
+                patch('sys.argv', ['desktop', str(request)]), \
+                patch('censor.desktop.os.setsid'), patch('censor.desktop.signal.signal'), \
+                tempfile.TemporaryFile(mode='w+', encoding='utf-8') as protocol, \
+                contextlib.redirect_stdout(protocol), contextlib.redirect_stderr(io.StringIO()) as diagnostic:
+            status = desktop.main()
+            protocol.seek(0)
+            events = [json.loads(line) for line in protocol]
+        self.assertEqual(status, 0, events)
+        self.assertEqual(events[-1]['event'], 'result')
+        self.assertTrue(any(e.get('stage') == 'Downloading GigaAM — 40 / 100 MB' and e['fraction'] == .4 for e in events))
+        self.assertTrue(any(e.get('stage') == 'Loading word alignment model' for e in events))
+        self.assertIn('Library diagnostic', diagnostic.getvalue())
+
+    def test_worker_with_empty_models_reports_progress_then_download_consent(self):
+        import os
+        request = self.work / 'missing-model-request.json'
+        request.write_text(json.dumps(dict(operation='analyze', source=str(self.source),
+            backend='gigaam-mps', model='gigaam-v3', offline=True, cache_dir=str(self.work/'cache'))))
+        result = subprocess.run([sys.executable, '-m', 'censor.desktop', str(request)],
+            env={**os.environ, 'BLEEP_MODEL_CACHE': str(self.work/'empty-models')},
+            capture_output=True, text=True, timeout=30)
+        self.assertEqual(result.returncode, 1, result.stderr)
+        events = [json.loads(line) for line in result.stdout.splitlines()]
+        self.assertTrue(any(e.get('stage') == 'Preparing speech model' for e in events), events)
+        self.assertEqual(events[-1]['event'], 'error')
+        self.assertEqual(events[-1].get('code'), 'model_download_required', events)
+        self.assertTrue(all('_output' not in e for e in events))
+
     def test_app_updates_and_reinstalls_invalidate_every_recognizer_cache(self):
         from censor.experimental_gpu import MODELS
         choices = [('faster-whisper', 'large-v3'), ('mlx', 'large-v3'),
@@ -246,6 +290,32 @@ class DesktopTests(unittest.TestCase):
                     self.assertEqual(engine.call_args.args[0], resolved)
                     self.assertTrue(analyze(request)['cache_hit'])
                 self.assertEqual(engine.call_count, 2)
+
+    def test_whisper_downloads_use_model_stages_before_recognition(self):
+        from types import SimpleNamespace
+        def download(repo, **options):
+            if options.get('dry_run'):
+                return [SimpleNamespace(will_download=True, file_size=2_000_000)]
+            with options['tqdm_class'](total=2_000_000, unit='B', desc='weights') as bar:
+                bar.update(2_000_000)
+            return '/cached/model'
+        def transcribe(audio, progress):
+            from huggingface_hub import snapshot_download
+            snapshot_download('test/whisper', local_files_only=False)
+            progress(1)
+            return [WordTimestamp('бля', 1, 1.3)]
+        for backend, target in [('faster-whisper', 'FasterWhisperBackend'), ('mlx', 'MLXWhisperBackend')]:
+            with self.subTest(backend=backend), \
+                 patch('huggingface_hub.snapshot_download', side_effect=download), \
+                 patch('censor.desktop.' + target + '.transcribe', side_effect=transcribe), \
+                 contextlib.redirect_stdout(io.StringIO()) as protocol:
+                analyze(dict(source=str(self.source), backend=backend, cache_dir=str(self.work / backend)))
+            events = [json.loads(line) for line in protocol.getvalue().splitlines()]
+            stages = [event['stage'] for event in events if event.get('event') == 'progress']
+            downloaded = next(i for i, stage in enumerate(stages) if stage.startswith('Downloading Whisper') and '2.0 / 2.0 MB' in stage)
+            recognized = next(i for i, stage in enumerate(stages) if stage == 'Recognizing speech')
+            self.assertLess(downloaded, recognized)
+            self.assertTrue(stages[recognized - 1].startswith('Loading Whisper'))
 
     def test_json_protocol_and_video_stream_copy(self):
         source = self.work / 'video.mov'

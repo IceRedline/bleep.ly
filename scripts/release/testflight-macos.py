@@ -131,6 +131,7 @@ def prepare(args):
                 DTXcode=xcode_number, DTXcodeBuild=xcode[1].split()[-1],
                 DTCompiler='com.apple.compilers.llvm.clang.1_0', BuildMachineOSBuild=command('sw_vers', '-buildVersion'))
     (app/'Contents/Info.plist').write_bytes(plistlib.dumps(info))
+    subprocess.run(['bash', str(ROOT/'scripts/build-theme.sh'), str(app)], check=True)
     manifest = dict(source_app=str(source), app_source_commit=source_commit, runtime_origin=runtime_origin,
                     engine=json.loads((app/'Contents/Resources/Engine/runtime.json').read_text()),
                     build=args.build_number, version=info['CFBundleShortVersionString'],

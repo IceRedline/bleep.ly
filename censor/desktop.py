@@ -30,11 +30,12 @@ from .experimental_gpu import BACKENDS as GPU_BACKENDS, ExperimentalGPUBackend
 # Approved beep_trimmed.wav timing, independent of the subsequently selected cue.
 MUTE_CAP = 0.383021
 PROTOCOL = 1
+_protocol_output = None
 
 
-def emit(event: str, **payload):
+def emit(event: str, *, _output=None, **payload):
     print(json.dumps({"version": PROTOCOL, "event": event, **payload}, ensure_ascii=False,
-                     allow_nan=False), flush=True)
+                     allow_nan=False), flush=True, file=_output if _output is not None else _protocol_output)
 
 
 def progress(stage, duration):
@@ -105,8 +106,9 @@ def analyze_track(request):
     info = media_info(source, stream, allow_audio=True)
     info = replace(info, duration=request.get("_duration", info.duration))
     prefix = request.get("_track_label", "")
+    protocol_output = sys.stdout
     def report(label, fraction):
-        emit("progress", stage=prefix + label, fraction=fraction, duration=info.duration)
+        emit("progress", stage=prefix + label, fraction=fraction, duration=info.duration, _output=protocol_output)
     def tracking(label, length):
         return progress(prefix + label, length)
     signature = fingerprint(source)
@@ -130,9 +132,10 @@ def analyze_track(request):
                 raise CensorError("Selected experimental model does not match its GPU backend.")
             if model == "gigaam-v3" and language != "ru":
                 raise CensorError("GigaAM v3 supports Russian only. Choose Whisper for English.")
-            report("Preparing experimental model", 0)
-            assets = prepare(model, offline=request.get("offline", True))
-            native_engine = ExperimentalGPUBackend(model, assets, language=language)
+            report("Preparing speech model", 0)
+            assets = prepare(model, offline=request.get("offline", True), progress=report)
+            native_engine = ExperimentalGPUBackend(model, assets, language=language,
+                                                    stage=lambda label: report(label, 0))
             key, metadata = gpu_cache_identity(source, model, info.audio_index,
                                                tracking("Reading media", source.stat().st_size), language=language)
         elif backend == "whisperkit":
@@ -169,18 +172,25 @@ def analyze_track(request):
             with tempfile.TemporaryDirectory(prefix="bleep-speech-") as folder:
                 audio = Path(folder) / "speech.wav"
                 extract_audio(source, audio, info, tracking("Preparing audio", info.duration))
-                callback = tracking("Recognizing speech", info.duration)
+                callback = None
                 protocol_output = sys.stdout
                 def inference_progress(seconds):
                     # Library stdout is redirected, but app progress must stay on the protocol pipe.
+                    nonlocal callback
                     with contextlib.redirect_stdout(protocol_output):
+                        if callback is None:
+                            callback = tracking("Recognizing speech", info.duration)
                         callback(seconds)
                 engine = MLXWhisperBackend if backend == "mlx" else FasterWhisperBackend
                 # Some inference libraries print to stdout; keep the protocol clean.
                 with contextlib.redirect_stdout(sys.stderr):
                     transcriber = native_engine if backend == "whisperkit" or backend in GPU_BACKENDS else engine(model, language, compute, request.get("offline", True))
                     recognition_started = time.perf_counter()
-                    raw = transcriber.transcribe(audio, inference_progress)
+                    from .download_progress import reported_hub_downloads
+                    preparation = (reported_hub_downloads(f"Whisper {model.rsplit('/', 1)[-1]}", report)
+                                   if backend in {"faster-whisper", "mlx"} else contextlib.nullcontext())
+                    with preparation:
+                        raw = transcriber.transcribe(audio, inference_progress)
                     recognition_seconds = time.perf_counter() - recognition_started
                 if backend == "whisperkit" or backend in GPU_BACKENDS:
                     metadata["native_metrics"] = native_engine.metrics
@@ -332,11 +342,10 @@ def _main():
         os.setsid()
     signal.signal(signal.SIGTERM, lambda *_: (_ for _ in ()).throw(KeyboardInterrupt()))
     # Keep a dedicated protocol stream even while third-party stdout is redirected.
-    global emit
-    protocol_output = sys.stdout
-    def emit(event, **payload):
-        print(json.dumps({"version": PROTOCOL, "event": event, **payload}, ensure_ascii=False,
-                         allow_nan=False), file=protocol_output, flush=True)
+    # Use the same emitter as direct calls so stream arguments cannot enter JSON.
+    global _protocol_output
+    previous_output = _protocol_output
+    _protocol_output = sys.stdout
     request = {}
     try:
         request = json.loads(Path(sys.argv[1]).read_text())
@@ -369,6 +378,8 @@ def _main():
         else:
             emit("error", message=str(exc))
         return 1
+    finally:
+        _protocol_output = previous_output
 
 
 if __name__ == "__main__":

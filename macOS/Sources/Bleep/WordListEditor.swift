@@ -109,7 +109,7 @@ struct WordListEditor: View {
                     catch { self.error = error.localizedDescription }
                 }.keyboardShortcut(.defaultAction).disabled(drafts.count != VideoLanguage.allCases.count)
             }
-        }.padding(24).frame(width: 620, height: 660)
+        }.padding(24).frame(width: 620, height: 660).tint(.mint)
             .onAppear {
                 do {
                     for language in VideoLanguage.allCases {

@@ -3,6 +3,180 @@ import SwiftUI
 @testable import Bleep
 
 final class ProgressAndContextTests: XCTestCase {
+    @MainActor
+    private func hasLaidOutNativeBar(_ view: NSView) -> Bool {
+        if let bar = view as? NSProgressIndicator, bar.style == .bar,
+           !bar.isHiddenOrHasHiddenAncestor, !bar.visibleRect.isEmpty {
+            return true
+        }
+        return view.subviews.contains(where: hasLaidOutNativeBar)
+    }
+
+    @MainActor
+    func testEveryProcessingStageHasExactlyOneIndicator() async throws {
+        let samples: [(String, Double, Bool)] = [
+            ("Downloading Qwen ForcedAligner — 541.2 / 1840.0 MB", 0.294, false),
+            ("Downloading GigaAM — 0 MB downloaded", 0, false),
+            ("Recognizing speech", 0.45, false),
+            ("Recognizing speech", 0, false),
+            ("Exporting audio", 0.65, true),
+            ("Exporting video", 0.25, true),
+            ("Loading word alignment model", 0, false),
+            ("Reading media", 0, false),
+            ("Preparing audio", 0.3, false),
+            ("Preparing preview", 0, false),
+            ("Checking Qwen download size", 0, false),
+            ("Connecting to download GigaAM", 0, false),
+            ("", 0, false)
+        ]
+        for (stage, fraction, exporting) in samples {
+            let host = NSHostingView(rootView: ProcessingProgressView(stage: stage, fraction: fraction,
+                elapsed: 35, remaining: 60, sourceName: "Stream.m4a", exporting: exporting)
+                .frame(width: 620, height: 520).background(Color(red: 0.06, green: 0.09, blue: 0.14))
+                .environment(\.colorScheme, .dark))
+            host.frame = NSRect(x: 0, y: 0, width: 620, height: 520)
+            host.layoutSubtreeIfNeeded()
+            let bitmap = try XCTUnwrap(host.bitmapImageRepForCachingDisplay(in: host.bounds))
+            host.cacheDisplay(in: host.bounds, to: bitmap)
+            // Inspect the rendered pixels outside the central icon. Only the
+            // indicator is mint there: ring above the midpoint, bar below it.
+            // This catches both duplicate indicators and entirely empty stages.
+            var upper = false, lower = false
+            for y in stride(from: 0, to: bitmap.pixelsHigh, by: 2) {
+                for x in stride(from: 0, to: bitmap.pixelsWide, by: 2) {
+                    guard abs(Double(x) / Double(bitmap.pixelsWide) - 0.5) * 620 > 35,
+                          let color = bitmap.colorAt(x: x, y: y)?.usingColorSpace(.deviceRGB),
+                          color.redComponent < 0.3, color.greenComponent > 0.55, color.blueComponent > 0.4 else { continue }
+                    if y < bitmap.pixelsHigh / 2 { upper = true } else { lower = true }
+                }
+            }
+            XCTAssertEqual(upper, !stage.hasPrefix("Downloading "), stage)
+            // Sequoia uses a native indeterminate bar whose animation does not
+            // paint mint pixels in an offscreen snapshot. Check that this real
+            // control is laid out and visible, without depending on its tint.
+            XCTAssertEqual(lower || hasLaidOutNativeBar(host), stage.hasPrefix("Downloading "), stage)
+        }
+        let grid = NSHostingView(rootView: VStack(spacing: 28) {
+            ForEach(0..<2) { row in
+                HStack(spacing: 28) {
+                    ForEach(0..<3) { column in
+                        let item = samples[[0, 2, 4, 1, 6, 7][row * 3 + column]]
+                        ProcessingProgressView(stage: item.0, fraction: item.1, elapsed: 35, remaining: 60,
+                                               sourceName: "Stream.m4a", exporting: item.2)
+                            .frame(width: 560, height: 430)
+                    }
+                }
+            }
+        }.padding(28).background(Color(red: 0.06, green: 0.09, blue: 0.14))
+            .environment(\.colorScheme, .dark))
+        grid.frame = NSRect(origin: .zero, size: grid.fittingSize)
+        grid.layoutSubtreeIfNeeded()
+        let bitmap = try XCTUnwrap(grid.bitmapImageRepForCachingDisplay(in: grid.bounds))
+        grid.cacheDisplay(in: grid.bounds, to: bitmap)
+        let folder = URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent()
+            .deletingLastPathComponent().deletingLastPathComponent().appendingPathComponent(".cache/macos-previews")
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        try XCTUnwrap(bitmap.representation(using: .png, properties: [:]))
+            .write(to: folder.appendingPathComponent("single-processing-indicator.png"))
+    }
+
+    func testDownloadCountersKeepTheirStageAndUseMeasuredSpeedWithoutFakeProgress() throws {
+        var progress = StageProgress()
+        progress.report("Checking GigaAM model", fraction: 0, now: 0)
+        XCTAssertTrue(StageProgress.isIndeterminate(progress.stage, fraction: progress.displayed))
+        progress.report("Track 1/2 · Downloading GigaAM — 0 / 100 MB", fraction: 0, now: 5)
+        progress.report("Track 1/2 · Downloading GigaAM — 10 / 100 MB", fraction: 0.1, now: 7)
+        XCTAssertNil(progress.remaining(now: 7))
+        progress.report("Track 1/2 · Downloading GigaAM — 30 / 100 MB", fraction: 0.3, now: 9)
+        XCTAssertEqual(progress.stage, "Track 1/2 · Downloading GigaAM")
+        XCTAssertEqual(progress.started, 5)
+        XCTAssertEqual(try XCTUnwrap(progress.remaining(now: 9)), 7, accuracy: 0.001)
+        progress.advance(now: 12)
+        XCTAssertEqual(progress.displayed, 0.3)
+        XCTAssertFalse(progress.estimated)
+        XCTAssertNil(progress.remaining(now: 30), "A stalled transfer must not keep counting down")
+        XCTAssertFalse(StageProgress.isIndeterminate("Downloading GigaAM — 0 / 100 MB", fraction: 0))
+        XCTAssertTrue(StageProgress.isIndeterminate("Downloading GigaAM — 50 MB", fraction: 0))
+    }
+
+    func testDownloadETAExcludesResumeOffsetAndResetsAfterRetry() throws {
+        var progress = StageProgress()
+        progress.report("Downloading Qwen — 750 / 1000 MB", fraction: 0.75, now: 10)
+        XCTAssertNil(progress.remaining(now: 10))
+        progress.report("Downloading Qwen — 800 / 1000 MB", fraction: 0.8, now: 15)
+        XCTAssertEqual(try XCTUnwrap(progress.remaining(now: 15)), 20, accuracy: 0.001)
+        progress.report("Downloading Qwen — 200 / 1000 MB", fraction: 0.2, now: 16)
+        XCTAssertEqual(progress.displayed, 0.2)
+        XCTAssertNil(progress.remaining(now: 16))
+        progress.report("Downloading Qwen — 300 / 1000 MB", fraction: 0.3, now: 17)
+        XCTAssertEqual(try XCTUnwrap(progress.remaining(now: 17)), 7, accuracy: 0.001)
+        progress.report("Downloading Qwen — 1000 / 1000 MB", fraction: 1, now: 18)
+        XCTAssertEqual(progress.remaining(now: 18), 0)
+        progress.report("Loading word alignment model", fraction: 0, now: 19)
+        progress.advance(now: 34)
+        XCTAssertTrue(StageProgress.isIndeterminate(progress.stage, fraction: progress.displayed))
+        XCTAssertNil(progress.remaining(now: 34))
+    }
+
+    func testNetworkDownloadBytesKeepTimerWithoutInventingPercentOrETA() {
+        var progress = StageProgress()
+        for (time, bytes) in [(10.0, "0.0"), (15.0, "25.4"), (20.0, "61.2")] {
+            let label = "Track 1/2 · Downloading Qwen ForcedAligner — \(bytes) MB downloaded"
+            progress.report(label, fraction: 0, now: time)
+            progress.advance(now: time + 2)
+            XCTAssertEqual(progress.started, 10)
+            XCTAssertTrue(StageProgress.isDownloading(label))
+            XCTAssertTrue(StageProgress.isIndeterminate(label, fraction: progress.displayed))
+            XCTAssertEqual(StageProgress.downloadDetail(label), "\(bytes) MB downloaded")
+            XCTAssertEqual(progress.displayed, 0)
+            XCTAssertNil(progress.remaining(now: time + 2))
+        }
+    }
+
+    @MainActor
+    func testProcessingInformationKeepsSameSizeAcrossStages() throws {
+        let samples: [(String, Double, Double, Double?)] = [
+            ("Checking GigaAM model", 0, 15, nil),
+            ("Downloading GigaAM — 204.5 / 448.9 MB", 0.455, 34, 60),
+            ("Downloading Qwen ForcedAligner — 541.2 / 1840.0 MB", 0.294, 200, 60),
+            ("Loading word alignment model", 0, 12, nil),
+            ("Reading media", 0, 2, nil),
+            ("Recognizing speech", 0, 1, nil),
+            ("Recognizing speech", 0.45, 35, 60),
+            ("Exporting audio", 0.65, 35, 30)
+        ]
+        var expected: NSSize?
+        for (stage, fraction, elapsed, remaining) in samples {
+            let host = NSHostingView(rootView: StageProgressIndicator(stage: stage, fraction: fraction, elapsed: elapsed, remaining: remaining))
+            let size = host.fittingSize
+            XCTAssertEqual(size.height, 88)
+            if let expected { XCTAssertEqual(size, expected) } else { expected = size }
+        }
+        for name in ["Whisper Large v3", "WhisperKit", "Parakeet v3", "Qwen3 ASR", "GigaAM tokenizer"] {
+            XCTAssertTrue(StageProgress.isModelPreparation("Track 1/2 · Downloading \(name) — 10 / 100 MB"))
+            XCTAssertTrue(StageProgress.isModelPreparation("Checking \(name) download size"))
+        }
+        XCTAssertFalse(StageProgress.isModelPreparation("Recognizing speech"))
+        XCTAssertFalse(StageProgress.isModelPreparation("Exporting audio"))
+        let host = NSHostingView(rootView: VStack(spacing: 28) {
+            ForEach(samples.indices, id: \.self) { index in
+                let item = samples[index]
+                StageProgressIndicator(stage: item.0, fraction: item.1, elapsed: item.2, remaining: item.3)
+            }
+        }.padding(32).frame(width: 560, height: 1040).background(Color(red: 0.06, green: 0.09, blue: 0.14))
+            .environment(\.colorScheme, .dark))
+        host.frame = NSRect(x: 0, y: 0, width: 560, height: 1040)
+        host.layoutSubtreeIfNeeded()
+        let bitmap = try XCTUnwrap(host.bitmapImageRepForCachingDisplay(in: host.bounds))
+        host.cacheDisplay(in: host.bounds, to: bitmap)
+        let root = URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent()
+            .deletingLastPathComponent().deletingLastPathComponent()
+        let folder = root.appendingPathComponent(".cache/macos-previews")
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        try XCTUnwrap(bitmap.representation(using: .png, properties: [:]))
+            .write(to: folder.appendingPathComponent("model-download-progress.png"))
+    }
+
     func testSparseProgressMovesButOnlyWorkerCanComplete() {
         var progress = StageProgress()
         progress.duration = 100

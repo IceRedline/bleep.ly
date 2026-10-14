@@ -11,6 +11,7 @@ from pathlib import Path
 
 from .models import WordTimestamp
 from .model_downloads import ModelDownloadRequired
+from .download_progress import sized_model_downloads
 from .transcription import file_hash
 from .utils import CensorError, write_json
 
@@ -106,11 +107,12 @@ def prepare_assets(folder: Path, offline=True, progress=None):
                 last_update = now
 
     report(0)
-    with tempfile.TemporaryDirectory(prefix='bleep-wk-download-', dir=folder.parent) as work:
+    with sized_model_downloads(), tempfile.TemporaryDirectory(prefix='bleep-wk-download-', dir=folder.parent) as work:
         for repo, revision, name, size in files:
             def transferred(count, file_size=size):
                 report(min(file_size, max(0, count)))
             hf_hub_download(repo, name, revision=revision, local_dir=work,
+                            headers={'Accept-Encoding': 'identity'},
                             tqdm_class=download_progress_bar(transferred))
             completed += size
             report(0)

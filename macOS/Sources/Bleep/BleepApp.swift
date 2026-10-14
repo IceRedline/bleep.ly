@@ -132,6 +132,7 @@ struct SettingsView: View {
             }
         }
         .formStyle(.grouped).padding(16).frame(width: 590, height: 550)
+        .tint(.mint)
         .onAppear { WhisperKitExperiment.migratePreferences(defaults: .standard) }
         .sheet(isPresented: $showWordLists) {
             WordListEditor(root: RuntimePaths.bundledRoot ?? URL(fileURLWithPath: projectRoot), language: VideoLanguage(rawValue: videoLanguage) ?? .russian)

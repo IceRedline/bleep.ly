@@ -32,14 +32,15 @@ with (Path(app) / 'Contents/Info.plist').open('wb') as file:
         'CFBundleDisplayName': 'bleep.ly',
         'CFBundlePackageType': 'APPL',
         'CFBundleIconFile': 'AppIcon',
-        'CFBundleShortVersionString': '0.4.0',
-        'CFBundleVersion': '5',
+        'CFBundleShortVersionString': '0.1.7',
+        'CFBundleVersion': '16',
         'BleepBuildID': str(uuid.uuid4()),
         'LSMinimumSystemVersion': '14.0',
         'NSHighResolutionCapable': True,
         'BleepProjectRoot': root,
     }, file)
 PY
+bash scripts/build-theme.sh "$APP"
 mkdir -p "$APP/Contents/Helpers"
 cp .cache/whisperkit-build/release/BleepWhisperKit "$APP/Contents/Helpers/BleepWhisperKit"
 codesign --force --sign - "$APP/Contents/Helpers/BleepWhisperKit"

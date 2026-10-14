@@ -46,6 +46,7 @@ struct ContentView: View {
             }.padding(30)
         }
         .background(WindowChrome())
+        .environment(\.colorScheme, .dark)
         .preferredColorScheme(.dark)
         .tint(.mint)
         .frame(minWidth: 880, minHeight: 690)
@@ -160,26 +161,15 @@ struct ContentView: View {
     private var processing: some View {
         VStack(spacing: 28) {
             Spacer()
-            ZStack {
-                Circle().stroke(.white.opacity(0.08), lineWidth: 8)
-                Circle().trim(from: 0, to: StageProgress.isReadingMedia(model.stage) ? 0 : max(0.015, model.fraction))
-                    .stroke(.mint, style: StrokeStyle(lineWidth: 8, lineCap: .round)).rotationEffect(.degrees(-90))
-                    .animation(reduceMotion ? nil : .easeOut(duration: 0.2), value: model.fraction)
-                Image(systemName: model.phase == .exporting ? "arrow.up.doc" : "waveform")
-                    .font(.system(size: 44, weight: .light)).foregroundStyle(.mint)
-            }.frame(width: 140, height: 140)
-            VStack(spacing: 10) {
-                Text(model.phase == .exporting ? "Making the clean cut." : "Listening for the little slips.")
-                    .font(.system(size: 30, weight: .semibold)).tracking(-0.7)
-                Text(model.sourceName).foregroundStyle(.secondary)
+            ProcessingProgressView(stage: model.stage, fraction: model.fraction, elapsed: model.stageElapsed,
+                                   remaining: model.stageRemaining, sourceName: model.sourceName,
+                                   exporting: model.phase == .exporting)
+            VStack(spacing: 14) {
+                Button("Cancel", action: model.cancel).disabled(model.cancelling)
+                Text(model.phase == .analyzing ? "Audio stays on your Mac. First-time model downloads can take several minutes." : "Your review and original media are kept intact.")
+                    .font(.caption).foregroundStyle(.secondary)
+                    .multilineTextAlignment(.center).frame(maxWidth: 560)
             }
-            VStack(spacing: 8) {
-                Text(model.stage).font(.headline)
-                StageProgressDetails(stage: model.stage, fraction: model.fraction, elapsed: model.stageElapsed, remaining: model.stageRemaining)
-            }.frame(height: 72)
-            Text(model.phase == .analyzing ? "Audio stays on your Mac. The first model load can take a moment." : "Your review and original media are kept intact.")
-                .font(.callout).foregroundStyle(.secondary)
-            Button("Cancel", action: model.cancel).disabled(model.cancelling)
             Spacer()
         }.frame(maxWidth: .infinity)
     }
@@ -387,7 +377,7 @@ struct ContentView: View {
 
     private var previewPreparation: some View {
         VStack(spacing: 8) {
-            ProgressView().controlSize(.small)
+            ProgressView().progressViewStyle(.circular).controlSize(.small)
             Text(model.previewPreparation).font(.caption).monospacedDigit().multilineTextAlignment(.center)
         }.padding(12).background(.black.opacity(0.75), in: RoundedRectangle(cornerRadius: 10))
     }
@@ -466,7 +456,7 @@ struct IntervalEditor: View {
                     dismiss()
                 }.buttonStyle(.borderedProminent).disabled(!valid).keyboardShortcut(.defaultAction)
             }
-        }.padding(28).frame(width: 450)
+        }.padding(28).frame(width: 450).tint(.mint)
             .onAppear {
                 label = word?.word ?? ""
                 start = word?.muteStart ?? min(model.playhead, max(0, (model.document?.duration ?? 1) - 0.1))

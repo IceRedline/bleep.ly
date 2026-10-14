@@ -5,6 +5,10 @@ import SwiftUI
 @MainActor
 final class WindowLayoutTests: XCTestCase {
     func testDropZoneStaysFixedAndNativeTitlebarIsTransparent() async throws {
+        let application = NSApplication.shared
+        let previousAppearance = application.appearance
+        application.appearance = NSAppearance(named: .aqua)
+        defer { application.appearance = previousAppearance }
         let suite = "layout-\(UUID())"
         let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
         defer { defaults.removePersistentDomain(forName: suite) }
@@ -24,7 +28,6 @@ final class WindowLayoutTests: XCTestCase {
                 .onPreferenceChange(DropZoneFrameKey.self) { dropFrame = $0 })
             let window = NSWindow(contentRect: NSRect(origin: .zero, size: size),
                                   styleMask: [.titled, .closable, .miniaturizable, .resizable], backing: .buffered, defer: false)
-            window.appearance = NSAppearance(named: .darkAqua)
             window.contentView = host
             window.orderFront(nil)
             defer { window.orderOut(nil) }
@@ -36,10 +39,16 @@ final class WindowLayoutTests: XCTestCase {
             XCTAssertEqual(window.titleVisibility, .hidden)
             XCTAssertTrue(window.styleMask.contains(.fullSizeContentView))
             XCTAssertNotNil(window.standardWindowButton(.closeButton))
+            XCTAssertEqual(window.effectiveAppearance.bestMatch(from: [.aqua, .darkAqua]), .darkAqua,
+                           "Native controls must match the dark canvas when macOS is light")
             for mode in [WorkflowMode.fast, .advanced] {
                 model.selectMode(mode)
                 try await Task.sleep(nanoseconds: 350_000_000)
                 host.layoutSubtreeIfNeeded()
+                for appearance in [NSAppearance.Name.darkAqua, .aqua] {
+                    application.appearance = NSAppearance(named: appearance)
+                    XCTAssertEqual(window.effectiveAppearance.bestMatch(from: [.aqua, .darkAqua]), .darkAqua)
+                }
                 XCTAssertEqual(dropFrame, fast, "Drop target must stay anchored when toggling modes")
                 let frame = try XCTUnwrap(host.superview)
                 let bitmap = try XCTUnwrap(frame.bitmapImageRepForCachingDisplay(in: frame.bounds))
