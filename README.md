@@ -8,7 +8,7 @@ Local speech recognition and profanity censoring for Russian video and audio, wi
 
 ## Download for macOS
 
-The [v0.1.5 release](https://github.com/IceRedline/bleep.ly/releases/tag/v0.1.5)
+The [v0.1.6 release](https://github.com/IceRedline/bleep.ly/releases/tag/v0.1.6)
 provides a self-contained DMG for **Apple Silicon, macOS 15.0 or later**.
 Open the DMG and drag **bleep.ly** to **Applications**.
 Python, FFmpeg and the recognition engines are included; Homebrew and this
@@ -134,6 +134,14 @@ choices are GPU-only; unavailable GPU support produces an error without CPU
 fallback. See [GPU comparison](experiments/gpu-models.md) for pinned weights,
 timestamps, and the full-file benchmark command.
 
+GigaAM uses overlapping speech windows to retain words at chunk boundaries, then
+Qwen3-ForcedAligner refines their timing against the audio. GigaAM therefore also
+downloads the pinned aligner weights (about 1.84 GB), through the same first-use
+download permission. Ambiguous alignments are retried with local context; words
+that still cannot be located reliably keep their original timing for review.
+Alignment retry/fallback counts are recorded in recognition history. This does
+not change existing reviews, manual mute intervals, or custom-cue playback.
+
 On the initial 19.93-second local reference using Turbo, MLX found 4/4 reviewed occurrences in three runs; CPU found 3/4; WhisperKit found 2/4, 3/4, and 3/4. This small sample is insufficient for a general quality ranking. WhisperKit remains experimental. See the [WhisperKit setup and reproducible benchmark](experiments/README.md).
 
 For development, `requirements.txt` already includes the Python dependencies for
@@ -243,6 +251,6 @@ Code lives in `censor/`, the SwiftUI app in `macOS/`, the experimental native he
 
 ## Limitations
 
-Recognition can miss words or place approximate boundaries, especially with music, overlapping voices, shouting, or fast speech. Review important material in Advanced and listen to the export. Muting affects the entire selected track, including music; this does not separate voices from a mixed recording. After analysis, **Preview with censorship** automatically prepares a temporary WAV using the export mixer. Original playback remains available while preparation runs; ready audio replaces it at the current position. The video is never copied or re-encoded. Completed Beep, Silence, and Custom variants are cached per track, so switching back does not render again. Word and timing edits patch only the affected audio windows, including fades and complete cue tails, instead of rendering the full recording again. Source audio is decoded once per track for the session. The current prepared preview stays playable while an edit is applied; the updated version replaces it at the current position. A different custom cue prepares its own variant. The session retains decoded source audio and up to eight recent preview variants, uses copy-on-write snapshots on APFS, and clears them on Home, a new source, or normal app exit. Preview audio has a 7 GiB session budget; older variants and decoded tracks are removed first. A preview that cannot fit the budget or leave 1 GiB of disk space shows an error while original playback and export remain available. Abandoned processing folders are cleaned up after a crash. Recognition cache and history share a 256 MiB budget and a 30-day retention period, enforced before and after analysis. Reusing a transcript refreshes its retention date. These limits do not delete models, original recordings, exports, custom sounds, or the saved review. The checkbox affects listening only; exports always apply the reviewed censoring. **Play export** opens the exported file.
+Recognition can miss words or place approximate boundaries, especially with music, overlapping voices, shouting, or fast speech. Review important material in Advanced and listen to the export. Muting affects the entire selected track, including music; this does not separate voices from a mixed recording. After analysis, **Preview with censorship** automatically prepares a temporary WAV using the export mixer. Original playback remains available while preparation runs; ready audio replaces it at the current position. The video is never copied or re-encoded. Completed Beep, Silence, and Custom variants are cached per track, so switching back does not render again. Word and timing edits patch only the affected audio windows, including fades and complete cue tails, instead of rendering the full recording again. Source audio is decoded once per track for the session. The current prepared preview stays playable while an edit is applied; the updated version replaces it at the current position. A different custom cue prepares its own variant. The session retains decoded source audio and up to eight recent preview variants, uses copy-on-write snapshots on APFS, and clears them on Home, a new source, or normal app exit. Preview audio has a 7 GiB session budget; older variants and decoded tracks are removed first. A preview that cannot fit the budget or leave 1 GiB of disk space shows an error while original playback and export remain available. Abandoned processing folders are cleaned up after a crash. Recognition cache and history share a 256 MiB budget and a 30-day retention period, enforced before and after analysis. Reusing a transcript refreshes its retention date. These limits do not delete models, original recordings, exports, custom sounds, or the saved review. The checkbox affects listening only; exports always apply the reviewed censoring. **Play export** opens the exported file. Desktop exports decode each track once and mix censorship in one-second blocks, processing only active intervals and sound tails. Single-track WAV export streams directly to its destination without a full-length intermediate; video and multitrack exports retain independent track processing and video stream copy.
 
 Waveform zoom remains future work.

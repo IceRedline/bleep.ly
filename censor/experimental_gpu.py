@@ -7,6 +7,7 @@ from pathlib import Path
 import tempfile
 
 from .models import WordTimestamp
+from .speech_chunks import CONTEXT_SECONDS, append_window_words, speech_windows
 from .model_downloads import ModelDownloadRequired
 from .transcription import file_hash
 from .utils import CensorError
@@ -35,7 +36,10 @@ def prepare(model, offline=True):
             _download_tokenizer(repo, str(folder))
         if not all(path.is_file() for path in files):
             raise ModelDownloadRequired("GigaAM weights are not cached. Enable first-time model download.")
-        return [str(folder)]
+        from huggingface_hub import snapshot_download
+        aligner = snapshot_download(ALIGNER[0], revision=ALIGNER[1], local_files_only=offline,
+                                   allow_patterns=["*.json", "*.safetensors", "*.txt", "*.model", "*.vocab"])
+        return [str(folder), aligner]
     from huggingface_hub import snapshot_download
     assets = [(repo, revision)] + ([ALIGNER] if model == "qwen3-asr" else [])
     return [snapshot_download(name, revision=rev, local_files_only=offline,
@@ -62,10 +66,15 @@ def cache_identity(source, model, audio_index, progress=None, language="ru"):
                     decoder="greedy", seed=0)
     for dependency in ["torch" if backend == "gigaam-mps" else "mlx", "numpy", "faster-whisper"]:
         metadata[dependency + "_version"] = importlib.metadata.version(dependency)
-    if model == "qwen3-asr":
+    if model in {"qwen3-asr", "gigaam-v3"}:
         metadata.update(aligner_model=ALIGNER[0], aligner_revision=ALIGNER[1])
     if backend == "gigaam-mps":
         metadata["backend_revision"] = "7447938d791c4f3e643386ee22c33777004293a5"
+        metadata.update(adapter_version=3, context_seconds=CONTEXT_SECONDS,
+                        overlap_seconds=2 * CONTEXT_SECONDS, stitching="midpoint-ownership-v1",
+                        alignment="qwen-bounded-retry-v1",
+                        mlx_version=importlib.metadata.version("mlx"),
+                        aligner_backend_version=importlib.metadata.version("mlx-qwen3-asr"))
     # Keep existing Russian benchmark caches usable; separate English detection runs.
     if language != "ru" and backend == "parakeet-mlx":
         metadata["detection_language"] = language
@@ -96,6 +105,7 @@ class ExperimentalGPUBackend:
         self.language = language
         self.model = model
         self.assets = assets
+        self.metrics = {}
 
     def transcribe(self, audio, progress):
         if self.model == "gigaam-v3":
@@ -128,21 +138,28 @@ class ExperimentalGPUBackend:
         import soundfile as sf
         from faster_whisper.audio import decode_audio
         from faster_whisper.vad import get_speech_timestamps, VadOptions
+        from .word_alignment import WordAligner
         if not torch.backends.mps.is_available():
             raise CensorError("Apple MPS GPU is unavailable; no CPU fallback is used.")
         torch.manual_seed(0)
         model = gigaam.load_model("v3_e2e_rnnt", device="mps", fp16_encoder=False,
                                   use_flash=False, download_root=self.assets[0])
+        aligner = WordAligner(self.assets[1])
         data = decode_audio(str(audio), sampling_rate=16000)
         chunks = get_speech_timestamps(data, VadOptions(max_speech_duration_s=20))
         words = []
         with tempfile.TemporaryDirectory(prefix="bleep-gigaam-") as folder:
             path = Path(folder) / "chunk.wav"
-            for chunk in chunks:
-                sf.write(path, data[chunk["start"]:chunk["end"]], 16000, subtype="FLOAT")
+            for window in speech_windows(chunks, len(data)):
+                segment = data[window.start:window.end]
+                sf.write(path, segment, 16000, subtype="FLOAT")
                 result = model.transcribe(str(path), word_timestamps=True)
-                offset = chunk["start"] / 16000
-                words.extend(WordTimestamp(w.text, w.start + offset, w.end + offset) for w in result.words or [])
-                progress(chunk["end"] / 16000)
+                offset = window.start / 16000
+                native = [WordTimestamp(w.text, w.start, w.end) for w in result.words or []]
+                current = [WordTimestamp(w.word, w.start + offset, w.end + offset)
+                           for w in aligner.align(segment, native)]
+                append_window_words(words, current, window)
+                progress(window.own_end)
         torch.mps.synchronize()
+        self.metrics['word_alignment'] = aligner.metrics
         return words

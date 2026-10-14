@@ -10,12 +10,15 @@ from censor.utils import CensorError
 
 class ExperimentalGPUTests(unittest.TestCase):
     def test_bundled_gigaam_uses_writable_model_directory(self):
-        with tempfile.TemporaryDirectory() as folder, patch.dict('os.environ', {'BLEEP_MODEL_CACHE': folder}):
+        with tempfile.TemporaryDirectory() as folder, patch.dict('os.environ', {'BLEEP_MODEL_CACHE': folder}), \
+                patch('huggingface_hub.snapshot_download', return_value='/cached-aligner') as download:
             models = Path(folder) / 'gigaam'
             models.mkdir()
             (models / 'v3_e2e_rnnt.ckpt').write_bytes(b'weights')
             (models / 'v3_e2e_rnnt_tokenizer.model').write_bytes(b'tokenizer')
-            self.assertEqual(prepare('gigaam-v3', offline=True), [str(models)])
+            self.assertEqual(prepare('gigaam-v3', offline=True), [str(models), '/cached-aligner'])
+            self.assertTrue(download.call_args.kwargs['local_files_only'])
+            self.assertIn('ForcedAligner', download.call_args.args[0])
 
     def test_subword_pieces_become_one_word_before_profanity_matching(self):
         pieces = [SimpleNamespace(text=text, start=start, end=end) for text, start, end in [
@@ -39,11 +42,31 @@ class ExperimentalGPUTests(unittest.TestCase):
                 self.assertEqual(meta['device'], 'GPU (Metal)')
                 _, qwen = cache_identity(source, 'qwen3-asr', 0)
                 self.assertIn('aligner_revision', qwen)
+                _, gigaam = cache_identity(source, 'gigaam-v3', 0)
+                self.assertEqual(gigaam['adapter_version'], 3)
+                self.assertEqual(gigaam['overlap_seconds'], 2)
+                self.assertEqual(gigaam['stitching'], 'midpoint-ownership-v1')
+                self.assertEqual(gigaam['aligner_revision'], qwen['aligner_revision'])
+                self.assertEqual(gigaam['alignment'], 'qwen-bounded-retry-v1')
 
     def test_offline_preparation_cannot_download_gigaam(self):
         with tempfile.TemporaryDirectory() as folder, patch('censor.experimental_gpu.ROOT', Path(folder)):
             with self.assertRaisesRegex(CensorError, 'not cached'):
                 prepare('gigaam-v3', offline=True)
+
+    def test_existing_gigaam_still_requests_consent_for_missing_aligner(self):
+        from huggingface_hub.errors import LocalEntryNotFoundError
+        from censor.model_downloads import requires_model_download
+        with tempfile.TemporaryDirectory() as folder, patch.dict('os.environ', {'BLEEP_MODEL_CACHE': folder}), \
+                patch('huggingface_hub.snapshot_download', side_effect=LocalEntryNotFoundError('aligner missing')) as download:
+            models = Path(folder) / 'gigaam'
+            models.mkdir()
+            for name in ['v3_e2e_rnnt.ckpt', 'v3_e2e_rnnt_tokenizer.model']:
+                (models / name).write_bytes(b'cached')
+            with self.assertRaises(LocalEntryNotFoundError) as error:
+                prepare('gigaam-v3', offline=True)
+            self.assertTrue(requires_model_download(error.exception))
+            self.assertTrue(download.call_args.kwargs['local_files_only'])
 
     def test_pinned_hf_assets_are_requested_offline(self):
         with patch('huggingface_hub.snapshot_download', return_value='/cached') as download:

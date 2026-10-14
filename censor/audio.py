@@ -40,10 +40,10 @@ def gain_expression(ranges: list[CensorRange], mode: str, duck_db: float) -> str
 
 
 def bed_filter(info: MediaInfo, ranges: list[CensorRange], mode: str, duck_db: float) -> str:
-    return (f"aresample={RATE}:async=1:first_pts=0,"
+    base = (f"aresample={RATE}:async=1:first_pts=0,"
             "aformat=sample_fmts=fltp:channel_layouts=stereo,"
-            f"apad,atrim=end_sample={samples(info.duration)},asetpts=N/SR/TB,"
-            f"aeval=exprs='val(ch)*({gain_expression(ranges, mode, duck_db)})':c=same")
+            f"apad,atrim=end_sample={samples(info.duration)},asetpts=N/SR/TB")
+    return base + (f",aeval=exprs='val(ch)*({gain_expression(ranges, mode, duck_db)})':c=same" if ranges else "")
 
 
 def beep_filter(duration: float) -> str:
