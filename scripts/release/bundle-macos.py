@@ -223,6 +223,7 @@ print(json.dumps(files))
     info.update(CFBundleShortVersionString=args.version, CFBundleVersion='15', LSMinimumSystemVersion=minimum,
                 BleepBuildID=str(uuid.uuid4()))
     info_path.write_bytes(plistlib.dumps(info))
+    subprocess.run(['bash', str(ROOT/'scripts/build-theme.sh'), str(app)], check=True)
     print(json.dumps(dict(app=str(app), native_files=len(files), **manifest), indent=2))
 
 

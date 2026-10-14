@@ -40,6 +40,7 @@ with (Path(app) / 'Contents/Info.plist').open('wb') as file:
         'BleepProjectRoot': root,
     }, file)
 PY
+bash scripts/build-theme.sh "$APP"
 mkdir -p "$APP/Contents/Helpers"
 cp .cache/whisperkit-build/release/BleepWhisperKit "$APP/Contents/Helpers/BleepWhisperKit"
 codesign --force --sign - "$APP/Contents/Helpers/BleepWhisperKit"

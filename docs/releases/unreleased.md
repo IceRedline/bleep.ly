@@ -8,3 +8,4 @@
 - Report CPU and MLX Whisper downloads as model preparation with byte counters, rather than displaying recognition timing while their weights are still downloading. Preserve backend model aliases, file filters, cache and offline behavior.
 - Move the processing privacy and media-preservation notes below Cancel, using smaller secondary text to keep progress and its action together.
 - Use one compact information area for preparation explanations, model download bytes and processing metrics, keeping Cancel in a fixed position as stages change.
+- Use the app's mint accent for the censor sound selector, Settings, editors and native controls, with matching light and dark appearance assets included in every build.

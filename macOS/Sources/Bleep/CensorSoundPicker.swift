@@ -31,6 +31,7 @@ struct CensorSoundPicker: NSViewRepresentable {
         let control = NSSegmentedControl(labels: ["Beep", "Silence", "Custom"], trackingMode: .selectOne,
             target: context.coordinator, action: #selector(Coordinator.selectSound(_:)))
         control.segmentDistribution = .fillEqually
+        control.selectedSegmentBezelColor = .systemMint
         control.setAccessibilityLabel("Censor sound")
         return control
     }

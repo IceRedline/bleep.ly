@@ -455,7 +455,7 @@ struct IntervalEditor: View {
                     dismiss()
                 }.buttonStyle(.borderedProminent).disabled(!valid).keyboardShortcut(.defaultAction)
             }
-        }.padding(28).frame(width: 450)
+        }.padding(28).frame(width: 450).tint(.mint)
             .onAppear {
                 label = word?.word ?? ""
                 start = word?.muteStart ?? min(model.playhead, max(0, (model.document?.duration ?? 1) - 0.1))
