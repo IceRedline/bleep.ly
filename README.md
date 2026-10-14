@@ -10,7 +10,7 @@ Local speech recognition and profanity censoring for Russian video and audio, wi
 
 ## Download for macOS
 
-The [v0.1.7 release](https://github.com/IceRedline/bleep.ly/releases/tag/v0.1.7)
+The [v0.1.8 release](https://github.com/IceRedline/bleep.ly/releases/tag/v0.1.8)
 provides a self-contained DMG for **Apple Silicon, macOS 15.0 or later**.
 Open the DMG and drag **bleep.ly** to **Applications**.
 Python, FFmpeg and the recognition engines are included; Homebrew and this
@@ -22,8 +22,8 @@ The release is signed with Developer ID and notarized by Apple. Models and cache
 live under `~/Library/Application Support/bleep.ly/`; moving or updating the app
 does not remove them. The Intel build is not included in this release.
 
-The DMG is about **761 MB**; the installed app is about **2.43 GB**, before
-model downloads. Most of that space is used by the two bundled Python runtimes
+See the release assets for the DMG download size. Most of the installed app's
+space is used by the two bundled Python runtimes
 and their recognition libraries. To update from an earlier version, replace the app in
 Applications; your settings, downloaded models and saved review are retained.
 
