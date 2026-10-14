@@ -1,11 +1,3 @@
 # Unreleased
 
-- Show downloaded/total MB and a progress bar for model downloads when the total size is known. Hide elapsed time, estimated remaining time and the separate percentage readout throughout model download and preparation stages. Keep recognition and export timing available.
-- Replace the generic experimental-model preparation label with named checking, downloading and loading stages. Display an indeterminate download bar while the transfer size is unknown and an animated ring while models are loading into memory. Download percentages are measured, and reaching the end of a transfer does not claim completion before the downloader returns successfully.
-- Fix a model-preparation error in the desktop worker (`TextIOWrapper is not JSON serializable`) by sharing one JSON event emitter between direct calls and app launches. Add cold-start worker coverage to the packaged-app smoke check.
-- Show exactly one progress indicator per operation: a linear bar for model downloads, and a circular ring for recognition, export and all other processing stages. Remove duplicate bars and secondary spinners; animate the ring when progress is unknown, respecting Reduce Motion.
-- Use standard HTTP streaming for Qwen, Parakeet and all Whisper model files so the received bytes and known file sizes share the same units. Report small incoming chunks against a stable manifest total, exclude already cached files where supported, and avoid counting the downloader's duplicate counters. Preserve pinned revisions and download validation; mark the model ready only after success.
-- Report CPU and MLX Whisper downloads as model preparation with byte counters, rather than displaying recognition timing while their weights are still downloading. Preserve backend model aliases, file filters, cache and offline behavior.
-- Move the processing privacy and media-preservation notes below Cancel, using smaller secondary text to keep progress and its action together.
-- Use one compact information area for preparation explanations, model download bytes and processing metrics, keeping Cancel in a fixed position as stages change.
-- Use the app's mint accent for the censor sound selector, Settings, editors and native controls, with matching light and dark appearance assets included in every build.
+No unreleased changes.
