@@ -7,6 +7,9 @@ struct WindowChrome: NSViewRepresentable {
         override func viewDidMoveToWindow() {
             super.viewDidMoveToWindow()
             guard let window else { return }
+            // The main canvas is always dark. Native menus and field text must
+            // resolve their colors in the same appearance, even on a light Mac.
+            window.appearance = NSAppearance(named: .darkAqua)
             window.titleVisibility = .hidden
             window.titlebarAppearsTransparent = true
             window.styleMask.insert(.fullSizeContentView)

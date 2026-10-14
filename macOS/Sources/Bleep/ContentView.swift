@@ -46,6 +46,7 @@ struct ContentView: View {
             }.padding(30)
         }
         .background(WindowChrome())
+        .environment(\.colorScheme, .dark)
         .preferredColorScheme(.dark)
         .tint(.mint)
         .frame(minWidth: 880, minHeight: 690)
