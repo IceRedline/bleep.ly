@@ -169,6 +169,10 @@ struct ContentView: View {
                     .font(.caption).foregroundStyle(.secondary)
                     .multilineTextAlignment(.center).frame(maxWidth: 560)
             }
+            // Reuse the empty metrics space without moving the ring or title.
+            .offset(y: StageProgress.showsTiming(model.stage) ? 0 : -56)
+            .animation(reduceMotion ? nil : .timingCurve(0.77, 0, 0.175, 1, duration: 0.22),
+                       value: StageProgress.showsTiming(model.stage))
             Spacer()
         }.frame(maxWidth: .infinity)
     }
