@@ -16,6 +16,8 @@ import uuid
 ROOT = Path(__file__).resolve().parents[2]
 MAGIC = {b'\xcf\xfa\xed\xfe', b'\xce\xfa\xed\xfe', b'\xfe\xed\xfa\xcf', b'\xca\xfe\xba\xbe', b'\xbe\xba\xfe\xca'}
 SUPPORTED_MACOS = (15, 0)
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import pyav_distribution
 
 
 def macho_files(folder):
@@ -212,10 +214,11 @@ print(json.dumps(files))
     for package in (ROOT/'.cache/whisperkit-build/checkouts').glob('*'):
         for license_file in package.glob('LICENSE*'):
             if license_file.is_file(): shutil.copy2(license_file, licenses/f'{package.name}-{license_file.name}')
+    pyav = pyav_distribution.install(app)
     normalize_permissions(app)
     files, minimum = audit(app)
     manifest = dict(version=args.version, source_commit=subprocess.check_output(['git','rev-parse','HEAD'],cwd=ROOT,text=True).strip(),
-                    architecture='arm64', python='3.11.15', ffmpeg='8.1.2', minimum_macos=minimum)
+                    architecture='arm64', python='3.11.15', ffmpeg='8.1.2', pyav=pyav, minimum_macos=minimum)
     (engine/'runtime.json').write_text(json.dumps(manifest, indent=2)+'\n')
     info_path = app/'Contents/Info.plist'
     info = plistlib.loads(info_path.read_bytes())
