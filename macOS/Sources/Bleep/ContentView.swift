@@ -162,9 +162,11 @@ struct ContentView: View {
             Spacer()
             ZStack {
                 Circle().stroke(.white.opacity(0.08), lineWidth: 8)
-                Circle().trim(from: 0, to: StageProgress.isIndeterminate(model.stage, fraction: model.fraction) ? 0 : model.fraction)
-                    .stroke(.mint, style: StrokeStyle(lineWidth: 8, lineCap: .round)).rotationEffect(.degrees(-90))
-                    .animation(reduceMotion ? nil : .easeOut(duration: 0.2), value: model.fraction)
+                if !StageProgress.isDownloading(model.stage) {
+                    Circle().trim(from: 0, to: StageProgress.isIndeterminate(model.stage, fraction: model.fraction) ? 0 : model.fraction)
+                        .stroke(.mint, style: StrokeStyle(lineWidth: 8, lineCap: .round)).rotationEffect(.degrees(-90))
+                        .animation(reduceMotion ? nil : .easeOut(duration: 0.2), value: model.fraction)
+                }
                 Image(systemName: model.phase == .exporting ? "arrow.up.doc" : "waveform")
                     .font(.system(size: 44, weight: .light)).foregroundStyle(.mint)
             }.frame(width: 140, height: 140)
