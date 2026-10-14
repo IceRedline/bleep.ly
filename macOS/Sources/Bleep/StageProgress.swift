@@ -32,10 +32,6 @@ struct StageProgress {
         stage.localizedCaseInsensitiveContains("model") || stage.localizedCaseInsensitiveContains("download")
     }
 
-    static func showsTiming(_ stage: String) -> Bool {
-        !isModelPreparation(stage) && !isReadingMedia(stage)
-    }
-
     static func title(_ stage: String) -> String {
         isDownloading(stage) ? String(stage.components(separatedBy: " — ")[0]) : stage
     }

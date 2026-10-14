@@ -6,11 +6,10 @@ struct StageProgressDetails: View {
     let fraction: Double
     let elapsed: Double
     var remaining: Double? = nil
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
         Group {
-            if !StageProgress.showsTiming(stage) {
+            if StageProgress.isModelPreparation(stage) || StageProgress.isReadingMedia(stage) {
                 Color.clear.frame(width: 320).accessibilityHidden(true)
             } else if StageProgress.usesEstimates(stage) || fraction > 0 {
                 HStack(spacing: 16) {
@@ -28,10 +27,6 @@ struct StageProgressDetails: View {
         }
         .frame(height: 44)
         .transaction { $0.animation = nil }
-        .opacity(StageProgress.showsTiming(stage) ? 1 : 0)
-        // Let Cancel clear this area before the metrics appear.
-        .animation(reduceMotion ? nil : .easeOut(duration: 0.08)
-            .delay(StageProgress.showsTiming(stage) ? 0.16 : 0), value: StageProgress.showsTiming(stage))
     }
 
     private func metric(_ label: String, value: String) -> some View {
