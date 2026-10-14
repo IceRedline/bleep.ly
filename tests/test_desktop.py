@@ -78,6 +78,7 @@ class DesktopTests(unittest.TestCase):
                 analyze(dict(source=str(self.source), language='de'))
 
     def test_model_download_and_loading_progress_stay_on_protocol_output(self):
+        from censor import desktop
         def prepare(*args, **kwargs):
             kwargs['progress']('Downloading GigaAM — 40 / 100 MB', .4)
             return ['/cached', '/aligner']
@@ -86,15 +87,39 @@ class DesktopTests(unittest.TestCase):
             engine.stage('Loading word alignment model')
             progress(1)
             return [WordTimestamp('бля', 1, 1.3)]
+        request = self.work / 'gpu-request.json'
+        request.write_text(json.dumps(dict(operation='analyze', source=str(self.source),
+            backend='gigaam-mps', model='gigaam-v3', cache_dir=str(self.work/'cache'))))
         with patch('censor.experimental_gpu.prepare', side_effect=prepare), \
                 patch('censor.experimental_gpu.importlib.metadata.version', return_value='test'), \
                 patch('censor.desktop.ExperimentalGPUBackend.transcribe', autospec=True, side_effect=transcribe), \
-                contextlib.redirect_stdout(io.StringIO()) as protocol, contextlib.redirect_stderr(io.StringIO()) as diagnostic:
-            analyze(dict(source=str(self.source), backend='gigaam-mps', model='gigaam-v3', cache_dir=str(self.work/'cache')))
-        events = [json.loads(line) for line in protocol.getvalue().splitlines()]
+                patch('sys.argv', ['desktop', str(request)]), \
+                patch('censor.desktop.os.setsid'), patch('censor.desktop.signal.signal'), \
+                tempfile.TemporaryFile(mode='w+', encoding='utf-8') as protocol, \
+                contextlib.redirect_stdout(protocol), contextlib.redirect_stderr(io.StringIO()) as diagnostic:
+            status = desktop.main()
+            protocol.seek(0)
+            events = [json.loads(line) for line in protocol]
+        self.assertEqual(status, 0, events)
+        self.assertEqual(events[-1]['event'], 'result')
         self.assertTrue(any(e.get('stage') == 'Downloading GigaAM — 40 / 100 MB' and e['fraction'] == .4 for e in events))
         self.assertTrue(any(e.get('stage') == 'Loading word alignment model' for e in events))
         self.assertIn('Library diagnostic', diagnostic.getvalue())
+
+    def test_worker_with_empty_models_reports_progress_then_download_consent(self):
+        import os
+        request = self.work / 'missing-model-request.json'
+        request.write_text(json.dumps(dict(operation='analyze', source=str(self.source),
+            backend='gigaam-mps', model='gigaam-v3', offline=True, cache_dir=str(self.work/'cache'))))
+        result = subprocess.run([sys.executable, '-m', 'censor.desktop', str(request)],
+            env={**os.environ, 'BLEEP_MODEL_CACHE': str(self.work/'empty-models')},
+            capture_output=True, text=True, timeout=30)
+        self.assertEqual(result.returncode, 1, result.stderr)
+        events = [json.loads(line) for line in result.stdout.splitlines()]
+        self.assertTrue(any(e.get('stage') == 'Preparing speech model' for e in events), events)
+        self.assertEqual(events[-1]['event'], 'error')
+        self.assertEqual(events[-1].get('code'), 'model_download_required', events)
+        self.assertTrue(all('_output' not in e for e in events))
 
     def test_app_updates_and_reinstalls_invalidate_every_recognizer_cache(self):
         from censor.experimental_gpu import MODELS

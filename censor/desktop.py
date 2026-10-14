@@ -30,11 +30,12 @@ from .experimental_gpu import BACKENDS as GPU_BACKENDS, ExperimentalGPUBackend
 # Approved beep_trimmed.wav timing, independent of the subsequently selected cue.
 MUTE_CAP = 0.383021
 PROTOCOL = 1
+_protocol_output = None
 
 
 def emit(event: str, *, _output=None, **payload):
     print(json.dumps({"version": PROTOCOL, "event": event, **payload}, ensure_ascii=False,
-                     allow_nan=False), flush=True, file=_output)
+                     allow_nan=False), flush=True, file=_output if _output is not None else _protocol_output)
 
 
 def progress(stage, duration):
@@ -334,11 +335,10 @@ def _main():
         os.setsid()
     signal.signal(signal.SIGTERM, lambda *_: (_ for _ in ()).throw(KeyboardInterrupt()))
     # Keep a dedicated protocol stream even while third-party stdout is redirected.
-    global emit
-    protocol_output = sys.stdout
-    def emit(event, **payload):
-        print(json.dumps({"version": PROTOCOL, "event": event, **payload}, ensure_ascii=False,
-                         allow_nan=False), file=protocol_output, flush=True)
+    # Use the same emitter as direct calls so stream arguments cannot enter JSON.
+    global _protocol_output
+    previous_output = _protocol_output
+    _protocol_output = sys.stdout
     request = {}
     try:
         request = json.loads(Path(sys.argv[1]).read_text())
@@ -371,6 +371,8 @@ def _main():
         else:
             emit("error", message=str(exc))
         return 1
+    finally:
+        _protocol_output = previous_output
 
 
 if __name__ == "__main__":

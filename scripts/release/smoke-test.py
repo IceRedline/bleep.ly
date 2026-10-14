@@ -77,6 +77,19 @@ print('Runtime imports, Metal and JIT passed:', sys.executable, flush=True)
     assert before == after, 'Export modified video packets'
     worker(dict(operation='export',document=document,output=str(folder/'censored.wav'),format='audio',sound='silence'))
     print('Imported transcript, approved mute timing, video stream copy and WAV export passed', flush=True)
+
+    # Exercise the actual app entry point before any GPU model has been downloaded.
+    # Reviewed-transcript imports bypass the model preparation/progress path.
+    missing_request = folder/'missing-model-request.json'
+    missing_request.write_text(json.dumps(dict(operation='analyze', source=str(source),
+        backend='gigaam-mps', model='gigaam-v3', offline=True, cache_dir=str(folder/'recognition-cache'))))
+    missing = subprocess.run([str(gpu), '-u', '-m', 'censor.desktop', str(missing_request)],
+        cwd=engine, env=environment, capture_output=True, text=True, timeout=30)
+    events = [json.loads(line) for line in missing.stdout.splitlines()]
+    assert missing.returncode == 1, (missing.stdout, missing.stderr)
+    assert any(event.get('stage') == 'Preparing speech model' for event in events), events
+    assert events[-1].get('code') == 'model_download_required', events
+    print('Cold-start GPU worker progress and download consent passed', flush=True)
     if args.recognize:
         if not args.model_cache: parser.error('--recognize requires --model-cache')
         environment['HF_HOME'] = str(args.model_cache.resolve()/'huggingface')
