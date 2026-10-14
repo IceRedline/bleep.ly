@@ -3,6 +3,71 @@ import SwiftUI
 @testable import Bleep
 
 final class ProgressAndContextTests: XCTestCase {
+    @MainActor
+    func testEveryProcessingStageHasExactlyOneIndicator() async throws {
+        let samples: [(String, Double, Bool)] = [
+            ("Downloading Qwen ForcedAligner — 541.2 / 1840.0 MB", 0.294, false),
+            ("Downloading GigaAM — 0 MB downloaded", 0, false),
+            ("Recognizing speech", 0.45, false),
+            ("Recognizing speech", 0, false),
+            ("Exporting audio", 0.65, true),
+            ("Exporting video", 0.25, true),
+            ("Loading word alignment model", 0, false),
+            ("Reading media", 0, false),
+            ("Preparing audio", 0.3, false),
+            ("Preparing preview", 0, false),
+            ("Checking Qwen download size", 0, false),
+            ("Connecting to download GigaAM", 0, false),
+            ("", 0, false)
+        ]
+        for (stage, fraction, exporting) in samples {
+            let host = NSHostingView(rootView: ProcessingProgressView(stage: stage, fraction: fraction,
+                elapsed: 35, remaining: 60, sourceName: "Stream.m4a", exporting: exporting)
+                .frame(width: 620, height: 520).background(Color(red: 0.06, green: 0.09, blue: 0.14))
+                .environment(\.colorScheme, .dark))
+            host.frame = NSRect(x: 0, y: 0, width: 620, height: 520)
+            host.layoutSubtreeIfNeeded()
+            let bitmap = try XCTUnwrap(host.bitmapImageRepForCachingDisplay(in: host.bounds))
+            host.cacheDisplay(in: host.bounds, to: bitmap)
+            // Inspect the rendered pixels outside the central icon. Only the
+            // indicator is mint there: ring above the midpoint, bar below it.
+            // This catches both duplicate indicators and entirely empty stages.
+            var upper = false, lower = false
+            for y in stride(from: 0, to: bitmap.pixelsHigh, by: 2) {
+                for x in stride(from: 0, to: bitmap.pixelsWide, by: 2) {
+                    guard abs(Double(x) / Double(bitmap.pixelsWide) - 0.5) * 620 > 35,
+                          let color = bitmap.colorAt(x: x, y: y)?.usingColorSpace(.deviceRGB),
+                          color.redComponent < 0.3, color.greenComponent > 0.55, color.blueComponent > 0.4 else { continue }
+                    if y < bitmap.pixelsHigh / 2 { upper = true } else { lower = true }
+                }
+            }
+            XCTAssertEqual(upper, !stage.hasPrefix("Downloading "), stage)
+            XCTAssertEqual(lower, stage.hasPrefix("Downloading "), stage)
+        }
+        let grid = NSHostingView(rootView: VStack(spacing: 28) {
+            ForEach(0..<2) { row in
+                HStack(spacing: 28) {
+                    ForEach(0..<3) { column in
+                        let item = samples[[0, 2, 4, 1, 6, 7][row * 3 + column]]
+                        ProcessingProgressView(stage: item.0, fraction: item.1, elapsed: 35, remaining: 60,
+                                               sourceName: "Stream.m4a", exporting: item.2)
+                            .frame(width: 560, height: 430)
+                    }
+                }
+            }
+        }.padding(28).background(Color(red: 0.06, green: 0.09, blue: 0.14))
+            .environment(\.colorScheme, .dark))
+        grid.frame = NSRect(origin: .zero, size: grid.fittingSize)
+        grid.layoutSubtreeIfNeeded()
+        let bitmap = try XCTUnwrap(grid.bitmapImageRepForCachingDisplay(in: grid.bounds))
+        grid.cacheDisplay(in: grid.bounds, to: bitmap)
+        let folder = URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent()
+            .deletingLastPathComponent().deletingLastPathComponent().appendingPathComponent(".cache/macos-previews")
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        try XCTUnwrap(bitmap.representation(using: .png, properties: [:]))
+            .write(to: folder.appendingPathComponent("single-processing-indicator.png"))
+    }
+
     func testDownloadCountersKeepTheirStageAndUseMeasuredSpeedWithoutFakeProgress() throws {
         var progress = StageProgress()
         progress.report("Checking GigaAM model", fraction: 0, now: 0)

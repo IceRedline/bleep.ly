@@ -160,22 +160,9 @@ struct ContentView: View {
     private var processing: some View {
         VStack(spacing: 28) {
             Spacer()
-            ZStack {
-                Circle().stroke(.white.opacity(0.08), lineWidth: 8)
-                if !StageProgress.isDownloading(model.stage) {
-                    Circle().trim(from: 0, to: StageProgress.isIndeterminate(model.stage, fraction: model.fraction) ? 0 : model.fraction)
-                        .stroke(.mint, style: StrokeStyle(lineWidth: 8, lineCap: .round)).rotationEffect(.degrees(-90))
-                        .animation(reduceMotion ? nil : .easeOut(duration: 0.2), value: model.fraction)
-                }
-                Image(systemName: model.phase == .exporting ? "arrow.up.doc" : "waveform")
-                    .font(.system(size: 44, weight: .light)).foregroundStyle(.mint)
-            }.frame(width: 140, height: 140)
-            VStack(spacing: 10) {
-                Text(model.phase == .exporting ? "Making the clean cut." : "Listening for the little slips.")
-                    .font(.system(size: 30, weight: .semibold)).tracking(-0.7)
-                Text(model.sourceName).foregroundStyle(.secondary)
-            }
-            StageProgressIndicator(stage: model.stage, fraction: model.fraction, elapsed: model.stageElapsed, remaining: model.stageRemaining)
+            ProcessingProgressView(stage: model.stage, fraction: model.fraction, elapsed: model.stageElapsed,
+                                   remaining: model.stageRemaining, sourceName: model.sourceName,
+                                   exporting: model.phase == .exporting)
             Text(model.phase == .analyzing ? "Audio stays on your Mac. First-time model downloads can take several minutes." : "Your review and original media are kept intact.")
                 .font(.callout).foregroundStyle(.secondary)
             Button("Cancel", action: model.cancel).disabled(model.cancelling)
@@ -386,7 +373,7 @@ struct ContentView: View {
 
     private var previewPreparation: some View {
         VStack(spacing: 8) {
-            ProgressView().controlSize(.small)
+            ProgressView().progressViewStyle(.circular).controlSize(.small)
             Text(model.previewPreparation).font(.caption).monospacedDigit().multilineTextAlignment(.center)
         }.padding(12).background(.black.opacity(0.75), in: RoundedRectangle(cornerRadius: 10))
     }
