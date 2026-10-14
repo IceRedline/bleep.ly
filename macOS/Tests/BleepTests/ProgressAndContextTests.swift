@@ -4,6 +4,15 @@ import SwiftUI
 
 final class ProgressAndContextTests: XCTestCase {
     @MainActor
+    private func hasLaidOutNativeBar(_ view: NSView) -> Bool {
+        if let bar = view as? NSProgressIndicator, bar.style == .bar,
+           !bar.isHiddenOrHasHiddenAncestor, !bar.visibleRect.isEmpty {
+            return true
+        }
+        return view.subviews.contains(where: hasLaidOutNativeBar)
+    }
+
+    @MainActor
     func testEveryProcessingStageHasExactlyOneIndicator() async throws {
         let samples: [(String, Double, Bool)] = [
             ("Downloading Qwen ForcedAligner — 541.2 / 1840.0 MB", 0.294, false),
@@ -42,7 +51,10 @@ final class ProgressAndContextTests: XCTestCase {
                 }
             }
             XCTAssertEqual(upper, !stage.hasPrefix("Downloading "), stage)
-            XCTAssertEqual(lower, stage.hasPrefix("Downloading "), stage)
+            // Sequoia uses a native indeterminate bar whose animation does not
+            // paint mint pixels in an offscreen snapshot. Check that this real
+            // control is laid out and visible, without depending on its tint.
+            XCTAssertEqual(lower || hasLaidOutNativeBar(host), stage.hasPrefix("Downloading "), stage)
         }
         let grid = NSHostingView(rootView: VStack(spacing: 28) {
             ForEach(0..<2) { row in
