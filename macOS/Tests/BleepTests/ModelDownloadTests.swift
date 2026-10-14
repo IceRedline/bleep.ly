@@ -55,6 +55,8 @@ final class ModelDownloadTests: XCTestCase {
         XCTAssertEqual(ModelDownloadPermission.selected(defaults: defaults), .ask)
         let task = try XCTUnwrap(model.open(source))
         try await waitForPrompt(model)
+        XCTAssertTrue(model.modelDownloadMessage.contains("Whisper Large v3 · CPU"))
+        XCTAssertTrue(model.modelDownloadMessage.contains("3.1 GB"))
         for _ in 0..<100 where window.attachedSheet == nil {
             try await Task.sleep(nanoseconds: 10_000_000)
         }
@@ -63,8 +65,8 @@ final class ModelDownloadTests: XCTestCase {
             (view as? NSButton).map { [$0] } ?? view.subviews.flatMap { buttons(in: $0) }
         }
         let choices = buttons(in: try XCTUnwrap(sheet.contentView))
-        XCTAssertTrue(choices.contains { $0.title == "No" })
-        let accept = try XCTUnwrap(choices.first { $0.title == "OK" })
+        XCTAssertTrue(choices.contains { $0.title == "Not Now" })
+        let accept = try XCTUnwrap(choices.first { $0.title == "Allow Download" })
         accept.performClick(nil)
         await task.value
         XCTAssertFalse(model.requestingModelDownload)
@@ -119,5 +121,25 @@ final class ModelDownloadTests: XCTestCase {
         XCTAssertEqual(ModelDownloadPermission.selected(defaults: defaults), .ask)
         defaults.set(true, forKey: "allowDownloads")
         XCTAssertEqual(ModelDownloadPermission.selected(defaults: defaults), .allowed)
+    }
+
+    func testEverySelectableModelHasSizeAndRequiredComponents() {
+        for engine in ["faster-whisper", "mlx", "whisperkit"] {
+            for language in VideoLanguage.allCases {
+                for model in RecognitionModel.choices(backend: engine, language: language) {
+                    let backend = RecognitionModel.engine(model: model.rawValue, selected: engine)
+                    let estimate = ModelDownloadEstimate(backend: backend, model: model.rawValue)
+                    XCTAssertGreaterThan(estimate.bytes, 0)
+                    XCTAssertTrue(estimate.summary.contains("GB"))
+                    if engine == "mlx", model == .gigaAM || model == .qwen {
+                        XCTAssertTrue(estimate.includesAligner)
+                        XCTAssertGreaterThan(estimate.bytes, 1_840_013_484)
+                        XCTAssertTrue(estimate.consentMessage.contains("word alignment"))
+                    }
+                }
+            }
+        }
+        XCTAssertEqual(ModelDownloadEstimate(backend: "gigaam-mps", model: "gigaam-v3").size, "2.3 GB")
+        XCTAssertEqual(ModelDownloadEstimate(backend: "mlx-qwen3-asr", model: "qwen3-asr").size, "6.6 GB")
     }
 }

@@ -22,6 +22,7 @@ final class AppModel: ObservableObject {
     private var progressTask: Task<Void, Never>?
     @Published var error: String?
     @Published private(set) var requestingModelDownload = false
+    @Published private(set) var modelDownloadMessage = ""
     private var modelDownloadContinuation: CheckedContinuation<Bool, Never>?
     @Published var sourceName = ""
     @Published var sound = "beep" {
@@ -220,6 +221,8 @@ final class AppModel: ObservableObject {
                 } catch let failure as BridgeFailure where failure.code == "model_download_required" {
                     guard !cancelling else { throw CancellationError() }
                     guard ModelDownloadPermission.selected(defaults: defaults) == .ask else { throw failure }
+                    modelDownloadMessage = ModelDownloadEstimate(backend: request["backend"] as? String ?? "faster-whisper",
+                                                                 model: request["model"] as? String ?? "large-v3").consentMessage
                     stage = "Waiting for model download permission"
                     progressTask?.cancel(); progressTask = nil
                     progressIsEstimated = false; stageRemaining = nil

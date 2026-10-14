@@ -54,10 +54,10 @@ struct ContentView: View {
             Button("OK", role: .cancel) { model.error = nil }
         } message: { Text(model.error ?? "") }
         .alert("Download model?", isPresented: Binding(get: { model.requestingModelDownload }, set: { if !$0 { model.answerModelDownload(false) } })) {
-            Button("OK") { model.answerModelDownload(true) }
-            Button("No", role: .cancel) { model.answerModelDownload(false) }
+            Button("Allow Download") { model.answerModelDownload(true) }
+            Button("Not Now", role: .cancel) { model.answerModelDownload(false) }
         } message: {
-            Text("The selected model needs to be downloaded. Allow downloads of models that aren’t on your Mac? Downloads can be several GB. Your recordings stay on your Mac. You can change this in Settings.")
+            Text(model.modelDownloadMessage)
         }
         .sheet(isPresented: $showInterval) {
             IntervalEditor(model: model, word: editingWord)

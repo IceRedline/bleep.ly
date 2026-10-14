@@ -67,7 +67,7 @@ struct SettingsView: View {
     @AppStorage("pythonPath") private var pythonPath = ""
     @AppStorage("backend") private var backend = "faster-whisper"
     @AppStorage("recognitionModel") private var recognitionModel = RecognitionModel.largeV3.rawValue
-    @AppStorage("allowDownloads") private var allowDownloads = true
+    @AppStorage("allowDownloads") private var allowDownloads = false
     @AppStorage("modelDownloadConsentAnswered") private var modelDownloadConsentAnswered = false
     @AppStorage("censorStyle") private var censorStyle = "middle"
     @AppStorage("videoLanguage") private var videoLanguage = "ru"
@@ -93,7 +93,7 @@ struct SettingsView: View {
                 if backend == "whisperkit" {
                     Text("Core ML · less accurate in our test: 2–3/4 explicit words; MLX: 4/4.")
                         .font(.caption).foregroundStyle(.orange)
-                    Text("Uses Large v3 Turbo (~1.7 GB download). First run may take a few minutes.")
+                    Text("Uses Large v3 Turbo. First run may take a few minutes.")
                         .font(.caption).foregroundStyle(.secondary)
                 } else {
                     Text(backend == "mlx" ? "Faster · GPU recognition" : "Classic · CPU recognition")
@@ -110,6 +110,10 @@ struct SettingsView: View {
                             .font(.caption).foregroundStyle(.secondary)
                     }
                 }
+                Text(downloadEstimate.summary)
+                    .font(.caption).foregroundStyle(.secondary)
+                Text("Cached files may reduce the download. Allow extra disk space for installation and processing.")
+                    .font(.caption).foregroundStyle(.secondary)
                 Toggle("Allow first-time model download", isOn: $allowDownloads)
                     .onChange(of: allowDownloads) { _, _ in modelDownloadConsentAnswered = true }
                 Text("Before the first download, we ask for permission. Your choice applies to missing models. With downloads off, only downloaded models can be used. Recordings stay on your Mac.")
@@ -162,5 +166,11 @@ struct SettingsView: View {
         .sheet(isPresented: $showWordLists) {
             WordListEditor(root: RuntimePaths.bundledRoot ?? URL(fileURLWithPath: projectRoot), language: VideoLanguage(rawValue: videoLanguage) ?? .russian)
         }
+    }
+
+    private var downloadEstimate: ModelDownloadEstimate {
+        let selected = RecognitionModel.choices(backend: backend, language: VideoLanguage(rawValue: videoLanguage) ?? .russian)
+            .contains { $0.rawValue == recognitionModel } ? recognitionModel : RecognitionModel.largeV3.rawValue
+        return ModelDownloadEstimate(backend: RecognitionModel.engine(model: selected, selected: backend), model: selected)
     }
 }
