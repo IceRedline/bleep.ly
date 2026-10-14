@@ -3,6 +3,7 @@ import AppKit
 
 @main
 struct BleepApp: App {
+    @Environment(\.openWindow) private var openWindow
     @StateObject private var model = AppModel()
     @NSApplicationDelegateAdaptor(AppDelegate.self) private var delegate
 
@@ -23,8 +24,22 @@ struct BleepApp: App {
             CommandGroup(replacing: .undoRedo) {
                 Button("Undo Review Change", action: model.undo).keyboardShortcut("z").disabled(!model.canUndo || model.busy)
             }
+            CommandGroup(replacing: .help) {
+                ForEach(AppInformation.allCases, id: \.rawValue) { document in
+                    Button(document.title) { openWindow(id: document.rawValue) }
+                }
+            }
         }
         Settings { SettingsView() }
+        Window("Privacy Policy", id: AppInformation.privacy.rawValue) {
+            AppInformationView(document: .privacy)
+        }.defaultSize(width: 620, height: 650)
+        Window("Support", id: AppInformation.support.rawValue) {
+            AppInformationView(document: .support)
+        }.defaultSize(width: 620, height: 650)
+        Window("Open Source Licenses", id: AppInformation.licenses.rawValue) {
+            AppInformationView(document: .licenses)
+        }.defaultSize(width: 620, height: 650)
     }
 }
 
@@ -47,6 +62,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 }
 
 struct SettingsView: View {
+    @Environment(\.openWindow) private var openWindow
     @AppStorage("projectRoot") private var projectRoot = AppModel.defaultRoot
     @AppStorage("pythonPath") private var pythonPath = ""
     @AppStorage("backend") private var backend = "faster-whisper"
@@ -59,6 +75,15 @@ struct SettingsView: View {
 
     var body: some View {
         Form {
+            Section("Privacy & Support") {
+                HStack {
+                    ForEach(AppInformation.allCases, id: \.rawValue) { document in
+                        Button(document.title) { openWindow(id: document.rawValue) }
+                    }
+                }
+                Text("Your recordings are processed on your Mac.")
+                    .font(.caption).foregroundStyle(.secondary)
+            }
             Section("Recognition") {
                 Picker("Engine", selection: $backend) {
                     Text("CPU · Classic processing").tag("faster-whisper")

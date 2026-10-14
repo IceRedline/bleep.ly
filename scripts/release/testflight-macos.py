@@ -123,6 +123,10 @@ def prepare(args):
     subprocess.run(['cp', '-cR', str(source), str(app)], check=True)
     shutil.copy2(args.executable, app/'Contents/MacOS/Bleep')
     runtime_origin = refresh_engine(app, source_commit)
+    documentation = app/'Contents/Resources/Documentation'
+    documentation.mkdir(exist_ok=True)
+    for name in ['privacy-policy.md', 'support.md', 'third-party.md']:
+        shutil.copy2(ROOT/'docs'/name, documentation/name)
     info.update(CFBundleVersion=args.build_number, BleepBuildID=str(uuid.uuid4()), BleepAppSandbox=True,
                 LSApplicationCategoryType='public.app-category.video',
                 NSHumanReadableCopyright=args.copyright, CFBundleSupportedPlatforms=['MacOSX'],
