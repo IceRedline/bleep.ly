@@ -13,26 +13,29 @@ needed by the chosen upload tool; do not place them in source or shell history.
 Build and test the Swift app, then commit the source before preparing a candidate:
 
 ```sh
+bash scripts/release/build-pyav.sh
 python3 scripts/release/testflight-macos.py prepare \
-  --output build/testflight-0.1.7-16 --build-number 16 \
+  --output build/testflight-0.1.7-17 --build-number 17 \
   --copyright 'Copyright © 2026 YOUR NAME'
 ```
 
 This clones the existing release and replaces its Swift executable with
 `.cache/swift-build/release/Bleep`. Python engine source and word lists come from
-the same committed checkout; only the pinned runtimes remain from the source
-release. `preparation.json` records both origins. Source DMGs and apps are
+the same committed checkout. The pinned runtimes remain from the source
+release except PyAV, which is replaced in both by the locally built LGPL wheel.
+Offline policy/support documents and the corresponding FFmpeg/PyAV sources are
+included. `preparation.json` records the origins and wheel checksum. Source DMGs and apps are
 never modified. The resulting candidate is unsigned until the next step. Use a
 new, monotonically increasing build number for every upload.
 
 ```sh
 security find-identity -v -p codesigning
 python3 scripts/release/testflight-macos.py sign \
-  --app build/testflight-0.1.7-16/bleep.ly.app \
+  --app build/testflight-0.1.7-17/bleep.ly.app \
   --profile /path/to/bleep-ly-store.provisionprofile \
   --identity APPLICATION_CERTIFICATE_SHA1 \
   --installer-identity '3rd Party Mac Developer Installer: YOUR NAME (TEAM_ID)' \
-  --pkg build/testflight-0.1.7-16/bleep.ly-0.1.7-16.pkg
+  --pkg build/testflight-0.1.7-17/bleep.ly-0.1.7-17.pkg
 ```
 
 Signing checks the profile's app, platform, expiration and certificate before
@@ -104,6 +107,7 @@ overwrite existing release artifacts.
 ```sh
 bash scripts/build-macos.sh
 bash scripts/release/build-ffmpeg.sh
+bash scripts/release/build-pyav.sh
 python3 scripts/release/bundle-macos.py --version 0.1.7
 python3 scripts/release/sign-macos.py --identity 'Developer ID Application: YOUR NAME (TEAM_ID)' build/release/bleep.ly.app
 python3 scripts/release/smoke-test.py build/release/bleep.ly.app
@@ -113,6 +117,19 @@ The FFmpeg script builds unmodified LGPL sources with only system frameworks,
 without Homebrew dynamic libraries, network protocols, GPL or nonfree options.
 The source archive SHA-256 is pinned. Include that archive with every binary
 release. Do not silently substitute a system FFmpeg.
+
+PyAV 18.1.0's upstream wheel vendors its own FFmpeg and x264/x265 libraries,
+independently of our command-line helpers. Never ship it unchanged. The separate
+`build-pyav.sh` builds unmodified FFmpeg 8.1.2 shared libraries with GPL, nonfree,
+version-3 components and external codec autodetection disabled, then compiles
+PyAV and makes the wheel relocatable with delocate. The build runs in an ASCII
+temporary path because pkg-config escapes non-ASCII checkout paths incorrectly.
+Both packaging paths install this wheel and preserve its BSD license and authors.
+The exact source archives, LGPL license, configurations and rebuild instructions
+are embedded under `ThirdParty/Sources`. `pyav_distribution.audit` rejects
+x264/x265 files, unsafe configure flags, unknown builds and mismatched sources;
+TestFlight signing runs it again before creating a package. The wheel supports
+macOS 14+, while the app's other dependencies still require macOS 15+.
 
 The smoke check runs with an isolated HOME and a PATH containing only bundled
 tools and macOS system utilities. It checks imports in both Python runtimes,

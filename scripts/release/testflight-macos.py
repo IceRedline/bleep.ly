@@ -14,8 +14,11 @@ import shutil
 import stat
 import subprocess
 import uuid
+import sys
 
 ROOT = Path(__file__).resolve().parents[2]
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import pyav_distribution
 spec = importlib.util.spec_from_file_location('bundle', Path(__file__).with_name('bundle-macos.py'))
 bundle = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(bundle)
@@ -111,7 +114,7 @@ def prepare(args):
     if not args.build_number.isdecimal() or int(args.build_number) < int(info['CFBundleVersion']):
         raise ValueError('Build number must be an integer at least the source release build')
     # Never stamp a source revision that omits tracked implementation edits.
-    subprocess.run(['git', 'diff', '--exit-code', 'HEAD', '--', 'macOS', 'censor', 'profanity.txt', 'profanity.en.txt', 'scripts/release'], cwd=ROOT, check=True)
+    subprocess.run(['git', 'diff', '--exit-code', 'HEAD', '--', 'macOS', 'censor', 'docs', 'profanity.txt', 'profanity.en.txt', 'scripts'], cwd=ROOT, check=True)
     source_commit = command('git', '-C', ROOT, 'rev-parse', 'HEAD')
     sdk_version = command('xcrun', '--sdk', 'macosx', '--show-sdk-version')
     sdk_build = command('xcrun', '--sdk', 'macosx', '--show-sdk-build-version')
@@ -123,6 +126,11 @@ def prepare(args):
     subprocess.run(['cp', '-cR', str(source), str(app)], check=True)
     shutil.copy2(args.executable, app/'Contents/MacOS/Bleep')
     runtime_origin = refresh_engine(app, source_commit)
+    pyav = pyav_distribution.install(app)
+    documentation = app/'Contents/Resources/Documentation'
+    documentation.mkdir(exist_ok=True)
+    for name in ['privacy-policy.md', 'support.md', 'third-party.md']:
+        shutil.copy2(ROOT/'docs'/name, documentation/name)
     info.update(CFBundleVersion=args.build_number, BleepBuildID=str(uuid.uuid4()), BleepAppSandbox=True,
                 LSApplicationCategoryType='public.app-category.video',
                 NSHumanReadableCopyright=args.copyright, CFBundleSupportedPlatforms=['MacOSX'],
@@ -132,7 +140,8 @@ def prepare(args):
                 DTCompiler='com.apple.compilers.llvm.clang.1_0', BuildMachineOSBuild=command('sw_vers', '-buildVersion'))
     (app/'Contents/Info.plist').write_bytes(plistlib.dumps(info))
     subprocess.run(['bash', str(ROOT/'scripts/build-theme.sh'), str(app)], check=True)
-    manifest = dict(source_app=str(source), app_source_commit=source_commit, runtime_origin=runtime_origin,
+    bundle.normalize_permissions(app)
+    manifest = dict(source_app=str(source), app_source_commit=source_commit, runtime_origin=runtime_origin, pyav=pyav,
                     engine=json.loads((app/'Contents/Resources/Engine/runtime.json').read_text()),
                     build=args.build_number, version=info['CFBundleShortVersionString'],
                     executable_sha256=hashlib.sha256((app/'Contents/MacOS/Bleep').read_bytes()).hexdigest())
@@ -152,6 +161,7 @@ def sign(args):
     shutil.copy2(args.profile, app/'Contents/embedded.provisionprofile')
     clear_quarantine(app)
     bundle.normalize_permissions(app)
+    pyav_distribution.audit(app)
     files, _ = bundle.audit(app)
     child = {'com.apple.security.app-sandbox': True, 'com.apple.security.inherit': True}
     python = {**child, 'com.apple.security.cs.allow-jit': True,

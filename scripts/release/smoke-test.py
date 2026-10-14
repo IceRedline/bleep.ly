@@ -27,9 +27,23 @@ with tempfile.TemporaryDirectory(prefix='bleep-release-smoke-') as temporary:
         HF_HOME=str(folder/'models/huggingface'), BLEEP_MODEL_CACHE=str(folder/'models'))
     for python in [core, gpu]:
         script = """
-import sys, ssl, importlib, importlib.metadata
+import sys, ssl, importlib, importlib.metadata, ctypes, pathlib, tempfile, wave
 for module in ['censor.desktop', 'faster_whisper', 'mlx_whisper', 'torch', 'onnxruntime', 'numpy', 'certifi']:
     importlib.import_module(module)
+import av
+for library in (pathlib.Path(av.__file__).parent/'.dylibs').glob('*.dylib'):
+    native = ctypes.CDLL(str(library))
+    license = getattr(native, library.name.split('.')[0][3:] + '_license')
+    license.restype = ctypes.c_char_p
+    assert license() == b'LGPL version 2.1 or later', (library, license())
+from faster_whisper.audio import decode_audio
+with tempfile.TemporaryDirectory() as audio_folder:
+    audio_path = pathlib.Path(audio_folder)/'audio.wav'
+    with wave.open(str(audio_path), 'wb') as audio:
+        audio.setnchannels(2); audio.setsampwidth(2); audio.setframerate(48000)
+        audio.writeframes(b'\\x00\\x10' * 2 * 48000)
+    decoded = decode_audio(str(audio_path), sampling_rate=16000)
+    assert decoded.shape == (16000,) and max(decoded) > 0
 import mlx.core as mx
 assert mx.metal.is_available()
 assert (mx.array([1,2,3]) * 2).tolist() == [2,4,6]
