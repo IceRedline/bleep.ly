@@ -1,5 +1,6 @@
 # Unreleased
 
 - Add overlapping context to GigaAM recognition windows and reconcile boundary words, preventing words split at a VAD chunk boundary from disappearing. Invalidate older GigaAM recognition caches; saved reviews and manual mute intervals remain unchanged.
+- Refine new GigaAM word timestamps with Qwen3-ForcedAligner on Apple GPU so delayed punctuation does not determine the censor interval. Retry implausible or collapsed alignments with local context, retain unresolvable words for review, and record retry/fallback counts. Download the pinned aligner through the existing model-download consent flow and invalidate recognition caches from the older timing algorithm.
 - Stream desktop export mixing in one-second blocks instead of building a full-length delayed audio branch for every censor interval. Only active mute envelopes and custom-sound tails are mixed, keeping memory bounded on long recordings with hundreds of detections.
 - Preserve the approved sample timing, complete custom cues, overlapping fades, stereo audio, limiter behavior, independent video audio tracks, and video stream copying. Single-track WAV export writes directly to its atomic destination without a full-length intermediate audio file.

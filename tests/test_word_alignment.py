@@ -1,0 +1,58 @@
+import unittest
+from types import SimpleNamespace
+from unittest.mock import Mock
+
+from censor.models import WordTimestamp as Word
+from censor.utils import CensorError
+from censor.word_alignment import WordAligner
+
+
+def aligned(text, start, end):
+    return SimpleNamespace(text=text, start_time=start, end_time=end)
+
+
+class WordAlignmentTests(unittest.TestCase):
+    def aligner(self, outputs):
+        a = WordAligner.__new__(WordAligner)
+        a.backend = Mock()
+        a.backend.align.side_effect = outputs
+        a.tokenize = lambda text, language: [text.strip('.,!')] if text.strip('.,!') else []
+        a.metrics = dict(words=0, local_retries=0, native_fallbacks=0)
+        return a
+
+    def test_acoustic_span_replaces_punctuation_delay_but_keeps_text(self):
+        a = self.aligner([[aligned('блядь', .6, 1.16)]])
+        result = a.align([0] * 32000, [Word('блядь.', .8, 1.72, True)])
+        self.assertEqual(result, [Word('блядь.', .6, 1.16, True)])
+        self.assertEqual(a.metrics['local_retries'], 0)
+
+    def test_wrong_repeated_utterance_is_retried_in_bounded_context(self):
+        a = self.aligner([[aligned('блядь', 1.52, 1.68)], [aligned('блядь', .4, .96)]])
+        result = a.align([0] * 80000, [Word('блядь.', 2.8, 3.72)])
+        self.assertAlmostEqual(result[0].start, 2.6)
+        self.assertAlmostEqual(result[0].end, 3.16)
+        self.assertEqual(len(a.backend.align.call_args.args[0]), 30720)
+        self.assertEqual(a.metrics, dict(words=1, local_retries=1, native_fallbacks=0))
+
+    def test_unresolved_word_stays_reviewable_and_is_counted(self):
+        a = self.aligner([[aligned('word', 1, 1)], [aligned('word', .6, .6)]])
+        word = Word('word', 1, 1.4)
+        self.assertEqual(a.align([0] * 32000, [word]), [word])
+        self.assertEqual(a.metrics['native_fallbacks'], 1)
+
+    def test_incomplete_or_mismatched_transcript_is_not_silently_zipped(self):
+        for values in [[], [aligned('another', .5, 1)]]:
+            a = self.aligner([values])
+            with self.assertRaisesRegex(CensorError, 'different transcript'):
+                a.align([0] * 32000, [Word('word', .5, 1)])
+
+    def test_nonfinite_or_out_of_bounds_results_cannot_escape_into_review(self):
+        for start, end in [(float('nan'), 1), (.5, float('inf')), (-.1, .5), (1, 3)]:
+            a = self.aligner([[aligned('word', start, end)], [aligned('word', 0, 0)]])
+            word = Word('word', .5, 1)
+            self.assertEqual(a.align([0] * 32000, [word]), [word])
+
+    def test_empty_or_punctuation_only_transcript_needs_no_alignment(self):
+        a = self.aligner([])
+        self.assertEqual(a.align([0] * 16000, [Word('!', .5, .6)]), [])
+        a.backend.align.assert_not_called()

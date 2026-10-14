@@ -134,6 +134,14 @@ choices are GPU-only; unavailable GPU support produces an error without CPU
 fallback. See [GPU comparison](experiments/gpu-models.md) for pinned weights,
 timestamps, and the full-file benchmark command.
 
+GigaAM uses overlapping speech windows to retain words at chunk boundaries, then
+Qwen3-ForcedAligner refines their timing against the audio. GigaAM therefore also
+downloads the pinned aligner weights (about 1.84 GB), through the same first-use
+download permission. Ambiguous alignments are retried with local context; words
+that still cannot be located reliably keep their original timing for review.
+Alignment retry/fallback counts are recorded in recognition history. This does
+not change existing reviews, manual mute intervals, or custom-cue playback.
+
 On the initial 19.93-second local reference using Turbo, MLX found 4/4 reviewed occurrences in three runs; CPU found 3/4; WhisperKit found 2/4, 3/4, and 3/4. This small sample is insufficient for a general quality ranking. WhisperKit remains experimental. See the [WhisperKit setup and reproducible benchmark](experiments/README.md).
 
 For development, `requirements.txt` already includes the Python dependencies for

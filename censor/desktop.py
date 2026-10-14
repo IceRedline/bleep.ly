@@ -182,7 +182,7 @@ def analyze_track(request):
                     recognition_started = time.perf_counter()
                     raw = transcriber.transcribe(audio, inference_progress)
                     recognition_seconds = time.perf_counter() - recognition_started
-                if backend == "whisperkit":
+                if backend == "whisperkit" or backend in GPU_BACKENDS:
                     metadata["native_metrics"] = native_engine.metrics
                 words = parse_words({"words": [asdict(w) for w in raw
                                                if w.word.strip() and w.end > w.start and w.start < info.duration]}, info.duration)

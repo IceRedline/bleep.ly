@@ -28,7 +28,7 @@ downloads in Settings for missing weights; subsequent runs can stay offline.
 | Parakeet v3 | [mlx-community/parakeet-tdt-0.6b-v3](https://huggingface.co/mlx-community/parakeet-tdt-0.6b-v3), `ed2b7e8c15f9aaa0b5772e2efb986255eaef7e15` | parakeet-mlx 0.5.3 / BF16 / Metal | SentencePiece pieces merged into words |
 | Parakeet Ultra | [selcukkubur/parakeet-ultra-mlx](https://huggingface.co/selcukkubur/parakeet-ultra-mlx), `b554592c50b2a48471add2daa3d46fa9f00fef5e` | parakeet-mlx 0.5.3 / BF16 / Metal | Same adapter as v3 |
 | Qwen3-ASR 1.7B | [Qwen/Qwen3-ASR-1.7B](https://huggingface.co/Qwen/Qwen3-ASR-1.7B), `7278e1e70fe206f11671096ffdd38061171dd6e5` | mlx-qwen3-asr 0.4.4 / FP16 / Metal | Native MLX Qwen3-ForcedAligner-0.6B, `c7cbfc2048c462b0d63a45797104fc9db3ad62b7` |
-| GigaAM v3 | Official `v3_e2e_rnnt`, checkpoint MD5 `2730de7545ac43ad256485a462b0a27a` | GigaAM `7447938d791c4f3e643386ee22c33777004293a5`, torch/torchaudio 2.11 / MPS; FP32 weights with FP16 encoder autocast | Official RNNT token-to-word timestamps |
+| GigaAM v3 | Official `v3_e2e_rnnt`, checkpoint MD5 `2730de7545ac43ad256485a462b0a27a` | GigaAM `7447938d791c4f3e643386ee22c33777004293a5`, torch/torchaudio 2.11 / MPS; FP32 weights with FP16 encoder autocast | Qwen3-ForcedAligner-0.6B on MLX, same pinned revision as above; bounded local retries |
 
 Ultra uses a community format conversion of Moondream's weights. Its results
 measure this specific conversion/runtime, not the upstream NVIDIA/Photon pipeline.
@@ -40,9 +40,17 @@ tokens directly would inflate word counts and miss split profanity.
 Qwen uses the runtime's approximately 30-second low-energy chunk boundaries,
 the selected Russian or English language, greedy decoding, and its separate GPU aligner. Generation hitting
 the token limit is an error rather than an accepted partial transcript.
-GigaAM uses Silero VAD with a 20-second maximum speech chunk and maps each result
-to the original recording. This avoids the optional gated pyannote longform
-dependency. GigaAM requests MPS explicitly with operator CPU fallback disabled.
+GigaAM uses Silero VAD with a 20-second maximum speech core, adds one second of
+context on each side (at most 22 seconds), and assigns boundary words once by
+their midpoint. Qwen aligns each window's recognized text against its audio.
+Collapsed intervals or starts displaced by more than 600 ms are retried in a
+smaller window around the native detection; unresolved words retain their native
+timing for review. Alignment retries and native fallbacks appear in
+`native_metrics.word_alignment` in cache/history metadata. Native token timing
+is an approximate anchor, not acoustic ground truth. Cache identity includes the
+overlap policy, aligner revision, runtime versions, and alignment adapter version.
+This avoids the optional gated pyannote longform dependency. GigaAM requests MPS
+explicitly with operator CPU fallback disabled; alignment requires MLX Metal.
 Audio decoding, VAD and bookkeeping can still use CPU, as in the Whisper pipeline.
 
 ## Full-file comparison
@@ -84,6 +92,9 @@ including samples where every model missed a word. Comparing pipelines here also
 compares their segmentation and decoding settings, not only model weights.
 
 ## Local full-file run · 2026-10-10
+
+This historical run predates overlapping GigaAM windows and Qwen word alignment;
+its timing and counts do not describe the current GigaAM pipeline.
 
 Apple M3 Pro, 36 GiB RAM; one 27:44 recording, sequential fresh processes,
 no transcript cache reuse. All models used Apple GPU (MLX Metal or PyTorch MPS).
