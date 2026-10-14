@@ -61,7 +61,7 @@ final class ProgressAndContextTests: XCTestCase {
         let samples: [(String, Double, Double, Double?)] = [
             ("Checking GigaAM model", 0, 15, nil),
             ("Downloading GigaAM — 204.5 / 448.9 MB", 0.455, 34, 60),
-            ("Downloading Qwen ForcedAligner — 541.2 MB downloaded", 0, 200, nil),
+            ("Downloading Qwen ForcedAligner — 541.2 / 1840.0 MB", 0.294, 200, 60),
             ("Loading word alignment model", 0, 12, nil)
         ]
         var expected: NSSize?

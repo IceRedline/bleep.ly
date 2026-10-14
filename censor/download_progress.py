@@ -3,9 +3,27 @@ import io
 import threading
 import time
 import weakref
+from contextlib import contextmanager
 
 
-def byte_progress_bar(label, notify, total=None, *, network_only=False):
+@contextmanager
+def sized_model_downloads():
+    """Use streamed file bytes so progress and manifest totals share one unit.
+
+    Each desktop worker prepares one model at a time. Restore SDK settings even
+    on cancellation; HTTP retries, pinned revisions and cache validation stay in Hub.
+    """
+    from huggingface_hub import constants
+    previous = constants.HF_HUB_DISABLE_XET, constants.DOWNLOAD_CHUNK_SIZE
+    constants.HF_HUB_DISABLE_XET = True
+    constants.DOWNLOAD_CHUNK_SIZE = 1024 * 1024
+    try:
+        yield
+    finally:
+        constants.HF_HUB_DISABLE_XET, constants.DOWNLOAD_CHUNK_SIZE = previous
+
+
+def byte_progress_bar(label, notify, total=None):
     from tqdm import tqdm
 
     counts = {}
@@ -18,11 +36,10 @@ def byte_progress_bar(label, notify, total=None, *, network_only=False):
         def __init__(self, *args, **kwargs):
             name = kwargs.pop('name', '')
             description = kwargs.get('desc', '') or ''
-            # Hub's reconstruction counter advances when large buffers reach disk.
-            # Its transfer counter reports incoming network bytes continuously.
-            # Never combine them: compression/deduplication change the byte totals.
+            # HTTP updates the file counter for each received chunk, including
+            # resumed bytes. Ignore Hub's duplicate transfer and file-count bars.
             transfer = name.endswith('.transfer') or description.lower().endswith('downloading bytes')
-            self.track_bytes = kwargs.get('unit') in {'B', 'iB'} and transfer == network_only
+            self.track_bytes = kwargs.get('unit') in {'B', 'iB'} and not transfer
             self.progress_key = (name, description)
             instances.add(self)
             kwargs.update(disable=False, file=io.StringIO())
@@ -42,9 +59,7 @@ def byte_progress_bar(label, notify, total=None, *, network_only=False):
                 # Replacing the same key also resets an interrupted GigaAM attempt.
                 counts[self.progress_key] = (max(0, self.n), max(0, self.total or 0))
                 done = sum(value[0] for value in counts.values())
-                # Xet's transfer-bar total is an estimate for terminal rendering,
-                # not a Content-Length. It is even rewritten to n on completion.
-                size = 0 if network_only else total if total is not None else sum(value[1] for value in counts.values())
+                size = total if total is not None else sum(value[1] for value in counts.values())
                 now = time.monotonic()
                 if not force and done and now - last_report < .1 and (not size or done < size):
                     return
@@ -53,8 +68,7 @@ def byte_progress_bar(label, notify, total=None, *, network_only=False):
                     notify(f'{label} — {min(done, size) / 1e6:.1f} / {size / 1e6:.1f} MB',
                            min(.99, done / size))
                 else:
-                    suffix = ' downloaded' if network_only else ''
-                    notify(f'{label} — {done / 1e6:.1f} MB{suffix}', 0)
+                    notify(f'{label} — {done / 1e6:.1f} MB downloaded', 0)
 
         def update(self, n=1):
             result = super().update(n)

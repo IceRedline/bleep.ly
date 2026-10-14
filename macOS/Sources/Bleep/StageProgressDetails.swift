@@ -9,18 +9,18 @@ struct StageProgressDetails: View {
 
     var body: some View {
         Group {
-            if StageProgress.isReadingMedia(stage) {
+            if StageProgress.isModelPreparation(stage) {
+                Color.clear.frame(width: 320).accessibilityHidden(true)
+            } else if StageProgress.isReadingMedia(stage) {
                 ProgressView().controlSize(.small)
-            } else if StageProgress.usesEstimates(stage) || fraction > 0 ||
-                        (StageProgress.isDownloading(stage) && !StageProgress.isIndeterminate(stage, fraction: fraction)) {
+            } else if StageProgress.usesEstimates(stage) || fraction > 0 {
                 HStack(spacing: 16) {
                     metric("Progress", value: StageProgress.isIndeterminate(stage, fraction: fraction) ? "—"
                            : "\(StageProgress.usesEstimates(stage) && fraction < 1 ? "≈" : "")\(Int(fraction * 100))%")
                     metric("Elapsed", value: clockText(elapsed))
-                    if StageProgress.usesEstimates(stage) || StageProgress.isDownloading(stage) {
-                        metric("Remaining (est.)", value: remaining == nil && StageProgress.isDownloading(stage)
-                               ? "Estimating…" : StageProgress.remainingText(remaining))
-                            .help("Estimated time left in this stage, based on download, recognition or export speed. Waiting for progress measurements when unavailable.")
+                    if StageProgress.usesEstimates(stage) {
+                        metric("Remaining (est.)", value: StageProgress.remainingText(remaining))
+                            .help("Estimated time left in this stage, based on recognition or export speed. Waiting for progress measurements when unavailable.")
                     }
                 }
             } else {
