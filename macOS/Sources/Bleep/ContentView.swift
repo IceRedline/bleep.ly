@@ -163,9 +163,12 @@ struct ContentView: View {
             ProcessingProgressView(stage: model.stage, fraction: model.fraction, elapsed: model.stageElapsed,
                                    remaining: model.stageRemaining, sourceName: model.sourceName,
                                    exporting: model.phase == .exporting)
-            Text(model.phase == .analyzing ? "Audio stays on your Mac. First-time model downloads can take several minutes." : "Your review and original media are kept intact.")
-                .font(.callout).foregroundStyle(.secondary)
-            Button("Cancel", action: model.cancel).disabled(model.cancelling)
+            VStack(spacing: 14) {
+                Button("Cancel", action: model.cancel).disabled(model.cancelling)
+                Text(model.phase == .analyzing ? "Audio stays on your Mac. First-time model downloads can take several minutes." : "Your review and original media are kept intact.")
+                    .font(.caption).foregroundStyle(.secondary)
+                    .multilineTextAlignment(.center).frame(maxWidth: 560)
+            }
             Spacer()
         }.frame(maxWidth: .infinity)
     }
