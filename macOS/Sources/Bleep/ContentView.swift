@@ -162,7 +162,7 @@ struct ContentView: View {
             Spacer()
             ZStack {
                 Circle().stroke(.white.opacity(0.08), lineWidth: 8)
-                Circle().trim(from: 0, to: StageProgress.isReadingMedia(model.stage) ? 0 : max(0.015, model.fraction))
+                Circle().trim(from: 0, to: StageProgress.isIndeterminate(model.stage, fraction: model.fraction) ? 0 : model.fraction)
                     .stroke(.mint, style: StrokeStyle(lineWidth: 8, lineCap: .round)).rotationEffect(.degrees(-90))
                     .animation(reduceMotion ? nil : .easeOut(duration: 0.2), value: model.fraction)
                 Image(systemName: model.phase == .exporting ? "arrow.up.doc" : "waveform")
@@ -173,11 +173,8 @@ struct ContentView: View {
                     .font(.system(size: 30, weight: .semibold)).tracking(-0.7)
                 Text(model.sourceName).foregroundStyle(.secondary)
             }
-            VStack(spacing: 8) {
-                Text(model.stage).font(.headline)
-                StageProgressDetails(stage: model.stage, fraction: model.fraction, elapsed: model.stageElapsed, remaining: model.stageRemaining)
-            }.frame(height: 72)
-            Text(model.phase == .analyzing ? "Audio stays on your Mac. The first model load can take a moment." : "Your review and original media are kept intact.")
+            StageProgressIndicator(stage: model.stage, fraction: model.fraction, elapsed: model.stageElapsed, remaining: model.stageRemaining)
+            Text(model.phase == .analyzing ? "Audio stays on your Mac. First-time model downloads can take several minutes." : "Your review and original media are kept intact.")
                 .font(.callout).foregroundStyle(.secondary)
             Button("Cancel", action: model.cancel).disabled(model.cancelling)
             Spacer()

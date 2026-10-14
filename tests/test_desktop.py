@@ -77,6 +77,25 @@ class DesktopTests(unittest.TestCase):
             with self.assertRaisesRegex(CensorError, 'Russian or English'):
                 analyze(dict(source=str(self.source), language='de'))
 
+    def test_model_download_and_loading_progress_stay_on_protocol_output(self):
+        def prepare(*args, **kwargs):
+            kwargs['progress']('Downloading GigaAM — 40 / 100 MB', .4)
+            return ['/cached', '/aligner']
+        def transcribe(engine, audio, progress):
+            print('Library diagnostic')
+            engine.stage('Loading word alignment model')
+            progress(1)
+            return [WordTimestamp('бля', 1, 1.3)]
+        with patch('censor.experimental_gpu.prepare', side_effect=prepare), \
+                patch('censor.experimental_gpu.importlib.metadata.version', return_value='test'), \
+                patch('censor.desktop.ExperimentalGPUBackend.transcribe', autospec=True, side_effect=transcribe), \
+                contextlib.redirect_stdout(io.StringIO()) as protocol, contextlib.redirect_stderr(io.StringIO()) as diagnostic:
+            analyze(dict(source=str(self.source), backend='gigaam-mps', model='gigaam-v3', cache_dir=str(self.work/'cache')))
+        events = [json.loads(line) for line in protocol.getvalue().splitlines()]
+        self.assertTrue(any(e.get('stage') == 'Downloading GigaAM — 40 / 100 MB' and e['fraction'] == .4 for e in events))
+        self.assertTrue(any(e.get('stage') == 'Loading word alignment model' for e in events))
+        self.assertIn('Library diagnostic', diagnostic.getvalue())
+
     def test_app_updates_and_reinstalls_invalidate_every_recognizer_cache(self):
         from censor.experimental_gpu import MODELS
         choices = [('faster-whisper', 'large-v3'), ('mlx', 'large-v3'),

@@ -32,9 +32,9 @@ MUTE_CAP = 0.383021
 PROTOCOL = 1
 
 
-def emit(event: str, **payload):
+def emit(event: str, *, _output=None, **payload):
     print(json.dumps({"version": PROTOCOL, "event": event, **payload}, ensure_ascii=False,
-                     allow_nan=False), flush=True)
+                     allow_nan=False), flush=True, file=_output)
 
 
 def progress(stage, duration):
@@ -105,8 +105,9 @@ def analyze_track(request):
     info = media_info(source, stream, allow_audio=True)
     info = replace(info, duration=request.get("_duration", info.duration))
     prefix = request.get("_track_label", "")
+    protocol_output = sys.stdout
     def report(label, fraction):
-        emit("progress", stage=prefix + label, fraction=fraction, duration=info.duration)
+        emit("progress", stage=prefix + label, fraction=fraction, duration=info.duration, _output=protocol_output)
     def tracking(label, length):
         return progress(prefix + label, length)
     signature = fingerprint(source)
@@ -130,9 +131,10 @@ def analyze_track(request):
                 raise CensorError("Selected experimental model does not match its GPU backend.")
             if model == "gigaam-v3" and language != "ru":
                 raise CensorError("GigaAM v3 supports Russian only. Choose Whisper for English.")
-            report("Preparing experimental model", 0)
-            assets = prepare(model, offline=request.get("offline", True))
-            native_engine = ExperimentalGPUBackend(model, assets, language=language)
+            report("Preparing speech model", 0)
+            assets = prepare(model, offline=request.get("offline", True), progress=report)
+            native_engine = ExperimentalGPUBackend(model, assets, language=language,
+                                                    stage=lambda label: report(label, 0))
             key, metadata = gpu_cache_identity(source, model, info.audio_index,
                                                tracking("Reading media", source.stat().st_size), language=language)
         elif backend == "whisperkit":
