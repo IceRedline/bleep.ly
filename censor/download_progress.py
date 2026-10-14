@@ -23,6 +23,59 @@ def sized_model_downloads():
         constants.HF_HUB_DISABLE_XET, constants.DOWNLOAD_CHUNK_SIZE = previous
 
 
+def download_snapshot(snapshot_download, repo, name, offline, notify, **options):
+    """Report one SDK snapshot with the same manifest used for its download."""
+    notify(f"Checking {name} model", 0)
+    if offline:
+        return snapshot_download(repo, local_files_only=True, **options)
+    # A local snapshot directory may contain only files from an interrupted
+    # download. Online mode must check the pinned file list before using it.
+    # Plain HTTP reports received file bytes continuously, against the same
+    # manifest sizes. Xet's compressed wire bytes cannot use this denominator.
+    with sized_model_downloads():
+        notify(f"Checking {name} download size", 0)
+        plan_bar = byte_progress_bar('', lambda *_: None)
+        try:
+            plan = snapshot_download(repo, dry_run=True, tqdm_class=plan_bar, **options)
+        finally:
+            plan_bar.finish()
+        pending = [item for item in plan if item.will_download]
+        total = sum(item.file_size for item in pending) if all(item.file_size is not None for item in pending) else 0
+        notify(f"Connecting to download {name}", 0)
+        progress_bar = byte_progress_bar(f"Downloading {name}", notify, total)
+        try:
+            path = snapshot_download(repo, tqdm_class=progress_bar, headers={'Accept-Encoding': 'identity'}, **options)
+        finally:
+            progress_bar.finish()
+    notify(f"{name} model ready", 1)
+    return path
+
+
+@contextmanager
+def reported_hub_downloads(name, notify):
+    """Adapt Whisper loaders that call Hub internally, within one desktop worker.
+
+    Keep the SDK's model aliases, file filters, revision, cache and offline rules.
+    Restore its entry point on success, error and cancellation.
+    """
+    import huggingface_hub
+    original = huggingface_hub.snapshot_download
+
+    def snapshot(repo_id, **options):
+        offline = options.pop('local_files_only', False)
+        options.pop('tqdm_class', None)
+        path = download_snapshot(original, repo_id, name, offline, notify, **options)
+        notify(f"Loading {name} model", 0)
+        return path
+
+    huggingface_hub.snapshot_download = snapshot
+    try:
+        notify(f"Loading {name} model", 0)
+        yield
+    finally:
+        huggingface_hub.snapshot_download = original
+
+
 def byte_progress_bar(label, notify, total=None):
     from tqdm import tqdm
 

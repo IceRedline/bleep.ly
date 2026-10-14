@@ -4,7 +4,7 @@ from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import patch
 
-from censor.download_progress import byte_progress_bar, sized_model_downloads
+from censor.download_progress import byte_progress_bar, sized_model_downloads, reported_hub_downloads
 from censor.experimental_gpu import prepare, prepare_hub_asset
 
 
@@ -121,6 +121,35 @@ class ModelDownloadProgressTests(unittest.TestCase):
             self.assertTrue(constants.HF_HUB_DISABLE_XET)
             raise KeyboardInterrupt()
         self.assertEqual((constants.HF_HUB_DISABLE_XET, constants.DOWNLOAD_CHUNK_SIZE), original)
+
+    def test_whisper_sdk_keeps_alias_filters_and_offline_rules_with_byte_progress(self):
+        import huggingface_hub
+        from faster_whisper.utils import download_model
+        events = []
+        def download(repo, **options):
+            self.assertEqual(repo, 'Systran/faster-whisper-large-v3')
+            self.assertEqual(options['revision'], 'pinned')
+            self.assertIn('model.bin', options['allow_patterns'])
+            if options.get('local_files_only'):
+                return '/cached/whisper'
+            if options.get('dry_run'):
+                return [SimpleNamespace(will_download=True, file_size=2_000_000)]
+            with options['tqdm_class'](total=2_000_000, unit='B', desc='model.bin') as bar:
+                bar.update(1_000_000)
+                bar.update(1_000_000)
+            return '/cached/whisper'
+        with patch('huggingface_hub.snapshot_download', side_effect=download) as original:
+            with reported_hub_downloads('Whisper Large v3', lambda *e: events.append(e)):
+                self.assertEqual(download_model('large-v3', revision='pinned'), '/cached/whisper')
+            self.assertIs(huggingface_hub.snapshot_download, original)
+            self.assertIn(('Downloading Whisper Large v3 — 1.0 / 2.0 MB', .5), events)
+            self.assertEqual(events[-1], ('Loading Whisper Large v3 model', 0))
+            events.clear()
+            with self.assertRaises(KeyboardInterrupt), reported_hub_downloads('Whisper Large v3', lambda *e: events.append(e)):
+                self.assertEqual(download_model('large-v3', revision='pinned', local_files_only=True), '/cached/whisper')
+                raise KeyboardInterrupt()
+            self.assertFalse(any(label.startswith('Downloading ') for label, _ in events))
+            self.assertIs(huggingface_hub.snapshot_download, original)
 
     def test_gigaam_reports_both_files_and_restores_downloader_on_failure(self):
         from tqdm import tqdm

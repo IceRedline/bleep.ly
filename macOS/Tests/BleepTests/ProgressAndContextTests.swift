@@ -66,11 +66,18 @@ final class ProgressAndContextTests: XCTestCase {
         ]
         var expected: NSSize?
         for (stage, fraction, elapsed, remaining) in samples {
+            XCTAssertTrue(StageProgress.isModelPreparation(stage))
             let host = NSHostingView(rootView: StageProgressIndicator(stage: stage, fraction: fraction, elapsed: elapsed, remaining: remaining))
             let size = host.fittingSize
             XCTAssertEqual(size.height, 112)
             if let expected { XCTAssertEqual(size, expected) } else { expected = size }
         }
+        for name in ["Whisper Large v3", "WhisperKit", "Parakeet v3", "Qwen3 ASR", "GigaAM tokenizer"] {
+            XCTAssertTrue(StageProgress.isModelPreparation("Track 1/2 · Downloading \(name) — 10 / 100 MB"))
+            XCTAssertTrue(StageProgress.isModelPreparation("Checking \(name) download size"))
+        }
+        XCTAssertFalse(StageProgress.isModelPreparation("Recognizing speech"))
+        XCTAssertFalse(StageProgress.isModelPreparation("Exporting audio"))
         let host = NSHostingView(rootView: VStack(spacing: 28) {
             ForEach(samples.indices, id: \.self) { index in
                 let item = samples[index]

@@ -291,6 +291,32 @@ class DesktopTests(unittest.TestCase):
                     self.assertTrue(analyze(request)['cache_hit'])
                 self.assertEqual(engine.call_count, 2)
 
+    def test_whisper_downloads_use_model_stages_before_recognition(self):
+        from types import SimpleNamespace
+        def download(repo, **options):
+            if options.get('dry_run'):
+                return [SimpleNamespace(will_download=True, file_size=2_000_000)]
+            with options['tqdm_class'](total=2_000_000, unit='B', desc='weights') as bar:
+                bar.update(2_000_000)
+            return '/cached/model'
+        def transcribe(audio, progress):
+            from huggingface_hub import snapshot_download
+            snapshot_download('test/whisper', local_files_only=False)
+            progress(1)
+            return [WordTimestamp('бля', 1, 1.3)]
+        for backend, target in [('faster-whisper', 'FasterWhisperBackend'), ('mlx', 'MLXWhisperBackend')]:
+            with self.subTest(backend=backend), \
+                 patch('huggingface_hub.snapshot_download', side_effect=download), \
+                 patch('censor.desktop.' + target + '.transcribe', side_effect=transcribe), \
+                 contextlib.redirect_stdout(io.StringIO()) as protocol:
+                analyze(dict(source=str(self.source), backend=backend, cache_dir=str(self.work / backend)))
+            events = [json.loads(line) for line in protocol.getvalue().splitlines()]
+            stages = [event['stage'] for event in events if event.get('event') == 'progress']
+            downloaded = next(i for i, stage in enumerate(stages) if stage.startswith('Downloading Whisper') and '2.0 / 2.0 MB' in stage)
+            recognized = next(i for i, stage in enumerate(stages) if stage == 'Recognizing speech')
+            self.assertLess(downloaded, recognized)
+            self.assertTrue(stages[recognized - 1].startswith('Loading Whisper'))
+
     def test_json_protocol_and_video_stream_copy(self):
         source = self.work / 'video.mov'
         run(['ffmpeg', '-v', 'error', '-f', 'lavfi', '-i', 'color=s=160x90:r=25:d=3',

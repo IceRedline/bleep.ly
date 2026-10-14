@@ -172,18 +172,25 @@ def analyze_track(request):
             with tempfile.TemporaryDirectory(prefix="bleep-speech-") as folder:
                 audio = Path(folder) / "speech.wav"
                 extract_audio(source, audio, info, tracking("Preparing audio", info.duration))
-                callback = tracking("Recognizing speech", info.duration)
+                callback = None
                 protocol_output = sys.stdout
                 def inference_progress(seconds):
                     # Library stdout is redirected, but app progress must stay on the protocol pipe.
+                    nonlocal callback
                     with contextlib.redirect_stdout(protocol_output):
+                        if callback is None:
+                            callback = tracking("Recognizing speech", info.duration)
                         callback(seconds)
                 engine = MLXWhisperBackend if backend == "mlx" else FasterWhisperBackend
                 # Some inference libraries print to stdout; keep the protocol clean.
                 with contextlib.redirect_stdout(sys.stderr):
                     transcriber = native_engine if backend == "whisperkit" or backend in GPU_BACKENDS else engine(model, language, compute, request.get("offline", True))
                     recognition_started = time.perf_counter()
-                    raw = transcriber.transcribe(audio, inference_progress)
+                    from .download_progress import reported_hub_downloads
+                    preparation = (reported_hub_downloads(f"Whisper {model.rsplit('/', 1)[-1]}", report)
+                                   if backend in {"faster-whisper", "mlx"} else contextlib.nullcontext())
+                    with preparation:
+                        raw = transcriber.transcribe(audio, inference_progress)
                     recognition_seconds = time.perf_counter() - recognition_started
                 if backend == "whisperkit" or backend in GPU_BACKENDS:
                     metadata["native_metrics"] = native_engine.metrics

@@ -9,7 +9,7 @@ import tempfile
 from .models import WordTimestamp
 from .speech_chunks import CONTEXT_SECONDS, append_window_words, speech_windows
 from .model_downloads import ModelDownloadRequired
-from .download_progress import byte_progress_bar, sized_model_downloads
+from .download_progress import byte_progress_bar, download_snapshot
 from .transcription import file_hash
 from .utils import CensorError
 
@@ -59,31 +59,8 @@ def prepare(model, offline=True, progress=None):
 
 def prepare_hub_asset(repo, revision, name, offline, notify):
     from huggingface_hub import snapshot_download
-    options = dict(revision=revision, allow_patterns=["*.json", "*.safetensors", "*.txt", "*.model", "*.vocab"])
-    notify(f"Checking {name} model", 0)
-    if offline:
-        return snapshot_download(repo, local_files_only=True, **options)
-    # A local snapshot directory may contain only files from an interrupted
-    # download. Online mode must check the pinned file list before using it.
-    # Plain HTTP reports received file bytes continuously, against the same
-    # manifest sizes. Xet's compressed wire bytes cannot use this denominator.
-    with sized_model_downloads():
-        notify(f"Checking {name} download size", 0)
-        plan_bar = byte_progress_bar('', lambda *_: None)
-        try:
-            plan = snapshot_download(repo, dry_run=True, tqdm_class=plan_bar, **options)
-        finally:
-            plan_bar.finish()
-        pending = [item for item in plan if item.will_download]
-        total = sum(item.file_size for item in pending) if all(item.file_size is not None for item in pending) else 0
-        notify(f"Connecting to download {name}", 0)
-        progress_bar = byte_progress_bar(f"Downloading {name}", notify, total)
-        try:
-            path = snapshot_download(repo, tqdm_class=progress_bar, headers={'Accept-Encoding': 'identity'}, **options)
-        finally:
-            progress_bar.finish()
-    notify(f"{name} model ready", 1)
-    return path
+    return download_snapshot(snapshot_download, repo, name, offline, notify, revision=revision,
+                             allow_patterns=["*.json", "*.safetensors", "*.txt", "*.model", "*.vocab"])
 
 
 def cache_identity(source, model, audio_index, progress=None, language="ru"):
