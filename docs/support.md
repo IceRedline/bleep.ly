@@ -1,10 +1,10 @@
-# bleep.ly Support
+# bleeply Support
 
-Get help from Artem Tabenskii through [GitHub Issues](https://github.com/IceRedline/bleep.ly/issues). A GitHub account is needed to open an issue. Reports are public; never attach private recordings, transcripts or personal information.
+Get help from Artem Tabenskii through [GitHub Issues](https://github.com/IceRedline/bleeply/issues). A GitHub account is needed to open an issue. Reports are public; never attach private recordings, transcripts or personal information.
 
 ## Reporting a problem
 
-Include the app version and build from About bleep.ly, your macOS version, your Mac model, the selected recognition engine and model, and the steps that caused the problem. Copy the error message if one is shown. A description is usually enough; recordings are not required.
+Include the app version and build from About bleeply, your macOS version, your Mac model, the selected recognition engine and model, and the steps that caused the problem. Copy the error message if one is shown. A description is usually enough; recordings are not required.
 
 ## First run and model downloads
 

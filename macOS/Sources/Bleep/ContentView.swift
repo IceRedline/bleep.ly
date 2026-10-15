@@ -69,9 +69,9 @@ struct ContentView: View {
             Button(action: model.goHome) {
                 HStack(spacing: 10) {
                     Image(systemName: "waveform").font(.title2.weight(.semibold)).foregroundStyle(.mint)
-                    Text("bleep.ly").font(.system(size: 24, weight: .bold, design: .rounded)).tracking(-0.7)
+                    Text("bleeply").font(.system(size: 24, weight: .bold, design: .rounded)).tracking(-0.7)
                 }
-            }.buttonStyle(.plain).help("Return home").accessibilityLabel("bleep.ly · Home")
+            }.buttonStyle(.plain).help("Return home").accessibilityLabel("bleeply · Home")
             if model.document != nil || model.busy {
                 Button(action: model.goHome) { Label("Home", systemImage: "house") }
                     .buttonStyle(.borderless).help(model.busy ? "Cancel processing and return home" : "Return to file selection")

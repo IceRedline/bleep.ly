@@ -1,7 +1,7 @@
 #!/bin/bash
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-APP="${1:?Usage: build-theme.sh /path/to/bleep.ly.app}"
+APP="${1:?Usage: build-theme.sh /path/to/bleeply.app}"
 # AppKit resolves the global accent from the main bundle, not a SwiftPM bundle.
 xcrun actool "$ROOT/macOS/Resources/Theme.xcassets" \
   --compile "$APP/Contents/Resources" --platform macosx \

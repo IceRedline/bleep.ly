@@ -24,7 +24,7 @@ The separate command-line helpers use build-ffmpeg.sh and the same FFmpeg source
 archive. Python package copyright notices, including PyAV's BSD-3-Clause license,
 remain in each runtime's site-packages distribution metadata.
 
-To reproduce: check out the bleep.ly source revision in ../pyav-build.json,
+To reproduce: check out the bleeply source revision in ../pyav-build.json,
 create a Python 3.11 environment at .venv, install Xcode and pkg-config, then run
 bash scripts/release/build-pyav.sh. Copy these source archives into
 .cache/pyav-lgpl/sources first to reuse them without downloading again.
@@ -37,7 +37,7 @@ Keep the existing library install names and relative dependency paths (otool -L
 and install_name_tool can inspect/update them), or rebuild PyAV and use delocate.
 Re-sign every changed Mach-O and the local app copy with your own signing identity;
 macOS library validation requires matching signatures. Do not modify the installed
-signed release in place. No permission from the bleep.ly developer is required
+signed release in place. No permission from the bleeply developer is required
 to exercise the rights granted by the included LGPL license.
 '''
 

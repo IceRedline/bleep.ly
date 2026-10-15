@@ -25,7 +25,7 @@ final class PythonBridge {
              timing: @escaping @MainActor (Double) -> Void = { _ in }) async throws -> Data {
         guard process == nil else { throw BridgeFailure(message: "Another operation is still running.") }
         guard FileManager.default.fileExists(atPath: root.appendingPathComponent("censor/desktop.py").path) else {
-            throw BridgeFailure(message: "Choose the bleep.ly project folder in Settings.")
+            throw BridgeFailure(message: "Choose the bleeply project folder in Settings.")
         }
         guard FileManager.default.isExecutableFile(atPath: python.path) else {
             throw BridgeFailure(message: "Python was not found. Select the project's .venv/bin/python in Settings.")

@@ -47,7 +47,7 @@ enum RuntimePaths {
 
     static func history(root: URL, support: URL) -> URL {
         isBundled(root) ? support.appendingPathComponent("recognition-history")
-            : root.appendingPathComponent("тесты bleep.ly/recognition-history")
+            : root.appendingPathComponent("тесты bleeply/recognition-history")
     }
 
     static func environment(root: URL, python: URL, support: URL,

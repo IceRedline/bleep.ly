@@ -108,7 +108,7 @@ def prepare(args):
         raise ValueError('Output already exists; choose a new candidate directory')
     info = plistlib.loads((source/'Contents/Info.plist').read_bytes())
     if info.get('CFBundleIdentifier') != 'ly.bleep.desktop' or info.get('BleepAppSandbox'):
-        raise ValueError('Source must be the original bleep.ly direct-download release')
+        raise ValueError('Source must be the original bleeply direct-download release')
     if not args.executable.is_file():
         raise ValueError('Build the Swift app before preparing the candidate')
     if not args.build_number.isdecimal() or int(args.build_number) < int(info['CFBundleVersion']):
@@ -122,7 +122,7 @@ def prepare(args):
     xcode_parts = xcode[0].split()[-1].split('.')
     xcode_number = xcode_parts[0] + ''.join((xcode_parts[1:] + ['0', '0'])[:2])
     output.mkdir(parents=True)
-    app = output/'bleep.ly.app'
+    app = output/'bleeply.app'
     subprocess.run(['cp', '-cR', str(source), str(app)], check=True)
     shutil.copy2(args.executable, app/'Contents/MacOS/Bleep')
     runtime_origin = refresh_engine(app, source_commit)
@@ -131,7 +131,8 @@ def prepare(args):
     documentation.mkdir(exist_ok=True)
     for name in ['privacy-policy.md', 'support.md', 'third-party.md']:
         shutil.copy2(ROOT/'docs'/name, documentation/name)
-    info.update(CFBundleVersion=args.build_number, BleepBuildID=str(uuid.uuid4()), BleepAppSandbox=True,
+    info.update(CFBundleName='bleeply', CFBundleDisplayName='bleeply',
+                CFBundleVersion=args.build_number, BleepBuildID=str(uuid.uuid4()), BleepAppSandbox=True,
                 LSApplicationCategoryType='public.app-category.video',
                 NSHumanReadableCopyright=args.copyright, CFBundleSupportedPlatforms=['MacOSX'],
                 DTPlatformName='macosx', DTPlatformVersion=sdk_version, DTPlatformBuild=sdk_build,
@@ -197,7 +198,7 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     commands = parser.add_subparsers(dest='operation', required=True)
     prep = commands.add_parser('prepare', help='Clone a release without modifying its signed artifacts')
-    prep.add_argument('--source-app', type=Path, default=ROOT/'build/release/bleep.ly.app')
+    prep.add_argument('--source-app', type=Path, default=ROOT/'build/release/bleeply.app')
     prep.add_argument('--executable', type=Path, default=ROOT/'.cache/swift-build/release/Bleep')
     prep.add_argument('--output', type=Path, required=True)
     prep.add_argument('--build-number', required=True)

@@ -5,7 +5,7 @@ final class RuntimePathsTests: XCTestCase {
     func testRecognitionCacheSurvivesRelaunchAndMoveButNotReinstallation() throws {
         let folder = FileManager.default.temporaryDirectory.appendingPathComponent("bleep-install-\(UUID())")
         defer { try? FileManager.default.removeItem(at: folder) }
-        let app = folder.appendingPathComponent("bleep.ly.app")
+        let app = folder.appendingPathComponent("bleeply.app")
         let moved = folder.appendingPathComponent("Moved.app")
         try FileManager.default.createDirectory(at: app, withIntermediateDirectories: true)
         let info = ["CFBundleShortVersionString": "0.1.1", "CFBundleVersion": "7", "BleepBuildID": "build-a"]

@@ -1,10 +1,10 @@
-# bleep.ly for macOS
+# bleeply for macOS
 
 Native SwiftUI front end for the Python engine. The signed, Apple-notarized
-[0.1.4 release](https://github.com/IceRedline/bleep.ly/releases/tag/v0.1.4) supports
+[0.1.4 release](https://github.com/IceRedline/bleeply/releases/tag/v0.1.4) supports
 **Apple Silicon and macOS 15.0 or later**. It includes Python, FFmpeg and the
 recognition engines; only model weights download separately. Install it by
-dragging **bleep.ly** from the DMG to **Applications**.
+dragging the app from the DMG to **Applications**. Historical installers retain their original branding; new builds use **bleeply**.
 
 The instructions below describe development builds. The Swift app targets
 macOS 14+; its included WhisperKit helper requires Swift 5.10 or later. Use
@@ -21,7 +21,7 @@ From the repository root:
 ./scripts/build-macos.sh --open
 ```
 
-This builds `build/bleep.ly.app` with a local ad-hoc signature. You can open that app from Finder afterwards. `macOS/Package.swift` can also be opened in Xcode. When running through Xcode, set the project folder in the app's Settings.
+This builds `build/bleeply.app` with a local ad-hoc signature. You can open that app from Finder afterwards. `macOS/Package.swift` can also be opened in Xcode. When running through Xcode, set the project folder in the app's Settings.
 
 This is a local developer app: Python, FFmpeg, models, and the repository are external dependencies, not bundled. It is not notarized or ready for App Store distribution. Moving the app is fine as long as its project folder remains accessible; moving the repository requires updating Settings or rebuilding.
 
@@ -49,10 +49,10 @@ their separate runtime with `bash scripts/setup-experimental-gpu.sh`; release
 DMGs already contain it. See [recognition options](../README.md#recognition).
 
 Release builds store models in
-`~/Library/Application Support/bleep.ly/models/` and recognition history in
-`~/Library/Application Support/bleep.ly/recognition-history/`. Development
+`~/Library/Application Support/bleeply/models/` and recognition history in
+`~/Library/Application Support/bleeply/recognition-history/`. Development
 builds use the repository's `.cache/` for models and
-`тесты bleep.ly/recognition-history/` for history.
+`тесты bleeply/recognition-history/` for history.
 
 ## Fast Mode and Advanced Mode
 
@@ -77,7 +77,7 @@ In Settings → Censoring, choose **Word middle (default)** or **Whole word**. T
 
 Default automatic mute intervals use the same middle-word rule and 0.383021s cap as the approved `beep_trimmed.wav` reference. Switching sounds does not recalculate these intervals. Manual intervals use your exact boundaries. The original CLI and local reviewed media remain untouched.
 
-Reviews autosave to `~/Library/Application Support/bleep.ly/last-review.json`; **Resume Last Review** reopens the latest successful review. Word timestamps and classifications are cached separately under `cache/` in that folder. The last review is replaced when a new source finishes analysis. Clicking **Custom** activates the saved custom sound immediately. If no sound has been saved yet, it opens the audio file chooser; cancelling or a failed import keeps the previous selection. Click the filename below the sound selector to choose a replacement, or drop a new sound there. Cancelling replacement keeps the current mode and saved sound. The sound mode and custom audio are retained across launches. Custom audio is copied into `Custom Sounds/` in the app support directory; it remains available if the original cue is moved or deleted. Replacing it keeps only the new saved copy. Export checks source size/modification time and refuses changed media. Preview audio is a temporary session cache of decoded source audio and up to eight recent variants, cleared on Home, a new source, or normal app exit. APFS snapshots use copy-on-write so small edits do not copy an entire long WAV; other filesystems fall back to a file copy, but still process only the changed audio windows. It contains audio only and has a 7 GiB session budget. Older variants and decoded tracks are evicted first, keeping current playback and update inputs. If a preview cannot fit the budget or leave 1 GiB free on disk, the app explains the limit; original playback and export remain available. Abandoned processing and preview folders are cleaned up after a crash, with leases protecting live app instances and workers. Recognition cache and history share a 256 MiB budget and a 30-day retention period; cleanup runs before and after analysis, and reuse refreshes a transcript’s retention date. Models, original recordings, exports, custom sounds, and the saved review are excluded from cleanup. Settings → Storage explains these limits.
+Reviews autosave to `~/Library/Application Support/bleeply/last-review.json`; **Resume Last Review** reopens the latest successful review. Word timestamps and classifications are cached separately under `cache/` in that folder. The last review is replaced when a new source finishes analysis. Clicking **Custom** activates the saved custom sound immediately. If no sound has been saved yet, it opens the audio file chooser; cancelling or a failed import keeps the previous selection. Click the filename below the sound selector to choose a replacement, or drop a new sound there. Cancelling replacement keeps the current mode and saved sound. The sound mode and custom audio are retained across launches. Custom audio is copied into `Custom Sounds/` in the app support directory; it remains available if the original cue is moved or deleted. Replacing it keeps only the new saved copy. Export checks source size/modification time and refuses changed media. Preview audio is a temporary session cache of decoded source audio and up to eight recent variants, cleared on Home, a new source, or normal app exit. APFS snapshots use copy-on-write so small edits do not copy an entire long WAV; other filesystems fall back to a file copy, but still process only the changed audio windows. It contains audio only and has a 7 GiB session budget. Older variants and decoded tracks are evicted first, keeping current playback and update inputs. If a preview cannot fit the budget or leave 1 GiB free on disk, the app explains the limit; original playback and export remain available. Abandoned processing and preview folders are cleaned up after a crash, with leases protecting live app instances and workers. Recognition cache and history share a 256 MiB budget and a 30-day retention period; cleanup runs before and after analysis, and reuse refreshes a transcript’s retention date. Models, original recordings, exports, custom sounds, and the saved review are excluded from cleanup. Settings → Storage explains these limits.
 
 **Import Reviewed Transcript…** reuses an existing word-level transcript for the currently opened source, with its manual flags preserved and no inference. This is also available after an analysis error. It derives the initial middle-word intervals using the approved cap. It does not modify the supplied transcript.
 
@@ -117,5 +117,7 @@ The Python integration tests cover audio inputs, silence, cue tails, no-clobber 
 - `../censor/desktop.py`: version 1 JSON request/event protocol, using the existing recognition, profanity matching, and mixing functions.
 
 FCPXML/JSON export and waveform zoom are left for subsequent versions. Release DMGs include Python and FFmpeg; see [release instructions](../scripts/release/README.md). The CLI's existing FCPXML features remain available independently.
+
+The rebrand migrates the previous app support folder to `bleeply` before importing any Lab data. Saved reviews, custom sounds, bookmarks, and models are retained; files already present at the new location take precedence. The previous name appears in source only for migration compatibility.
 
 There is no separate Lab app. The unified build uses `ly.bleep.desktop` and the regular app support directory. On first launch it copies missing settings, the saved custom cue, and the last review from the former Lab app; existing regular-app data and the original Lab files are preserved.

@@ -48,7 +48,7 @@ def build_xml(source: Path, info: MediaInfo, media_dir: Path, ranges: list[Censo
                       duration=rational_time(durations[i]), hasAudio="1", audioSources="1", audioChannels="2", audioRate=str(RATE))
         ET.SubElement(beep, "media-rep", kind="original-media", src=(media_dir / f"beep_{i + 1:04d}.wav").resolve().as_uri())
     library = ET.SubElement(root, "library")
-    event = ET.SubElement(library, "event", name="bleep.ly")
+    event = ET.SubElement(library, "event", name="bleeply")
     project = ET.SubElement(event, "project", name=f"{source.stem} — censored")
     sequence = ET.SubElement(project, "sequence", format="r1", duration=rational_time(duration),
                              tcStart="0s", tcFormat="NDF", audioLayout="stereo", audioRate="48k")

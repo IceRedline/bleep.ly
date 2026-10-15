@@ -29,7 +29,7 @@ try:
     assert (volume/'Applications').is_symlink()
     assert (volume/'Applications').readlink() == Path('/Applications')
     with DSStore.open(str(volume/'.DS_Store'), 'r') as store:
-        assert tuple(store['bleep.ly.app']['Iloc'])[:2] == (202,236)
+        assert tuple(store['bleeply.app']['Iloc'])[:2] == (202,236)
         assert tuple(store['Applications']['Iloc'])[:2] == (518,236)
         assert store['.']['icvp']['backgroundType'] == 2
         window = store['.']['bwsp']
