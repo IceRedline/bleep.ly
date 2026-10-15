@@ -83,7 +83,21 @@ func clockText(_ seconds: Double) -> String {
 struct BridgeFailure: LocalizedError {
     var code: String? = nil
     let message: String
-    var errorDescription: String? { message }
+    var errorDescription: String? {
+        guard let code, !code.isEmpty else { return message }
+        return "\(message)\nError code: \(code)"
+    }
+}
+
+/// Preserve native AVFoundation/file-system diagnostics as well as worker codes.
+func errorMessage(_ error: Error) -> String {
+    if error is BridgeFailure { return error.localizedDescription }
+    let native = error as NSError
+    var message = "\(native.localizedDescription)\nError code: \(native.domain) (\(native.code))"
+    if let underlying = native.userInfo[NSUnderlyingErrorKey] as? NSError {
+        message += "\nUnderlying error: \(underlying.domain) (\(underlying.code))"
+    }
+    return message
 }
 
 enum WorkflowMode: String, CaseIterable {

@@ -376,7 +376,8 @@ def _main():
                  message="The selected model is not downloaded. Allow model downloads in Settings, "
                          "then open your file again. Your recordings stay on your Mac.")
         else:
-            emit("error", message=str(exc))
+            emit("error", code="processing_failed" if isinstance(exc, CensorError) else "internal_error",
+                 message=str(exc))
         return 1
     finally:
         _protocol_output = previous_output

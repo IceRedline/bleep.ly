@@ -96,7 +96,9 @@ final class PythonBridge {
                     continuation.resume(returning: result)
                 } else {
                     let diagnostic = (try? String(contentsOf: errorURL, encoding: .utf8)) ?? ""
-                    continuation.resume(throwing: BridgeFailure(code: failureCode, message: failure ??
+                    let code = failureCode ?? (failure == nil ?
+                        "worker_\(child.terminationReason == .uncaughtSignal ? "signal" : "exit")_\(child.terminationStatus)" : nil)
+                    continuation.resume(throwing: BridgeFailure(code: code, message: failure ??
                         (diagnostic.isEmpty ? "Processing stopped (\(child.terminationStatus))." : String(diagnostic.suffix(4000)))))
                 }
             }

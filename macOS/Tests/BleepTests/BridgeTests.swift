@@ -8,6 +8,17 @@ final class BridgeTests: XCTestCase {
             .deletingLastPathComponent().deletingLastPathComponent()
     }
 
+    func testNativeErrorRetainsDomainCodeAndUnderlyingCode() {
+        let error = NSError(domain: "AVFoundationErrorDomain", code: -11828, userInfo: [
+            NSLocalizedDescriptionKey: "Cannot Open",
+            NSUnderlyingErrorKey: NSError(domain: NSOSStatusErrorDomain, code: -12847)
+        ])
+        let message = errorMessage(error)
+        XCTAssertTrue(message.contains("Cannot Open"))
+        XCTAssertTrue(message.contains("AVFoundationErrorDomain (-11828)"))
+        XCTAssertTrue(message.contains("NSOSStatusErrorDomain (-12847)"))
+    }
+
     @MainActor
     func testRealPythonBridgeAnalysisAndExport() async throws {
         let python = root.appendingPathComponent(".venv/bin/python")
@@ -45,7 +56,31 @@ final class BridgeTests: XCTestCase {
             _ = try await bridge.run(root: root, python: python,
                 request: ["operation": "analyze", "source": "/does/not/exist"]) { _, _ in }
             XCTFail("Missing media must fail")
-        } catch { XCTAssertTrue(error.localizedDescription.contains("does not exist")) }
+        } catch {
+            XCTAssertTrue(error.localizedDescription.contains("does not exist"))
+            XCTAssertEqual((error as? BridgeFailure)?.code, "processing_failed")
+            XCTAssertTrue(error.localizedDescription.contains("Error code: processing_failed"))
+        }
+    }
+
+    @MainActor
+    func testWorkerCrashIncludesExitCodeAndDiagnostic() async throws {
+        let folder = FileManager.default.temporaryDirectory.appendingPathComponent("bleep-error-\(UUID())")
+        let package = folder.appendingPathComponent("censor")
+        try FileManager.default.createDirectory(at: package, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: folder) }
+        try Data().write(to: package.appendingPathComponent("__init__.py"))
+        try Data("import sys\nprint('Native model failed', file=sys.stderr)\nsys.exit(7)".utf8)
+            .write(to: package.appendingPathComponent("desktop.py"))
+        do {
+            _ = try await PythonBridge().run(root: folder, python: URL(fileURLWithPath: "/usr/bin/python3"),
+                request: ["operation": "test"]) { _, _ in }
+            XCTFail("Worker must fail")
+        } catch {
+            XCTAssertEqual((error as? BridgeFailure)?.code, "worker_exit_7")
+            XCTAssertTrue(error.localizedDescription.contains("Native model failed"))
+            XCTAssertTrue(error.localizedDescription.contains("Error code: worker_exit_7"))
+        }
     }
 
     @MainActor

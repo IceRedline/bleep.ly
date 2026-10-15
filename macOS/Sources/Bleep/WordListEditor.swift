@@ -100,13 +100,13 @@ struct WordListEditor: View {
             HStack {
                 Button("Reset this language") {
                     do { drafts[language] = try WordListPreferences.builtIn(language, root: root); error = nil }
-                    catch { self.error = error.localizedDescription }
+                    catch { self.error = errorMessage(error) }
                 }
                 Spacer()
                 Button("Cancel") { dismiss() }.keyboardShortcut(.cancelAction)
                 Button("Save") {
                     do { try WordListPreferences.save(drafts, defaults: defaults); dismiss() }
-                    catch { self.error = error.localizedDescription }
+                    catch { self.error = errorMessage(error) }
                 }.keyboardShortcut(.defaultAction).disabled(drafts.count != VideoLanguage.allCases.count)
             }
         }.padding(24).frame(width: 620, height: 660).tint(.mint)
@@ -115,7 +115,7 @@ struct WordListEditor: View {
                     for language in VideoLanguage.allCases {
                         drafts[language] = try WordListPreferences.load(language, root: root, defaults: defaults)
                     }
-                } catch { self.error = error.localizedDescription }
+                } catch { self.error = errorMessage(error) }
             }
     }
 }

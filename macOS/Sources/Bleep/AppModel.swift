@@ -96,7 +96,7 @@ final class AppModel: ObservableObject {
             do {
                 try LegacyLabMigration.migrate(defaults: defaults, directory: Self.support,
                     legacyDefaults: legacy, legacyDirectory: Self.support.deletingLastPathComponent().appendingPathComponent("bleep.ly Lab"))
-            } catch { migrationError = "Could not import Lab data: \(error.localizedDescription)" }
+            } catch { migrationError = "Could not import Lab data: \(errorMessage(error))" }
         }
         WhisperKitExperiment.migratePreferences(defaults: defaults)
         self.defaults = defaults
@@ -259,7 +259,7 @@ final class AppModel: ObservableObject {
                 saveDraft()
                 phase = .review
             } catch {
-                if !cancelling && !(error is CancellationError) { self.error = error.localizedDescription }
+                if !cancelling && !(error is CancellationError) { self.error = errorMessage(error) }
                 restoreReviewAfterOpenFailure()
             }
             cancelling = false
@@ -530,7 +530,7 @@ final class AppModel: ObservableObject {
                 await installPlayerItem(item, document: document, track: index, censored: true, generation: generation)
             } catch {
                 if !Task.isCancelled && playerGeneration == generation {
-                    self.error = "Could not prepare censored preview: \(error.localizedDescription)"
+                    self.error = "Could not prepare censored preview: \(errorMessage(error))"
                     if playingCensoredPreview, let original = try? await makePlayerItem(document: document, track: index) {
                         await installPlayerItem(original, document: document, track: index, censored: false, generation: generation)
                     }
@@ -610,7 +610,7 @@ final class AppModel: ObservableObject {
                 try SandboxFiles.saveBookmark(for: sourceAccess.url, to: supportDirectory.appendingPathComponent("last-source.bookmark"))
             }
             try JSONEncoder.bridge.encode(document).write(to: supportDirectory.appendingPathComponent("last-review.json"), options: .atomic)
-        } catch { self.error = "Could not save your review: \(error.localizedDescription)" }
+        } catch { self.error = "Could not save your review: \(errorMessage(error))" }
     }
     func restoreDraft() {
         guard !busy else { return }
@@ -631,7 +631,7 @@ final class AppModel: ObservableObject {
             preparePlayer()
             exportFormat = restored.hasVideo ? "video" : "audio"
             exportURL = nil; phase = .review
-        } catch { self.error = error.localizedDescription }
+        } catch { self.error = errorMessage(error) }
     }
     func importTranscript() {
         guard !busy, let source = document?.url ?? pendingSource else {
@@ -657,7 +657,7 @@ final class AppModel: ObservableObject {
             customSound = try SavedCensorSound(directory: supportDirectory, defaults: defaults).save(url)
             sound = "custom"
             error = nil
-        } catch { self.error = "Could not save the custom sound: \(error.localizedDescription)" }
+        } catch { self.error = "Could not save the custom sound: \(errorMessage(error))" }
     }
 
     func export() {
@@ -712,7 +712,7 @@ final class AppModel: ObservableObject {
                 try await render(document, to: destination, format: format, sound: selectedSound, customSound: selectedCustomSound)
                 exportAccess = destinationAccess
             } catch {
-                if !cancelling { self.error = error.localizedDescription }
+                if !cancelling { self.error = errorMessage(error) }
                 phase = .review
             }
             cancelling = false
