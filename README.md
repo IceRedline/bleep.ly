@@ -10,9 +10,9 @@ Local speech recognition and profanity censoring for Russian video and audio, wi
 
 ## Download for macOS
 
-The [v0.1.8 release](https://github.com/IceRedline/bleeply/releases/tag/v0.1.8)
+The [v0.1.9 release](https://github.com/IceRedline/bleeply/releases/tag/v0.1.9)
 provides a self-contained DMG for **Apple Silicon, macOS 15.0 or later**.
-Open the DMG and drag the app to **Applications**. Published installers retain the branding from their release; new builds use **bleeply**.
+Quit the previous app, open the DMG, and drag **bleeply** to **Applications**. If the previous version has a different app name, remove that old app after the update succeeds; keep its Application Support data for automatic migration.
 Python, FFmpeg and the recognition engines are included; Homebrew and this
 repository are not needed. Models download separately: when one is missing, choose **OK** in the download
 prompt to allow model downloads and continue processing. Downloads
