@@ -128,11 +128,11 @@ def main():
         files, minimum = audit(args.audit_only)
         print(json.dumps(dict(native_files=len(files), minimum_macos=minimum)))
         return
-    app = ROOT/'build/release/bleep.ly.app'
+    app = ROOT/'build/release/bleeply.app'
     app.parent.mkdir(parents=True, exist_ok=True)
     if app.exists():
         parser.error(f'{app} already exists; move the previous signed build aside before rebuilding')
-    shutil.copytree(ROOT/'build/bleep.ly.app', app)
+    shutil.copytree(ROOT/'build/bleeply.app', app)
     engine = app/'Contents/Resources/Engine'
     engine.mkdir()
     shutil.copytree(ROOT/'censor', engine/'censor', ignore=shutil.ignore_patterns('__pycache__', '*.pyc'))

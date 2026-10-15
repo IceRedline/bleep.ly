@@ -17,6 +17,7 @@ class FCPXMLTests(unittest.TestCase):
         info = MediaInfo(10, 0, 1, 1, 1920, 1080, Fraction(25), timecode=Fraction(3600))
         tree = build_xml(Path('/tmp/видео & "test".mov'), info, Path('/tmp/censor media'), [CensorRange(1.25, 1.75)], .8)
         root = ET.fromstring(ET.tostring(tree.getroot()))
+        self.assertEqual(root.find("library/event").get("name"), "bleeply")
         primary = root.find(".//spine/asset-clip")
         self.assertEqual(primary.get("srcEnable"), "video")
         self.assertEqual(primary.get("start"), "3600/1s")

@@ -1,4 +1,4 @@
-# bleep.ly project workflow
+# bleeply project workflow
 
 - Use Git for version control in this project.
 - Write public documentation, release notes, and pull request descriptions in English, matching the project README.

@@ -31,11 +31,11 @@ new, monotonically increasing build number for every upload.
 ```sh
 security find-identity -v -p codesigning
 python3 scripts/release/testflight-macos.py sign \
-  --app build/testflight-0.1.8-19/bleep.ly.app \
-  --profile /path/to/bleep-ly-store.provisionprofile \
+  --app build/testflight-0.1.8-19/bleeply.app \
+  --profile /path/to/bleeply-store.provisionprofile \
   --identity APPLICATION_CERTIFICATE_SHA1 \
   --installer-identity '3rd Party Mac Developer Installer: YOUR NAME (TEAM_ID)' \
-  --pkg build/testflight-0.1.8-19/bleep.ly-0.1.8-19.pkg
+  --pkg build/testflight-0.1.8-19/bleeply-0.1.8-19.pkg
 ```
 
 Signing checks the profile's app, platform, expiration and certificate before
@@ -93,7 +93,7 @@ Install a **Developer ID Application** identity in the login keychain. Create a
 notarytool profile interactively; never put a password in source or shell history:
 
 ```sh
-xcrun notarytool store-credentials bleep-ly-notary --apple-id YOUR_APPLE_ID --team-id YOUR_TEAM_ID
+xcrun notarytool store-credentials bleeply-notary --apple-id YOUR_APPLE_ID --team-id YOUR_TEAM_ID
 ```
 
 ## Build and check
@@ -109,8 +109,8 @@ bash scripts/build-macos.sh
 bash scripts/release/build-ffmpeg.sh
 bash scripts/release/build-pyav.sh
 python3 scripts/release/bundle-macos.py --version 0.1.8
-python3 scripts/release/sign-macos.py --identity 'Developer ID Application: YOUR NAME (TEAM_ID)' build/release/bleep.ly.app
-python3 scripts/release/smoke-test.py build/release/bleep.ly.app
+python3 scripts/release/sign-macos.py --identity 'Developer ID Application: YOUR NAME (TEAM_ID)' build/release/bleeply.app
+python3 scripts/release/smoke-test.py build/release/bleeply.app
 ```
 
 The FFmpeg script builds unmodified LGPL sources with only system frameworks,
@@ -137,7 +137,7 @@ Metal, PyTorch MPS, Numba JIT, transcript import, mute timing, WAV export and
 byte-identical video packet copying. Optional real offline recognition:
 
 ```sh
-python3 scripts/release/smoke-test.py build/release/bleep.ly.app \
+python3 scripts/release/smoke-test.py build/release/bleeply.app \
   --recognize /path/to/short-russian-recording.mov --model-cache "$PWD/.cache"
 ```
 
@@ -152,11 +152,11 @@ library validation stays enabled. Use the same Developer ID for all code.
 
 ```sh
 .cache/dmg-tools/bin/python scripts/release/build-dmg.py --version 0.1.8
-codesign --sign 'Developer ID Application: YOUR NAME (TEAM_ID)' --timestamp dist/bleep.ly-0.1.8-arm64.dmg
-xcrun notarytool submit dist/bleep.ly-0.1.8-arm64.dmg --keychain-profile bleep-ly-notary --wait
-xcrun stapler staple dist/bleep.ly-0.1.8-arm64.dmg
-xcrun stapler validate dist/bleep.ly-0.1.8-arm64.dmg
-spctl --assess --type open --context context:primary-signature --verbose=2 dist/bleep.ly-0.1.8-arm64.dmg
+codesign --sign 'Developer ID Application: YOUR NAME (TEAM_ID)' --timestamp dist/bleeply-0.1.8-arm64.dmg
+xcrun notarytool submit dist/bleeply-0.1.8-arm64.dmg --keychain-profile bleeply-notary --wait
+xcrun stapler staple dist/bleeply-0.1.8-arm64.dmg
+xcrun stapler validate dist/bleeply-0.1.8-arm64.dmg
+spctl --assess --type open --context context:primary-signature --verbose=2 dist/bleeply-0.1.8-arm64.dmg
 ```
 
 Apple's [distribution workflow](https://developer.apple.com/documentation/xcode/packaging-mac-software-for-distribution)

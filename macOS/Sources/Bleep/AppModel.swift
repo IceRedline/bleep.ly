@@ -69,7 +69,7 @@ final class AppModel: ObservableObject {
 
     static var support: URL {
         FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
-            .appendingPathComponent("bleep.ly", isDirectory: true)
+            .appendingPathComponent("bleeply", isDirectory: true)
     }
     static var defaultRoot: String {
         RuntimePaths.bundledRoot?.path ?? (Bundle.main.object(forInfoDictionaryKey: "BleepProjectRoot") as? String ?? FileManager.default.currentDirectoryPath)
@@ -91,12 +91,15 @@ final class AppModel: ObservableObject {
 
     init(defaults: UserDefaults = .standard, supportDirectory: URL? = nil) {
         var migrationError: String?
-        if defaults === UserDefaults.standard, supportDirectory == nil,
-           let legacy = UserDefaults(suiteName: "ly.bleep.desktop.lab") {
+        if defaults === UserDefaults.standard, supportDirectory == nil {
             do {
-                try LegacyLabMigration.migrate(defaults: defaults, directory: Self.support,
-                    legacyDefaults: legacy, legacyDirectory: Self.support.deletingLastPathComponent().appendingPathComponent("bleep.ly Lab"))
-            } catch { migrationError = "Could not import Lab data: \(errorMessage(error))" }
+                let parent = Self.support.deletingLastPathComponent()
+                try BrandMigration.migrate(parent: parent, defaults: defaults)
+                if let legacy = UserDefaults(suiteName: "ly.bleep.desktop.lab") {
+                    try LegacyLabMigration.migrate(defaults: defaults, directory: Self.support,
+                        legacyDefaults: legacy, legacyDirectory: parent.appendingPathComponent(BrandMigration.legacyName + " Lab"))
+                }
+            } catch { migrationError = "Could not migrate saved app data: \(errorMessage(error))" }
         }
         WhisperKitExperiment.migratePreferences(defaults: defaults)
         self.defaults = defaults
@@ -108,7 +111,7 @@ final class AppModel: ObservableObject {
         self.sound = ["beep", "silence", "custom"].contains(savedSound) ? savedSound : "beep"
         if self.sound == "custom" && self.customSound == nil {
             self.sound = "beep"
-            defaults.set("beep", forKey: "censorSound")
+            if migrationError == nil { defaults.set("beep", forKey: "censorSound") }
             self.error = "The saved custom sound is unavailable. Choose it again."
         }
         if let migrationError { self.error = migrationError }

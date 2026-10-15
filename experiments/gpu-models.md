@@ -1,6 +1,6 @@
 # Experimental Apple GPU models
 
-Select **Apple GPU · MLX / MPS → Model · testing** in the single bleep.ly app.
+Select **Apple GPU · MLX / MPS → Model · testing** in the single bleeply app.
 Changing the media language now selects GigaAM v3 for Russian on Apple Silicon,
 or Whisper Large v3 Turbo for English; Settings allows a manual override. Experimental choices share the existing
 profanity filter, review editor, audio preview and export code. Existing reviewed
@@ -58,7 +58,7 @@ Audio decoding, VAD and bookkeeping can still use CPU, as in the Whisper pipelin
 ```sh
 HF_HOME="$PWD/.cache/huggingface" HF_HUB_DISABLE_TELEMETRY=1 \
   .runtime/asr-env/bin/python scripts/benchmark-gpu-models.py 'стрим.m4v' \
-  --prepare --output 'тесты bleep.ly/gpu-comparison-new'
+  --prepare --output 'тесты bleeply/gpu-comparison-new'
 ```
 
 Downloads finish before timing. The script then runs all four experimental
@@ -75,11 +75,11 @@ For example:
 ```sh
 .runtime/asr-env/bin/python scripts/benchmark-gpu-models.py english.mp4 \
   --language en --models parakeet-v3 parakeet-ultra qwen3-asr large-v3-turbo large-v3 \
-  --output 'тесты bleep.ly/english-comparison-new'
+  --output 'тесты bleeply/english-comparison-new'
 ```
 
 `summary.csv` contains each success/error and wall time. Successful results also
-append to `тесты bleep.ly/recognition-history/runs.csv`. Requests, progress events,
+append to `тесты bleeply/recognition-history/runs.csv`. Requests, progress events,
 stderr and review JSON remain beside the summary. Wall time includes Python
 startup, audio extraction, model loading and recognition/alignment. It excludes
 downloads. Model loading and first-use kernel compilation are included; these
@@ -108,7 +108,7 @@ Downloads and the earlier 25-second compatibility checks preceded measurement.
 | GigaAM v3 e2e RNNT | 3871 | 416 | 76.54 s |
 | Whisper Large v3 Turbo | 3510 | 332 | 144.54 s |
 
-Artifacts are in the ignored `тесты bleep.ly/gpu-benchmark-2026-10-10/full/`.
+Artifacts are in the ignored `тесты bleeply/gpu-benchmark-2026-10-10/full/`.
 `time-windows.csv` compares counts by recording interval.
 `gigaam-review-candidates.csv` lists 105 GigaAM findings with no Turbo flagged-word
 center within 0.6 seconds; these are review candidates, not confirmed extra hits.
@@ -138,7 +138,7 @@ Times include loading, extraction and recognition/alignment; exclude download.
 | Whisper Large v3 Turbo | 1958 | 50 | 46.93 s |
 | Whisper Large v3 | 1868 | 49 | 116.17 s |
 
-Artifacts: ignored `тесты bleep.ly/english-benchmark-2026-10-10/` with source
+Artifacts: ignored `тесты bleeply/english-benchmark-2026-10-10/` with source
 provenance, the full source, per-model requests/reviews/logs, `full/summary.csv`
 and `full/review-candidates.csv`. All five runs also appear in recognition history
 with the effective word lists and classifier hash.

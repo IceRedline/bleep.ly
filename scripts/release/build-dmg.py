@@ -31,7 +31,7 @@ font_path = Path('/System/Library/Fonts/Supplemental')
 def text(x, y, value, size, color, bold=False, anchor='la'):
     font = ImageFont.truetype(str(font_path/('Arial Bold.ttf' if bold else 'Arial.ttf')), size*scale)
     draw.text((x*scale, y*scale), value, font=font, fill=color, anchor=anchor)
-text(48, 38, 'bleep.ly', 34, '#20241b', bold=True)
+text(48, 38, 'bleeply', 34, '#20241b', bold=True)
 text(672, 51, f'v{args.version}', 12, '#747a6c', anchor='ra')
 text(48, 91, 'Keep the story. Bleep the rest.', 17, '#606756')
 # Finder places the real, draggable icons over these quiet rounded wells.
@@ -41,31 +41,31 @@ for x in [202, 518]:
 draw.rounded_rectangle((320*2, 215*2, 400*2, 257*2), radius=21*2, fill='#e2f36d')
 draw.line([(340*2,236*2),(380*2,236*2)], fill='#374323', width=3*2)
 draw.line([(371*2,228*2),(380*2,236*2),(371*2,244*2)], fill='#374323', width=3*2, joint='curve')
-text(360, 375, 'Drag bleep.ly into Applications', 20, '#252c1e', bold=True, anchor='ma')
+text(360, 375, 'Drag bleeply into Applications', 20, '#252c1e', bold=True, anchor='ma')
 text(360, 412, 'Local processing. Your recordings stay on your Mac.', 13, '#717868', anchor='ma')
 background = folder/'dmg-background.tiff'
 image.save(background, dpi=(144,144), compression='tiff_lzw')
 image.resize(window_size, Image.Resampling.LANCZOS).save(folder/'dmg-background.png')
 if args.background_only:
     raise SystemExit()
-app = folder/'bleep.ly.app'
+app = folder/'bleeply.app'
 info = plistlib.loads((app/'Contents/Info.plist').read_bytes())
 assert info['CFBundleShortVersionString'] == args.version
 out = ROOT/'dist'
 out.mkdir(exist_ok=True)
-if (out/f'bleep.ly-{args.version}-arm64.dmg').exists():
+if (out/f'bleeply-{args.version}-arm64.dmg').exists():
     parser.error('DMG already exists; preserve the previous signed image before rebuilding')
-dmgbuild.build_dmg(str(out/f'bleep.ly-{args.version}-arm64.dmg'), f'bleep.ly {args.version}', settings={
+dmgbuild.build_dmg(str(out/f'bleeply-{args.version}-arm64.dmg'), f'bleeply {args.version}', settings={
     # Tens of thousands of runtime files need more HFS+ metadata space than
     # dmgbuild's default estimate (which can silently truncate a ditto copy).
     'format': 'UDZO', 'filesystem': 'HFS+', 'size': '4g',
     'files': [str(app)], 'symlinks': {'Applications': '/Applications'},
     'background': str(background), 'badge_icon': str(app/'Contents/Resources/AppIcon.icns'),
     'window_rect': ((180,180),window_size), 'default_view': 'icon-view',
-    'icon_locations': {'bleep.ly.app': (202,236), 'Applications': (518,236)},
+    'icon_locations': {'bleeply.app': (202,236), 'Applications': (518,236)},
     'icon_size': 96, 'text_size': 13,
     'show_toolbar': False, 'show_status_bar': False, 'show_sidebar': False,
     'show_pathbar': False, 'show_tab_view': False,
 })
 subprocess.run([sys.executable, str(Path(__file__).with_name('verify-dmg.py')),
-                str(out/f'bleep.ly-{args.version}-arm64.dmg'), str(app)], check=True)
+                str(out/f'bleeply-{args.version}-arm64.dmg'), str(app)], check=True)

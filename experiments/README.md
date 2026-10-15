@@ -1,6 +1,6 @@
 # WhisperKit: экспериментальный движок
 
-WhisperKit входит в единственное приложение **bleep.ly**, рядом с CPU и MLX.
+WhisperKit входит в единственное приложение **bleeply**, рядом с CPU и MLX.
 Отдельной Lab-сборки больше нет; движок остаётся экспериментальным и выбирается вручную.
 
 ## Запуск
@@ -11,7 +11,7 @@ WhisperKit входит в единственное приложение **bleep
 bash scripts/build-macos.sh
 .venv/bin/python -m pip install -r requirements-whisperkit.txt
 .venv/bin/python scripts/prepare-whisperkit.py
-open 'build/bleep.ly.app'
+open 'build/bleeply.app'
 ```
 
 Первичная сборка скачивает Swift-зависимости. Шаг prepare-whisperkit явно скачивает около
@@ -71,7 +71,7 @@ Swift helper запускается из Python отдельным процес�
 HF_HOME="$PWD/.cache/huggingface" HF_HUB_DISABLE_TELEMETRY=1 \
   .venv/bin/python -m censor.benchmark input.mov \
   --reference input.reviewed.transcript.json \
-  --helper 'build/bleep.ly.app/Contents/Helpers/BleepWhisperKit' \
+  --helper 'build/bleeply.app/Contents/Helpers/BleepWhisperKit' \
   --output .cache/comparison-new --repeats 3
 ```
 

@@ -18,7 +18,7 @@ enum AppInformation: String, CaseIterable {
         // Local development has no Resources directory. Release preparation
         // requires all documents so the policy always works without a network.
         let url = packaged.flatMap { FileManager.default.fileExists(atPath: $0.path) ? $0 : nil } ?? development
-        return (try? String(contentsOf: url, encoding: .utf8)) ?? "This document is unavailable. Contact support at https://github.com/IceRedline/bleep.ly/issues."
+        return (try? String(contentsOf: url, encoding: .utf8)) ?? "This document is unavailable. Contact support at https://github.com/IceRedline/bleeply/issues."
     }
 }
 

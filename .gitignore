@@ -9,6 +9,8 @@ build/
 dist/
 
 # Models, caches and test reports
+/тесты bleeply/
+# Keep legacy local reports ignored during an upgrade as well.
 /тесты bleep.ly/
 .cache/
 .pytest_cache/

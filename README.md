@@ -1,6 +1,6 @@
-<p align="center"><img src="icon.PNG" alt="bleep.ly icon" width="128"></p>
+<p align="center"><img src="icon.PNG" alt="bleeply icon" width="128"></p>
 
-# bleep.ly
+# bleeply
 
 Local speech recognition and profanity censoring for Russian video and audio, with experimental English support in the desktop app. A native **macOS app** wraps the Python engine with drag and drop, a review timeline, and clean audio/video export. Your recordings stay on your Mac.
 
@@ -10,17 +10,18 @@ Local speech recognition and profanity censoring for Russian video and audio, wi
 
 ## Download for macOS
 
-The [v0.1.8 release](https://github.com/IceRedline/bleep.ly/releases/tag/v0.1.8)
+The [v0.1.8 release](https://github.com/IceRedline/bleeply/releases/tag/v0.1.8)
 provides a self-contained DMG for **Apple Silicon, macOS 15.0 or later**.
-Open the DMG and drag **bleep.ly** to **Applications**.
+Open the DMG and drag the app to **Applications**. Published installers retain the branding from their release; new builds use **bleeply**.
 Python, FFmpeg and the recognition engines are included; Homebrew and this
 repository are not needed. Models download separately: when one is missing, choose **OK** in the download
 prompt to allow model downloads and continue processing. Downloads
 can be several GB, depending on the model. Afterwards recognition works offline.
 
-The release is signed with Developer ID and notarized by Apple. Models and caches
-live under `~/Library/Application Support/bleep.ly/`; moving or updating the app
-does not remove them. The Intel build is not included in this release.
+The release is signed with Developer ID and notarized by Apple. The Intel build
+is not included in this release. New builds store models and caches under
+`~/Library/Application Support/bleeply/` and migrate the previous data folder
+on first launch. Moving or updating the app does not remove them.
 
 See the release assets for the DMG download size. Most of the installed app's
 space is used by the two bundled Python runtimes
@@ -39,8 +40,8 @@ through their Python packages; the release's macOS 15 compatibility is checked
 separately with pinned dependencies.
 
 ```sh
-git clone https://github.com/IceRedline/bleep.ly.git
-cd bleep.ly
+git clone https://github.com/IceRedline/bleeply.git
+cd bleeply
 brew install ffmpeg@8 python@3.11
 brew link --force ffmpeg@8
 python3.11 -m venv .venv
@@ -48,7 +49,7 @@ python3.11 -m venv .venv
 bash scripts/build-macos.sh --open
 ```
 
-Open `build/bleep.ly.app` from Finder afterwards. This is a local development build with an ad-hoc signature: the repository, Python environment, FFmpeg, and model files remain external dependencies. If the repository moves, rebuild or update its location in Settings (`⌘,`).
+Open `build/bleeply.app` from Finder afterwards. This is a local development build with an ad-hoc signature: the repository, Python environment, FFmpeg, and model files remain external dependencies. If the repository moves, rebuild or update its location in Settings (`⌘,`).
 
 Optional Apple GPU recognition:
 
@@ -153,9 +154,9 @@ On the initial 19.93-second local reference using Turbo, MLX found 4/4 reviewed 
 For development, `requirements.txt` already includes the Python dependencies for
 WhisperKit model downloads; `scripts/build-macos.sh` builds its Swift helper.
 
-There is one app, **bleep.ly**, with CPU, MLX, and WhisperKit in the same Engine picker. The build always bundles the native WhisperKit helper; model weights are still downloaded only when requested. Choose WhisperKit and allow the initial download, or prepare the weights with `scripts/prepare-whisperkit.py`. The first Core ML preparation can take several minutes.
+There is one app, **bleeply**, with CPU, MLX, and WhisperKit in the same Engine picker. The build always bundles the native WhisperKit helper; model weights are still downloaded only when requested. Choose WhisperKit and allow the initial download, or prepare the weights with `scripts/prepare-whisperkit.py`. The first Core ML preparation can take several minutes.
 
-Upgrading removes the generated `build/bleep.ly Lab.app` after building the replacement. On first launch, the standard app imports missing settings, the saved custom sound, and the last review from Lab without overwriting existing standard-app data. Original Lab data stays intact; model caches already live in the shared repository.
+Upgrading removes obsolete generated app bundles from `build/` after building the replacement. On first launch, the standard app imports missing settings, the saved custom sound, and the last review from Lab without overwriting existing standard-app data. Original Lab data stays intact; model caches already live in the shared repository.
 
 ## Exports
 
@@ -217,8 +218,8 @@ release smoke tests. See [release checks](scripts/release/README.md).
 
 Each successful app recognition records one history row per audio track in
 `recognition-history/runs.csv`. In a release build this lives under
-`~/Library/Application Support/bleep.ly/`; in a development build, under
-`тесты bleep.ly/` inside the selected project folder. It includes the exact model,
+`~/Library/Application Support/bleeply/`; in a development build, under
+`тесты bleeply/` inside the selected project folder. It includes the exact model,
 engine/device, total and flagged word counts, source hash, track index, elapsed
 analysis/inference time, and cache-hit status. A cache
 hit has no inference time. WhisperKit uses automatic Core ML device selection;
@@ -232,9 +233,9 @@ Import existing caches (safe to repeat; changed cache contents create another re
 
 ```sh
 .venv/bin/python scripts/import-recognition-history.py \
-  --output 'тесты bleep.ly/recognition-history' \
-  "$HOME/Library/Application Support/bleep.ly/cache" \
-  "$HOME/Library/Application Support/bleep.ly Lab/cache"
+  --output 'тесты bleeply/recognition-history' \
+  "$HOME/Library/Application Support/bleeply/cache" \
+  /path/to/legacy-lab/cache
 ```
 
 Optional `--source /path/to/video` attaches the filename and duration only to

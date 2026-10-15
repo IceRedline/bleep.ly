@@ -8,7 +8,7 @@ struct BleepApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) private var delegate
 
     var body: some Scene {
-        Window("bleep.ly", id: "main") {
+        Window("bleeply", id: "main") {
             ContentView(model: model)
                 .onAppear { delegate.model = model; NSApp.activate(ignoringOtherApps: true) }
         }

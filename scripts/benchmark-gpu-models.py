@@ -59,7 +59,7 @@ def main():
         request = dict(operation="analyze", source=str(args.source.resolve()), backend=backend,
                        model=model, language=args.language, offline=True, bypass_cache=True,
                        cache_dir=str(output / "cache"),
-                       history_dir=str(ROOT / "тесты bleep.ly/recognition-history"))
+                       history_dir=str(ROOT / "тесты bleeply/recognition-history"))
         request_path = prefix.with_suffix(".request.json")
         request_path.write_text(json.dumps(request))
         print("Recognizing", model, flush=True)

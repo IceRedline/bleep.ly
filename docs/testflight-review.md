@@ -1,7 +1,6 @@
 # TestFlight handoff: 0.1.7 (17)
 
-The local candidate is `build/testflight-0.1.7-17/bleep.ly.app`; the upload artifact
-is `build/testflight-0.1.7-17/bleep.ly-0.1.7-17.pkg`. The candidate uses the explicit
+The archived 0.1.7 (17) candidate under `build/testflight-0.1.7-17/` retains its original branding. New candidates use `bleeply.app` and a `bleeply-VERSION-BUILD.pkg` upload artifact. The candidate uses the explicit
 macOS Bundle ID `ly.bleep.desktop`, App Sandbox, Apple Distribution signing and
 the matching Mac App Store Connect provisioning profile. It supports Apple
 Silicon Macs running macOS 15.0 or later. The existing notarized build 16 is preserved.
@@ -15,8 +14,8 @@ not a usable App Store Connect Privacy Policy URL.
 
 | Field | Value |
 | --- | --- |
-| Privacy Policy URL, after publication | https://github.com/IceRedline/bleep.ly/blob/main/docs/privacy-policy.md |
-| Support URL | https://github.com/IceRedline/bleep.ly/issues |
+| Privacy Policy URL, after publication | https://github.com/IceRedline/bleeply/blob/main/docs/privacy-policy.md |
+| Support URL | https://github.com/IceRedline/bleeply/issues |
 | Copyright | 2026 Artem Tabenskii |
 | App category | Video |
 | Login required | No |
@@ -30,7 +29,7 @@ See [Apple's App Privacy guidance](https://developer.apple.com/app-store/app-pri
 
 ## Beta description
 
-bleep.ly recognizes speech locally and helps censor profanity in audio and video.
+bleeply recognizes speech locally and helps censor profanity in audio and video.
 Open a file, review the detected words and mute intervals, choose a censor sound,
 and export audio or video. Russian is supported, with experimental English and
 additional recognition models. Recordings are processed on your Mac. Recognition
