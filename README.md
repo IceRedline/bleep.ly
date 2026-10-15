@@ -190,9 +190,11 @@ may use CPU for some operations in the Neural Engine column.
 [Full results and setup instructions](benchmarks/README.md) ·
 [Individual measurements](benchmarks/results/m3-pro-36gb-2026-10-15.json)
 
-To measure another Mac, prepare the benchmark environment with
-`make speedtest-setup`, then run `make speedtest` with the reference audio.
-Audio, models and detailed logs stay outside Git.
+To measure another Mac, double-click [`Run Speed Test.command`](Run%20Speed%20Test.command)
+in the repository or an extracted source ZIP. It installs missing prerequisites,
+runs the benchmark and saves reports under **Desktop → bleeply Speed Test**.
+The reference FLAC is included; macOS may ask you to approve tool installation.
+Model weights, other recordings and detailed logs stay outside Git.
 
 ## Exports
 
@@ -294,7 +296,7 @@ For repeatable Turbo CPU / MLX GPU / Core ML measurements across Macs, use
 [`make speedtest`](benchmarks/README.md). It checks one fixed English audio fixture,
 reports first-run preparation separately, and records three repeated runs per pipeline.
 
-Code lives in `censor/`, the SwiftUI app in `macOS/`, the experimental native helper in `experiments/WhisperKitRunner/`, and build tools in `scripts/`. Source media, transcripts, generated exports, weights, virtual environments, and caches are excluded from Git.
+Code lives in `censor/`, the SwiftUI app in `macOS/`, the experimental native helper in `experiments/WhisperKitRunner/`, and build tools in `scripts/`. Except for the fixed benchmark FLAC, source media, transcripts, generated exports, weights, virtual environments, and caches are excluded from Git.
 
 ## Limitations
 

@@ -34,6 +34,8 @@ htmlcov/
 *.[mM]4[aA]
 *.[aA][aA][cC]
 *.[fF][lL][aA][cC]
+# Deliberately versioned, immutable reference for cross-Mac speed tests.
+!/benchmarks/fixtures/turbo-en.flac
 *.[oO][gG][gG]
 *.[aA][iI][fF]
 *.[aA][iI][fF][fF]

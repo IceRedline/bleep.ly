@@ -6,6 +6,7 @@
   "source_url": "https://odysee.com/@Cinemassacre:b/silver-surfer-avgn:298124556cd99c257f36a8107d63e6d909757e0b",
   "video_sha256": "e58d5c395c889a18a6e29e32be0732ee1e5758b030679809d5b32d4a5becf346",
   "audio_pcm_sha256": "459f87d30b40d110989a43aae9f6e1af9d4bd145dd1357c5060e234b3a263506",
+  "audio_file_sha256": "56833a22915a0e9def0c6893b4ba7fb568fa7d026468c096aa5efe18e9a934dc",
   "sample_rate": 16000,
   "channels": 1,
   "pcm_format": "s16le",

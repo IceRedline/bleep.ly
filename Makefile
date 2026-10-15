@@ -1,5 +1,5 @@
 SPEEDTEST_PYTHON ?= .cache/speedtest/venv/bin/python
-AUDIO ?= .cache/speedtest/turbo-en.flac
+AUDIO ?= benchmarks/fixtures/turbo-en.flac
 SPEEDTEST_ARGS ?=
 
 .PHONY: speedtest speedtest-setup speedtest-audio

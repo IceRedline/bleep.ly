@@ -12,6 +12,23 @@ spec.loader.exec_module(speedtest)
 
 
 class SpeedtestTests(unittest.TestCase):
+    def test_bundled_reference_is_exact_original_fixture(self):
+        manifest = json.loads(speedtest.MANIFEST.read_text())
+        self.assertEqual(speedtest.sha256(speedtest.REFERENCE_AUDIO), manifest['audio_file_sha256'])
+        self.assertEqual(speedtest.validate_audio(speedtest.REFERENCE_AUDIO, manifest), manifest['audio_file_sha256'])
+
+    def test_source_archive_has_fingerprint_without_inheriting_parent_git_identity(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            (root / 'censor').mkdir()
+            module = root / 'censor/example.py'; module.write_text('first')
+            with patch.object(speedtest, 'ROOT', root), patch.object(speedtest, 'capture', return_value=str(root.parent)):
+                first = speedtest.source_info()
+                self.assertIsNone(first['git_commit'])
+                self.assertIsNone(first['git_dirty'])
+                module.write_text('changed')
+                self.assertNotEqual(first['source_sha256'], speedtest.source_info()['source_sha256'])
+
     def test_first_observed_is_excluded_and_partial_or_failed_runs_are_not_a_score(self):
         runs = [dict(mode='cpu', iteration=i, status='ok', wall_seconds=t)
                 for i, t in enumerate([600, 12, 10, 11])]
