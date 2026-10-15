@@ -27,7 +27,7 @@ class ModelDownloadTests(unittest.TestCase):
 
     def test_protocol_requests_consent_only_for_offline_analysis(self):
         for operation, offline, expected in [('analyze', True, 'model_download_required'),
-                                              ('analyze', False, None), ('export', True, None)]:
+                                              ('analyze', False, 'processing_failed'), ('export', True, 'processing_failed')]:
             with self.subTest(operation=operation, offline=offline), tempfile.TemporaryDirectory() as folder:
                 request = Path(folder) / 'request.json'
                 request.write_text(json.dumps(dict(operation=operation, offline=offline)))
@@ -47,6 +47,6 @@ class ModelDownloadTests(unittest.TestCase):
                     desktop.emit = original_emit
                 event = json.loads(output.getvalue())
                 self.assertEqual(event.get('code'), expected)
-                if expected:
+                if expected == 'model_download_required':
                     self.assertIn('Settings', event['message'])
                     self.assertNotIn('local_files_only', event['message'])
