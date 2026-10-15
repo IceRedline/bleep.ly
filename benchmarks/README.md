@@ -18,7 +18,7 @@ software versions, model fingerprints and hardware details are retained in JSON.
 
 ## Run on another Mac
 
-Prerequisites: Apple Silicon, macOS 14+, Python 3.11, FFmpeg / FFprobe, Xcode
+Prerequisites: Apple Silicon, macOS 15+, Python 3.11, FFmpeg / FFprobe, Xcode
 Command Line Tools and Git. Use a local terminal with Metal / Core ML access.
 Connect power, turn Low Power Mode off, close heavy applications and keep the
 machine's cooling conditions consistent. Do not run benchmark processes in parallel.
@@ -31,6 +31,11 @@ make speedtest-setup
 # Copy the reference FLAC from the first Mac, then use its local path.
 make speedtest AUDIO="/path/to/turbo-en.flac"
 ```
+
+Setup uses a dedicated `.cache/speedtest/venv`, leaving the development environment
+alone. It selects the release's SHA-256-pinned **macOS 15 MLX wheels**, including
+on newer Macs where pip would otherwise choose a different binary. Reports record
+wheel tags as well as version numbers; compare matching binaries across machines.
 
 With the default location `.cache/speedtest/turbo-en.flac`, just run
 `make speedtest`. Each invocation creates a new `.cache/speedtest/run-*` folder;

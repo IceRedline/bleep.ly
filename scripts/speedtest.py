@@ -19,7 +19,7 @@ sys.path.insert(0, str(ROOT))
 MANIFEST = ROOT / "benchmarks/turbo-en.json"
 WORK = ROOT / ".cache/speedtest"
 HELPER = ROOT / ".cache/whisperkit-build/release/BleepWhisperKit"
-PACKAGES = ("faster-whisper", "ctranslate2", "mlx-whisper", "mlx", "onnxruntime", "numpy", "huggingface-hub", "av")
+PACKAGES = ("faster-whisper", "ctranslate2", "mlx-whisper", "mlx", "mlx-metal", "onnxruntime", "numpy", "huggingface-hub", "av")
 MODES = {"cpu": "CPU · faster-whisper int8", "gpu": "GPU · MLX float16", "ane": "CPU + Neural Engine · WhisperKit"}
 
 
@@ -213,10 +213,15 @@ def run(args, manifest):
     if not HELPER.is_file():
         raise ValueError("Build the WhisperKit helper with make speedtest-setup first.")
     versions = {name: importlib.metadata.version(name) for name in PACKAGES}
+    wheel_tags = {name: [line.removeprefix("Tag: ") for line in
+                        (importlib.metadata.distribution(name).read_text("WHEEL") or "").splitlines()
+                        if line.startswith("Tag: ")] for name in PACKAGES}
     output = args.output.resolve() if args.output else WORK / ("run-" + datetime.now().strftime("%Y%m%d-%H%M%S"))
     output.mkdir(parents=True, exist_ok=False)
     report = {"schema": 1, "fixture": manifest, "audio_file_sha256": audio_hash,
               "timestamp_utc": datetime.now(timezone.utc).isoformat(), "host": host_info(), "packages": versions,
+              "wheel_tags": wheel_tags,
+              "dependencies": {d.metadata["Name"]: d.version for d in importlib.metadata.distributions()},
               "git_commit": capture("git", "-C", str(ROOT), "rev-parse", "HEAD"),
               "git_dirty": bool(capture("git", "-C", str(ROOT), "status", "--porcelain")),
               "ffmpeg": capture("ffmpeg", "-version").splitlines()[0],
