@@ -62,8 +62,8 @@ Opening a file with a missing model asks **Download model?**. Choose **OK** to a
 
 Choose **Video language → Русский / English** on the home screen before opening media.
 The saved choice controls recognition and the profanity dictionary. Changing to Russian
-selects GigaAM v3 on Apple GPU; changing to English selects Whisper Large v3 Turbo (keeping
-CPU if already selected, otherwise using Apple GPU). Intel Macs use Whisper on CPU.
+selects GigaAM v3; changing to English selects Whisper Large v3 Turbo. Both keep
+CPU if already selected, otherwise use Apple GPU. Intel Macs use Whisper on CPU.
 The subtitle shows the selected model and language. You can override it in Settings until the next language
 change; relaunching or selecting the same language keeps your manual choice. GigaAM
 is the Russian preset selected on a language change, based on the local trial,
@@ -115,16 +115,16 @@ One **Engine** picker selects the backend for the next file:
 
 | Engine | Processing | Availability in the DMG |
 | --- | --- | --- |
-| CPU · faster-whisper | Whisper on CPU, int8 | Included |
+| CPU · Classic processing | Whisper through faster-whisper (int8); Parakeet, Qwen3-ASR and GigaAM on CPU (float32) | Included; non-Whisper models require Apple Silicon |
 | Apple GPU · MLX / MPS | Whisper, Parakeet and Qwen3-ASR through MLX; GigaAM through PyTorch MPS | Included; Apple Silicon |
 | WhisperKit · Experimental | Native Swift helper running converted Whisper weights through Core ML | Included; experimental |
 
 All engines still require a separate model download. For source builds, install
-the optional GPU dependencies described below.
+the additional recognition dependencies described below.
 
 CPU and MLX now offer a temporary **Model · testing** picker: **Large v3** (default, full model) or **Large v3 Turbo**. The choice applies to the next opened file and uses a separate recognition cache. WhisperKit currently keeps its pinned Large v3 Turbo weights. WhisperKit is an Argmax framework; its model is **not an Apple speech model** and must also be downloaded. It is not Apple's Speech framework. Native execution does not guarantee higher accuracy or model download availability.
 
-The **Apple GPU · MLX / MPS** option also offers experimental **Parakeet v3**,
+On Apple Silicon, both **CPU** and **Apple GPU · MLX / MPS** also offer experimental **Parakeet v3**,
 **Parakeet Ultra**, **Qwen3-ASR 1.7B**, and **GigaAM v3 RNNT**. Their runtime is
 already included in the DMG. For a source build, install it with
 `bash scripts/setup-experimental-gpu.sh`. The development app selects
@@ -132,8 +132,12 @@ already included in the DMG. For a source build, install it with
 executable is configured. The standard development runtime remains in `.venv`;
 the release selects its bundled runtimes automatically.
 Model weights download on first use only when downloads are enabled. The new
-choices are GPU-only; unavailable GPU support produces an error without CPU
-fallback. See [GPU comparison](experiments/gpu-models.md) for pinned weights,
+models run on the selected device, including their word alignment. CPU runs use
+float32 and disable MLX JIT compilation, so they do not require a compiler or
+loading generated libraries. They can be slower and use more memory than GPU
+runs, especially Qwen3-ASR on an 8 GB Mac. CPU and GPU recognition caches are
+separate; downloaded weights are shared. GPU selection still reports unavailable
+GPU support without silently falling back. See [GPU comparison](experiments/gpu-models.md) for pinned weights,
 timestamps, and the full-file benchmark command.
 
 GigaAM uses overlapping speech windows to retain words at chunk boundaries, then
@@ -248,6 +252,10 @@ swift test --disable-sandbox --package-path macOS --scratch-path .cache/swift-bu
 ```
 
 Python integration tests generate short media with FFmpeg and check actual audio, independent track censorship, complete cue tails, video stream identity, cache behavior, and no-clobber exports. Swift tests cover the real Python bridge, native playback, explicit video/audio saving, cancellation/Home, progress, context duration, and stable window layout. Native tests need a local macOS session with media services. Inference is mocked in regression tests; actual engine comparison is a separate offline benchmark.
+
+For repeatable Turbo CPU / MLX GPU / Core ML measurements across Macs, use
+[`make speedtest`](benchmarks/README.md). It checks one fixed English audio fixture,
+reports first-run preparation separately, and records three repeated runs per pipeline.
 
 Code lives in `censor/`, the SwiftUI app in `macOS/`, the experimental native helper in `experiments/WhisperKitRunner/`, and build tools in `scripts/`. Source media, transcripts, generated exports, weights, virtual environments, and caches are excluded from Git.
 

@@ -128,27 +128,32 @@ def analyze_track(request):
             model = resolve_model(model)
         if backend in GPU_BACKENDS:
             from .experimental_gpu import MODELS, prepare, cache_identity as gpu_cache_identity
+            device = request.get("device", "gpu")
+            if device not in {"cpu", "gpu"}:
+                raise CensorError("Choose CPU or GPU for recognition.")
             if model not in MODELS or MODELS[model][0] != backend:
                 raise CensorError("Selected experimental model does not match its GPU backend.")
             if model == "gigaam-v3" and language != "ru":
                 raise CensorError("GigaAM v3 supports Russian only. Choose Whisper for English.")
             report("Preparing speech model", 0)
             assets = prepare(model, offline=request.get("offline", True), progress=report)
-            native_engine = ExperimentalGPUBackend(model, assets, language=language,
+            native_engine = ExperimentalGPUBackend(model, assets, language=language, device=device,
                                                     stage=lambda label: report(label, 0))
             key, metadata = gpu_cache_identity(source, model, info.audio_index,
-                                               tracking("Reading media", source.stat().st_size), language=language)
+                                               tracking("Reading media", source.stat().st_size), language=language, device=device)
         elif backend == "whisperkit":
             from .whisperkit_backend import WhisperKitBackend, prepare_assets, cache_identity
             model_folder = Path(request["whisperkit_model_folder"]).resolve()
             executable = Path(request["whisperkit_executable"]).resolve()
+            compute_units = request.get("whisperkit_compute_units", "default")
             native_engine = WhisperKitBackend(executable, model_folder,
-                stage=lambda label: report(label, 0), language=language)
+                stage=lambda label: report(label, 0), language=language, compute_units=compute_units)
             report("Preparing WhisperKit model", 0)
             prepare_assets(model_folder, offline=request.get("offline", True),
                            progress=report)
             key, metadata = cache_identity(source, model_folder, executable, info.audio_index,
-                                          tracking("Reading media", source.stat().st_size), language=language)
+                                          tracking("Reading media", source.stat().st_size), language=language,
+                                          compute_units=compute_units)
         else:
             key, metadata = cache_key(source, model, language, compute, info.audio_index,
                                       tracking("Reading media", source.stat().st_size), backend=backend)
@@ -376,7 +381,8 @@ def _main():
                  message="The selected model is not downloaded. Allow model downloads in Settings, "
                          "then open your file again. Your recordings stay on your Mac.")
         else:
-            emit("error", message=str(exc))
+            emit("error", code="processing_failed" if isinstance(exc, CensorError) else "internal_error",
+                 message=str(exc))
         return 1
     finally:
         _protocol_output = previous_output

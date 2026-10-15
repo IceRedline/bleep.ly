@@ -27,7 +27,10 @@ final class RecognitionModelTests: XCTestCase {
         for (backend, choice, expected, engine) in [
             ("faster-whisper", "", "large-v3", "faster-whisper"),
             ("faster-whisper", "large-v3-turbo", "large-v3-turbo", "faster-whisper"),
-            ("faster-whisper", "qwen3-asr", "large-v3", "faster-whisper"),
+            ("faster-whisper", "qwen3-asr", "qwen3-asr", "mlx-qwen3-asr"),
+            ("faster-whisper", "gigaam-v3", "gigaam-v3", "gigaam-mps"),
+            ("faster-whisper", "parakeet-v3", "parakeet-v3", "parakeet-mlx"),
+            ("faster-whisper", "parakeet-ultra", "parakeet-ultra", "parakeet-mlx"),
             ("mlx", "large-v3", "large-v3", "mlx"),
             ("mlx", "large-v3-turbo", "large-v3-turbo", "mlx"),
             ("mlx", "invalid", "large-v3", "mlx"),
@@ -48,6 +51,7 @@ final class RecognitionModelTests: XCTestCase {
             XCTAssertEqual(lists["allow"], ["бляха"])
             XCTAssertEqual(request["model"] as? String, expected)
             XCTAssertEqual(request["backend"] as? String, engine)
+            XCTAssertEqual(request["device"] as? String, backend == "faster-whisper" ? "cpu" : "gpu")
             XCTAssertEqual(request["app_cache_identity"] as? String, try RuntimePaths.recognitionCacheIdentity())
             XCTAssertEqual(request["history_dir"] as? String, folder.appendingPathComponent("support/recognition-history").path)
             XCTAssertEqual(request["managed_cache"] as? Bool, true)
@@ -82,7 +86,7 @@ final class RecognitionModelTests: XCTestCase {
         XCTAssertEqual(defaults.string(forKey: "recognitionModel"), "large-v3-turbo")
         defaults.set("faster-whisper", forKey: "backend")
         model.selectLanguage(.russian)
-        XCTAssertEqual(defaults.string(forKey: "backend"), "mlx")
+        XCTAssertEqual(defaults.string(forKey: "backend"), "faster-whisper")
         defaults.set("faster-whisper", forKey: "backend")
         model.selectLanguage(.english)
         XCTAssertEqual(defaults.string(forKey: "backend"), "faster-whisper")

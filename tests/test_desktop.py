@@ -77,6 +77,32 @@ class DesktopTests(unittest.TestCase):
             with self.assertRaisesRegex(CensorError, 'Russian or English'):
                 analyze(dict(source=str(self.source), language='de'))
 
+    def test_cpu_device_reaches_each_model_and_separates_cached_results(self):
+        from censor.experimental_gpu import MODELS
+        with contextlib.redirect_stdout(io.StringIO()), \
+                patch('censor.experimental_gpu.prepare', return_value=['/model', '/aligner']), \
+                patch('censor.experimental_gpu.importlib.metadata.version', return_value='test'), \
+                patch('censor.desktop.ExperimentalGPUBackend') as factory:
+            factory.return_value.metrics = {}
+            factory.return_value.transcribe.return_value = [WordTimestamp('бля', 1, 1.3)]
+            for model, (backend, _, _) in MODELS.items():
+                request = dict(source=str(self.source), model=model, backend=backend,
+                               cache_dir=str(self.work / 'device-cache'))
+                gpu = analyze(request)
+                cpu = analyze({**request, 'device': 'cpu'})
+                self.assertFalse(gpu['cache_hit'])
+                self.assertFalse(cpu['cache_hit'])
+                self.assertEqual(factory.call_args.kwargs['device'], 'cpu')
+                self.assertTrue(analyze({**request, 'device': 'cpu'})['cache_hit'])
+                self.assertTrue(analyze(request)['cache_hit'])
+            self.assertEqual(factory.return_value.transcribe.call_count, len(MODELS) * 2)
+
+    def test_invalid_device_is_rejected_before_download(self):
+        with patch('censor.experimental_gpu.prepare') as prepare:
+            with self.assertRaisesRegex(CensorError, 'Choose CPU or GPU'):
+                analyze(dict(source=str(self.source), backend='gigaam-mps', model='gigaam-v3', device='cuda'))
+            prepare.assert_not_called()
+
     def test_model_download_and_loading_progress_stay_on_protocol_output(self):
         from censor import desktop
         def prepare(*args, **kwargs):

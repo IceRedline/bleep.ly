@@ -5,7 +5,7 @@ import UniformTypeIdentifiers
 
 @MainActor
 final class WorkflowTests: XCTestCase {
-    private func fixture(video: Bool = false) throws -> (AppModel, URL, URL, UserDefaults) {
+    private func fixture(video: Bool = false, audioExtension: String = "wav", audioCodec: String? = nil) throws -> (AppModel, URL, URL, UserDefaults) {
         let root = URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent()
             .deletingLastPathComponent().deletingLastPathComponent()
         let python = root.appendingPathComponent(".venv/bin/python")
@@ -19,12 +19,12 @@ final class WorkflowTests: XCTestCase {
         defaults.set(root.path, forKey: "projectRoot")
         let model = AppModel(defaults: defaults, supportDirectory: folder.appendingPathComponent("support"))
         addTeardownBlock { await MainActor.run { model.goHome() } }
-        let source = folder.appendingPathComponent(video ? "видео.mov" : "audio.wav")
+        let source = folder.appendingPathComponent(video ? "видео.mov" : "audio.\(audioExtension)")
         let generator = Process()
         generator.executableURL = URL(fileURLWithPath: "/usr/bin/env")
         generator.environment = ["PATH": "/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin"]
         generator.arguments = ["ffmpeg", "-v", "error", "-f", "lavfi", "-i", "sine=frequency=440:duration=2"] +
-            (video ? ["-f", "lavfi", "-i", "color=c=blue:s=160x90:r=25:d=2", "-c:v", "libx264", "-c:a", "aac"] : []) + [source.path]
+            (video ? ["-f", "lavfi", "-i", "color=c=blue:s=160x90:r=25:d=2", "-c:v", "libx264", "-c:a", "aac"] : (audioCodec.map { ["-c:a", $0, "-strict", "experimental", "-ac", "2"] } ?? [])) + [source.path]
         try generator.run(); generator.waitUntilExit()
         XCTAssertEqual(generator.terminationStatus, 0)
         let transcript = folder.appendingPathComponent("review.json")
@@ -32,6 +32,41 @@ final class WorkflowTests: XCTestCase {
         {"words":[{"word":"test","start":0.5,"end":1.5,"profane":true}]}
         """.utf8).write(to: transcript)
         return (model, source, transcript, defaults)
+    }
+
+    func testOggOpusAndVorbisPreviewOriginalAndCensoredAudio() async throws {
+        for codec in ["libopus", "vorbis"] {
+            let (model, source, transcript, _) = try fixture(audioExtension: "ogg", audioCodec: codec)
+            let originalBytes = try Data(contentsOf: source)
+            await model.open(source, transcript: transcript, workflow: .advanced)?.value
+            await model.setPreviewCensorship(true)?.value
+            XCTAssertNil(model.error, codec)
+            XCTAssertTrue(model.playingCensoredPreview, codec)
+            let item = try XCTUnwrap(model.player.currentItem)
+            for _ in 0..<100 where item.status == .unknown {
+                try await Task.sleep(nanoseconds: 20_000_000)
+            }
+            XCTAssertEqual(item.status, .readyToPlay, item.error.map(errorMessage) ?? codec)
+            model.seek(0.7)
+            await model.setPreviewCensorship(false)?.value
+            XCTAssertNil(model.error, codec)
+            XCTAssertFalse(model.playingCensoredPreview)
+            let original = try XCTUnwrap(model.player.currentItem)
+            for _ in 0..<100 where original.status == .unknown {
+                try await Task.sleep(nanoseconds: 20_000_000)
+            }
+            XCTAssertEqual(original.status, .readyToPlay, original.error.map(errorMessage) ?? codec)
+            XCTAssertEqual(model.player.currentTime().seconds, 0.7, accuracy: 0.1)
+            model.togglePlayback()
+            for _ in 0..<100 where model.playhead < 0.8 { try await Task.sleep(nanoseconds: 20_000_000) }
+            XCTAssertGreaterThan(model.playhead, 0.8)
+            model.pause()
+            await model.setPreviewCensorship(true)?.value
+            XCTAssertTrue(model.playingCensoredPreview)
+            XCTAssertNil(model.error)
+            XCTAssertEqual(try Data(contentsOf: source), originalBytes)
+            model.goHome()
+        }
     }
 
     func testAdvancedAutomaticallyPreparesCensoredPreviewAfterAnalysis() async throws {

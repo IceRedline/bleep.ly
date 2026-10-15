@@ -1,0 +1,18 @@
+{
+  "id": "turbo-en-v1",
+  "title": "Silver Surfer (NES), AVGN Episode 27 — full English audio",
+  "author": "Cinemassacre",
+  "author_url": "https://cinemassacre.com/silver-surfer-nes-angry-video-game-nerd-avgn-episode-27/",
+  "source_url": "https://odysee.com/@Cinemassacre:b/silver-surfer-avgn:298124556cd99c257f36a8107d63e6d909757e0b",
+  "video_sha256": "e58d5c395c889a18a6e29e32be0732ee1e5758b030679809d5b32d4a5becf346",
+  "audio_pcm_sha256": "459f87d30b40d110989a43aae9f6e1af9d4bd145dd1357c5060e234b3a263506",
+  "sample_rate": 16000,
+  "channels": 1,
+  "pcm_format": "s16le",
+  "samples": 10055541,
+  "duration_seconds": 628.4713125,
+  "models": {
+    "cpu": {"repo": "mobiuslabsgmbh/faster-whisper-large-v3-turbo", "revision": "0a363e9161cbc7ed1431c9597a8ceaf0c4f78fcf", "patterns": ["config.json", "model.bin", "tokenizer.json", "vocabulary.*", "preprocessor_config.json"]},
+    "gpu": {"repo": "mlx-community/whisper-large-v3-turbo", "revision": "a4aaeec0636e6fef84abdcbe3544cb2bf7e9f6fb", "patterns": ["config.json", "*.safetensors", "*.npz"]}
+  }
+}

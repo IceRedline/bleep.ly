@@ -9,13 +9,17 @@ MAX_START_SHIFT = .6
 
 
 class WordAligner:
-    def __init__(self, model_path):
+    def __init__(self, model_path, device="gpu"):
         import mlx.core as mx
         from mlx_qwen3_asr.forced_aligner import ForcedAligner, ForcedAlignTextProcessor
-        if not mx.metal.is_available():
+        if device not in {"cpu", "gpu"}:
+            raise CensorError("Choose CPU or GPU for word alignment.")
+        if device == "gpu" and not mx.metal.is_available():
             raise CensorError("Apple Metal GPU is unavailable for word alignment.")
-        mx.set_default_device(mx.gpu)
-        self.backend = ForcedAligner(model_path=model_path, dtype=mx.float16)
+        mx.set_default_device(mx.cpu if device == "cpu" else mx.gpu)
+        if device == "cpu":
+            mx.disable_compile()
+        self.backend = ForcedAligner(model_path=model_path, dtype=mx.float32 if device == "cpu" else mx.float16)
         self.tokenize = ForcedAlignTextProcessor.tokenize_text
         self.metrics = dict(words=0, local_retries=0, native_fallbacks=0)
 

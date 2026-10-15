@@ -39,10 +39,12 @@ brew link --force ffmpeg@8
 With no saved preferences, the development app uses the project's `.venv/bin/python`, CPU/faster-whisper, full `large-v3`, and Russian speech. The temporary **Model · testing** picker selects Large v3 or Large v3 Turbo for CPU and MLX. WhisperKit keeps its pinned Turbo model. Selection applies to new files, and each model has a separate recognition cache. Large v3 has its own initial download. Choose **Apple GPU · MLX / MPS** in Settings to use the existing MLX implementation. The same app includes **WhisperKit · Experimental** in the Engine picker; see [WhisperKit setup](../experiments/README.md). Missing models trigger a **Download model?** prompt before any model download. **OK** remembers permission for missing models and continues processing the same file; **No** cancels and keeps recognition offline. Change this decision using **Allow first-time model download** in Settings. Cached models do not prompt. The app reuses the repository’s `.cache/huggingface` model cache (or an explicitly inherited `HF_HOME`). Recognition happens locally with every engine. No recording is uploaded.
 
 Changing **Video language** selects a model preset: Russian selects GigaAM v3
-on Apple Silicon; English selects Whisper Large v3 Turbo and retains CPU if it
+on Apple Silicon; English selects Whisper Large v3 Turbo. Both retain CPU if it
 was already selected. Selecting the same language or relaunching preserves
-manual model choices. GigaAM is unavailable for English. The GPU picker also
-includes Parakeet v3, Parakeet Ultra and Qwen3-ASR 1.7B. For development, install
+manual model choices. GigaAM is unavailable for English. On Apple Silicon, both CPU and GPU pickers
+include GigaAM v3, Parakeet v3, Parakeet Ultra and Qwen3-ASR 1.7B. CPU selection
+also applies to word alignment. CPU uses float32 with no runtime compilation;
+recognition caches are separate from GPU, while downloaded weights are shared. For development, install
 their separate runtime with `bash scripts/setup-experimental-gpu.sh`; release
 DMGs already contain it. See [recognition options](../README.md#recognition).
 
@@ -56,7 +58,7 @@ builds use the repository's `.cache/` for models and
 
 The header switches between **Fast Mode** (the initial default) and **Advanced**; your choice is remembered. Both use the same local recognition engine and censoring preference. Fast Mode does not reduce recognition quality.
 
-In **Fast Mode**, choose a censor sound if needed, then drop your media. After recognition, video sources offer **Save as Video** as the primary action and **Save as Audio** as the secondary action. Audio-only sources offer just **Save as Audio**. Each button opens a save dialog with its format already selected; no file is exported until you confirm a destination. The dialog initially suggests the source folder and an unused `NAME_censored.ext` filename. Video retains the source MOV/MP4/MKV container by default (otherwise MKV); audio becomes WAV. Existing files are never overwritten. After saving, the selected path is shown and both applicable save actions remain available, so you can export the other format without repeating recognition. Cancelling the dialog keeps the analyzed result; a failed export can be retried. Use the header's Advanced selector to inspect intervals, or Home/Open for another file.
+In **Fast Mode**, choose a censor sound if needed, then drop your media. After recognition, video sources offer **Save as Video** as the primary action and **Save as Audio** as the secondary action. Audio-only sources offer just **Save as Audio**. Each button opens a save dialog with its format already selected; no file is exported until you confirm a destination. The dialog initially suggests the source folder and an unused `NAME_censored.ext` filename. Video retains the source MOV/MP4/MKV container by default (otherwise MKV); audio becomes WAV. Existing files are never overwritten. After saving, the selected path and **Show in Finder** confirm completion. **Save Another Copy…** offers the applicable formats without repeating recognition. Cancelling the dialog keeps the analyzed result; a failed export can be retried. Use the header's Advanced selector to inspect intervals, or Home/Open for another file.
 
 In **Advanced Mode**, analysis stops at the timeline for manual review. Switching modes does not rerun recognition or discard edits. On the welcome screen the drop target stays fixed while the controls below fade. Click the logo, Home, or ⌘⇧H to cancel any active operation and return to file selection; the autosaved review can be resumed. The colored window background continues behind the native traffic lights. Resuming a saved review or importing a reviewed transcript always opens Advanced. The steps below describe Advanced Mode.
 

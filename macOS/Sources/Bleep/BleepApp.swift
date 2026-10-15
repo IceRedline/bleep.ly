@@ -103,7 +103,7 @@ struct SettingsView: View {
                             Text(model.title).tag(model.rawValue)
                         }
                     }
-                    Text("Applies to the next file; each model has its own cache. GigaAM uses Apple GPU.")
+                    Text("Applies to the next file. CPU and GPU results are cached separately; model downloads are shared for GigaAM, Parakeet and Qwen.")
                         .font(.caption).foregroundStyle(.secondary)
                     if videoLanguage == "en" {
                         Text("English selected on Home. GigaAM v3 is available for Russian only.")

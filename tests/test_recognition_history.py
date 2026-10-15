@@ -25,6 +25,12 @@ class RecognitionHistoryTests(unittest.TestCase):
         with (self.output / "runs.csv").open(encoding="utf-8-sig", newline="") as handle:
             return list(csv.DictReader(handle))
 
+    def test_explicit_cpu_device_overrides_gpu_backend_name(self):
+        for backend in ['parakeet-mlx', 'mlx-qwen3-asr', 'gigaam-mps']:
+            record_run(self.output, metadata={**self.metadata, 'backend': backend, 'device': 'CPU'},
+                       words=self.words, cache_path=self.cache)
+        self.assertEqual({row['device'] for row in self.rows()}, {'CPU'})
+
     def test_import_is_idempotent_but_preserves_changed_cache(self):
         first = import_cache(self.output, self.cache)
         self.assertEqual(first, import_cache(self.output, self.cache))

@@ -96,7 +96,7 @@ final class AppModel: ObservableObject {
             do {
                 try LegacyLabMigration.migrate(defaults: defaults, directory: Self.support,
                     legacyDefaults: legacy, legacyDirectory: Self.support.deletingLastPathComponent().appendingPathComponent("bleep.ly Lab"))
-            } catch { migrationError = "Could not import Lab data: \(error.localizedDescription)" }
+            } catch { migrationError = "Could not import Lab data: \(errorMessage(error))" }
         }
         WhisperKitExperiment.migratePreferences(defaults: defaults)
         self.defaults = defaults
@@ -138,7 +138,7 @@ final class AppModel: ObservableObject {
         let currentBackend = WhisperKitExperiment.backend(defaults: defaults)
         #if arch(arm64)
         let recommended: RecognitionModel = language == .russian ? .gigaAM : .turbo
-        let backend = language == .russian || currentBackend != "faster-whisper" ? "mlx" : "faster-whisper"
+        let backend = currentBackend == "faster-whisper" ? "faster-whisper" : "mlx"
         #else
         let recommended: RecognitionModel = language == .russian ? .largeV3 : .turbo
         let backend = "faster-whisper"
@@ -201,6 +201,7 @@ final class AppModel: ObservableObject {
                         ? RuntimePaths.history(root: root, support: supportDirectory)
                         : supportDirectory.appendingPathComponent("recognition-history")).path,
                     "backend": recognitionBackend,
+                    "device": selectedBackend == "faster-whisper" ? "cpu" : "gpu",
                     "model": selectedRecognitionModel,
                     "language": selectedLanguage.rawValue,
                     "word_lists": selectedWordLists,
@@ -259,7 +260,7 @@ final class AppModel: ObservableObject {
                 saveDraft()
                 phase = .review
             } catch {
-                if !cancelling && !(error is CancellationError) { self.error = error.localizedDescription }
+                if !cancelling && !(error is CancellationError) { self.error = errorMessage(error) }
                 restoreReviewAfterOpenFailure()
             }
             cancelling = false
@@ -426,11 +427,22 @@ final class AppModel: ObservableObject {
     }
 
     private func makePlayerItem(document: ReviewDocument, track index: Int, audioURL: URL? = nil) async throws -> AVPlayerItem {
-        if document.audioCount == 1 && audioURL == nil { return AVPlayerItem(url: document.url) }
         let asset = AVURLAsset(url: document.url)
-        let audio = try await asset.loadTracks(withMediaType: .audio)
-        let video = try await asset.loadTracks(withMediaType: .video)
-        guard audio.indices.contains(index) else { throw BridgeFailure(message: "Audio track is unavailable.") }
+        if audioURL == nil && !document.hasVideo {
+            // Ogg/Opus support varies by macOS version. FFmpeg can decode sources
+            // that AVFoundation cannot open; original playback must work too.
+            let ogg = ["ogg", "oga", "opus", "ogx"].contains(document.url.pathExtension.lowercased())
+            let playable = ogg ? false : ((try? await asset.load(.isPlayable)) ?? false)
+            if !playable {
+                let decoded = try await censoredPreview.originalAudio(document: document, track: index, root: root, python: python)
+                return try await makePlayerItem(document: document, track: index, audioURL: decoded)
+            }
+        }
+        if document.audioCount == 1 && audioURL == nil { return AVPlayerItem(asset: asset) }
+        // A prepared WAV does not require AVFoundation to understand the source audio.
+        let audio = audioURL == nil ? try await asset.loadTracks(withMediaType: .audio) : []
+        let video = document.hasVideo ? try await asset.loadTracks(withMediaType: .video) : []
+        if audioURL == nil && !audio.indices.contains(index) { throw BridgeFailure(message: "Audio track is unavailable.") }
         let composition = AVMutableComposition()
         var origin = CMTime.zero
         if let sourceVideo = video.first, document.hasVideo {
@@ -468,7 +480,7 @@ final class AppModel: ObservableObject {
         let playbackToken = previewGeneration
         player.pause()
         player.replaceCurrentItem(with: item)
-        if censored, let composition = item.asset as? AVComposition,
+        if let composition = item.asset as? AVComposition,
            let audio = composition.tracks(withMediaType: .audio).first {
             censoredPreview.protectPlayback(audio.segments.first(where: { !$0.isEmpty })?.sourceURL)
         } else { censoredPreview.protectPlayback(nil) }
@@ -530,7 +542,7 @@ final class AppModel: ObservableObject {
                 await installPlayerItem(item, document: document, track: index, censored: true, generation: generation)
             } catch {
                 if !Task.isCancelled && playerGeneration == generation {
-                    self.error = "Could not prepare censored preview: \(error.localizedDescription)"
+                    self.error = "Could not prepare censored preview: \(errorMessage(error))"
                     if playingCensoredPreview, let original = try? await makePlayerItem(document: document, track: index) {
                         await installPlayerItem(original, document: document, track: index, censored: false, generation: generation)
                     }
@@ -610,7 +622,7 @@ final class AppModel: ObservableObject {
                 try SandboxFiles.saveBookmark(for: sourceAccess.url, to: supportDirectory.appendingPathComponent("last-source.bookmark"))
             }
             try JSONEncoder.bridge.encode(document).write(to: supportDirectory.appendingPathComponent("last-review.json"), options: .atomic)
-        } catch { self.error = "Could not save your review: \(error.localizedDescription)" }
+        } catch { self.error = "Could not save your review: \(errorMessage(error))" }
     }
     func restoreDraft() {
         guard !busy else { return }
@@ -631,7 +643,7 @@ final class AppModel: ObservableObject {
             preparePlayer()
             exportFormat = restored.hasVideo ? "video" : "audio"
             exportURL = nil; phase = .review
-        } catch { self.error = error.localizedDescription }
+        } catch { self.error = errorMessage(error) }
     }
     func importTranscript() {
         guard !busy, let source = document?.url ?? pendingSource else {
@@ -657,7 +669,7 @@ final class AppModel: ObservableObject {
             customSound = try SavedCensorSound(directory: supportDirectory, defaults: defaults).save(url)
             sound = "custom"
             error = nil
-        } catch { self.error = "Could not save the custom sound: \(error.localizedDescription)" }
+        } catch { self.error = "Could not save the custom sound: \(errorMessage(error))" }
     }
 
     func export() {
@@ -712,7 +724,7 @@ final class AppModel: ObservableObject {
                 try await render(document, to: destination, format: format, sound: selectedSound, customSound: selectedCustomSound)
                 exportAccess = destinationAccess
             } catch {
-                if !cancelling { self.error = error.localizedDescription }
+                if !cancelling { self.error = errorMessage(error) }
                 phase = .review
             }
             cancelling = false

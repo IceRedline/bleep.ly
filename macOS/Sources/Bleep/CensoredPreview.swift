@@ -59,6 +59,14 @@ final class CensoredPreview {
         return cachedAudio(key: key)
     }
 
+    /// Decode unsupported source containers through the same bounded session cache.
+    func originalAudio(document: ReviewDocument, track: Int, root: URL, python: URL) async throws -> URL {
+        var original = document
+        original.words = []
+        return try await audio(document: original, track: track, sound: "silence", customSound: nil,
+                               root: root, python: python) { _, _ in }
+    }
+
     func audio(document: ReviewDocument, track: Int, sound: String, customSound: URL?,
                root: URL, python: URL, progress: @escaping @MainActor (String, Double) -> Void) async throws -> URL {
         let (key, contextKey, baseRequest) = try request(document: document, track: track, sound: sound, customSound: customSound)

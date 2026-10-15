@@ -129,13 +129,14 @@ def prepare_assets(folder: Path, offline=True, progress=None):
     notify('WhisperKit model ready', 1)
 
 
-def cache_identity(source, model_folder, executable, audio_index, progress=None, language="ru"):
+def cache_identity(source, model_folder, executable, audio_index, progress=None, language="ru", compute_units="default"):
     metadata = dict(schema=1, source_sha256=file_hash(source, progress), backend='whisperkit',
                     backend_version=SDK_VERSION, helper_sha256=file_hash(executable), model=MODEL,
                     model_revision=MODEL_REVISION, tokenizer_revision=TOKENIZER_REVISION,
                     local_model_files={str(p.relative_to(model_folder)): [p.stat().st_size, p.stat().st_mtime_ns]
                                        for p in sorted(model_folder.rglob('*')) if p.is_file()},
-                    language=language, audio_index=audio_index, word_timestamps=True, compute='CoreML defaults',
+                    language=language, audio_index=audio_index, word_timestamps=True,
+                    compute='CoreML defaults' if compute_units == 'default' else compute_units,
                     temperature=0, temperature_fallback_count=5, concurrent_workers=1,
                     max_initial_timestamp=1, suppress_blank=True,
                     chunking='vad/incremental', initial_prompt=None)
@@ -143,7 +144,10 @@ def cache_identity(source, model_folder, executable, audio_index, progress=None,
 
 
 class WhisperKitBackend:
-    def __init__(self, executable: Path, model_folder: Path, stage=None, language="ru"):
+    def __init__(self, executable: Path, model_folder: Path, stage=None, language="ru", compute_units="default"):
+        if compute_units not in {"default", "cpuAndNeuralEngine"}:
+            raise CensorError('Unsupported WhisperKit compute units.')
+        self.compute_units = compute_units
         self.language = language
         self.executable = executable
         self.model_folder = model_folder
@@ -157,7 +161,8 @@ class WhisperKitBackend:
             work = Path(folder)
             output = work / 'words.json'
             request = work / 'request.json'
-            write_json(request, dict(audio=str(audio), modelFolder=str(self.model_folder), output=str(output), language=self.language))
+            write_json(request, dict(audio=str(audio), modelFolder=str(self.model_folder), output=str(output),
+                                     language=self.language, computeUnits=self.compute_units))
             with tempfile.TemporaryFile() as errors:
                 process = subprocess.Popen([str(self.executable), str(request)], stdout=subprocess.PIPE,
                                            stderr=errors, text=True)

@@ -94,7 +94,7 @@ final class ModelDownloadTests: XCTestCase {
         XCTAssertEqual(try String(contentsOf: folder.appendingPathComponent("requests.jsonl")).split(separator: "\n").count, 1)
         await model.open(source)?.value
         XCTAssertFalse(model.requestingModelDownload)
-        XCTAssertEqual(model.error, "Missing model")
+        XCTAssertEqual(model.error, "Missing model\nError code: model_download_required")
         defaults.set(true, forKey: "allowDownloads")
         await model.open(source)?.value
         XCTAssertEqual(model.error, "Download started")
