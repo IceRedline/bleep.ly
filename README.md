@@ -9,7 +9,7 @@ processing run locally; your recordings stay on your Mac.
 
 [Privacy Policy](docs/privacy-policy.md) · [Support](docs/support.md) · [Open Source Licenses](docs/third-party.md)
 
-**Contents:** [Download](#download-for-macos) · [Setup](#setup) · [App workflow](#app-workflow) · [Recognition](#recognition) · [Exports](#exports) · [Architecture](#architecture) · [CLI](#cli) · [Checks](#checks) · [Limitations](#limitations)
+**Contents:** [Download](#download-for-macos) · [Setup](#setup) · [App workflow](#app-workflow) · [Recognition](#recognition) · [Turbo benchmark](#turbo-benchmark) · [Exports](#exports) · [Architecture](#architecture) · [CLI](#cli) · [Checks](#checks) · [Limitations](#limitations)
 
 ## Download for macOS
 
@@ -169,6 +169,30 @@ For development, `requirements.txt` already includes the Python dependencies for
 WhisperKit model downloads; `scripts/build-macos.sh` builds its Swift helper.
 
 The build includes the native WhisperKit helper. Model weights download on first use with permission, or can be prepared with `scripts/prepare-whisperkit.py`. Initial Core ML preparation can take several minutes.
+
+## Turbo benchmark
+
+Whisper Large v3 Turbo on the same **628.47-second English audio recording**.
+Times are the **median of three repeated runs**, after one separate initial run
+per pipeline. Smaller is faster; transcript caches are bypassed.
+
+| Mac | Memory | CPU: faster-whisper int8 | GPU: MLX float16 | CPU + Neural Engine: WhisperKit |
+| --- | ---: | ---: | ---: | ---: |
+| M1 Air | 8 GiB | Not measured | Not measured | Not measured |
+| M3 | — | Not measured | Not measured | Not measured |
+| M3 Pro | 36 GiB | 170.37 s | 41.49 s | 51.24 s |
+
+Measured on an M3 Pro with 12 CPU / 18 GPU cores, macOS 26.6.2, battery power,
+and Low Power Mode off. These are application pipelines with different runtimes,
+precisions and decoding settings; compare the same column across Macs. Core ML
+may use CPU for some operations in the Neural Engine column.
+
+[Full results and setup instructions](benchmarks/README.md) ·
+[Individual measurements](benchmarks/results/m3-pro-36gb-2026-10-15.json)
+
+To measure another Mac, prepare the benchmark environment with
+`make speedtest-setup`, then run `make speedtest` with the reference audio.
+Audio, models and detailed logs stay outside Git.
 
 ## Exports
 
