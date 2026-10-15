@@ -4,7 +4,9 @@ Native SwiftUI front end for the Python engine. The signed, Apple-notarized
 [0.1.9 release](https://github.com/IceRedline/bleeply/releases/tag/v0.1.9) supports
 **Apple Silicon and macOS 15.0 or later**. It includes Python, FFmpeg and the
 recognition engines; only model weights download separately. Install it by
-dragging **bleeply** from the DMG to **Applications**. Quit the previous app first. If it has a different app name, remove the old app after the update succeeds; keep its Application Support data for automatic migration.
+opening the DMG, dragging **bleeply** to **Applications**, and opening the app
+from there. For an existing installation, see the
+[update instructions](../README.md#updating-an-existing-installation).
 
 The instructions below describe development builds. The Swift app targets
 macOS 14+; its included WhisperKit helper requires Swift 5.10 or later. Use
@@ -15,28 +17,32 @@ WAV) and **Video** (original video stream + AAC audio, no video re-encoding).
 
 ## Build and launch
 
-From the repository root:
+Install Xcode, Python 3.11 and FFmpeg 8, then set up the Python engine from the
+repository root:
+
+```sh
+brew install ffmpeg@8 python@3.11
+brew link --force ffmpeg@8
+python3.11 -m venv .venv
+.venv/bin/pip install -r requirements.txt
+# Optional: Whisper recognition on Apple GPU.
+.venv/bin/pip install -r requirements-mlx.txt
+```
+
+Build and open the app:
 
 ```sh
 ./scripts/build-macos.sh --open
 ```
 
-This builds `build/bleeply.app` with a local ad-hoc signature. You can open that app from Finder afterwards. `macOS/Package.swift` can also be opened in Xcode. When running through Xcode, set the project folder in the app's Settings.
+This creates `build/bleeply.app` with an ad-hoc signature. It uses the repository,
+Python environment, FFmpeg and models on your Mac. You can also open
+`macOS/Package.swift` in Xcode; set the project folder in the app's Settings when
+running from Xcode. If the repository moves, rebuild the app or update its project
+folder setting. See the [release instructions](../scripts/release/README.md) for
+building a self-contained, signed distribution.
 
-This is a local developer app: Python, FFmpeg, models, and the repository are external dependencies, not bundled. It is not notarized or ready for App Store distribution. Moving the app is fine as long as its project folder remains accessible; moving the repository requires updating Settings or rebuilding.
-
-Set up the engine once if it is not already installed:
-
-```sh
-python3.11 -m venv .venv
-.venv/bin/pip install -r requirements.txt
-brew install ffmpeg@8
-brew link --force ffmpeg@8
-# Optional: existing Apple GPU engine
-.venv/bin/pip install -r requirements-mlx.txt
-```
-
-With no saved preferences, the development app uses the project's `.venv/bin/python`, CPU/faster-whisper, full `large-v3`, and Russian speech. The temporary **Model · testing** picker selects Large v3 or Large v3 Turbo for CPU and MLX. WhisperKit keeps its pinned Turbo model. Selection applies to new files, and each model has a separate recognition cache. Large v3 has its own initial download. Choose **Apple GPU · MLX / MPS** in Settings to use the existing MLX implementation. The same app includes **WhisperKit · Experimental** in the Engine picker; see [WhisperKit setup](../experiments/README.md). Missing models trigger a **Download model?** prompt before any model download. **OK** remembers permission for missing models and continues processing the same file; **No** cancels and keeps recognition offline. Change this decision using **Allow first-time model download** in Settings. Cached models do not prompt. The app reuses the repository’s `.cache/huggingface` model cache (or an explicitly inherited `HF_HOME`). Recognition happens locally with every engine. No recording is uploaded.
+With no saved preferences, the development app uses the project's `.venv/bin/python`, CPU/faster-whisper, full `large-v3`, and Russian speech. The **Model · testing** picker selects the recognition model for CPU and Apple GPU, including Large v3 and Large v3 Turbo. WhisperKit keeps its pinned Turbo model. Selection applies to new files, and each model has a separate recognition cache. Large v3 has its own initial download. Choose **Apple GPU · MLX / MPS** in Settings to use the existing MLX implementation. The same app includes **WhisperKit · Experimental** in the Engine picker; see [WhisperKit setup](../experiments/README.md). Missing models trigger a **Download model?** prompt before any model download. **OK** remembers permission for missing models and continues processing the same file; **No** cancels and keeps recognition offline. Change this decision using **Allow first-time model download** in Settings. Cached models do not prompt. The app reuses the repository’s `.cache/huggingface` model cache (or an explicitly inherited `HF_HOME`). Recognition happens locally with every engine. No recording is uploaded.
 
 Changing **Video language** selects a model preset: Russian selects GigaAM v3
 on Apple Silicon; English selects Whisper Large v3 Turbo. Both retain CPU if it
@@ -64,18 +70,19 @@ In **Advanced Mode**, analysis stops at the timeline for manual review. Switchin
 
 ## Workflow
 
-1. Drop a single video/audio file or choose **Open Media…** (⌘O).
-2. Follow stage progress. Sparse recognition/export callbacks are supplemented by an approximate percentage (≈), elapsed time, and estimated stage time remaining in three compact columns. ETA smooths real worker throughput and uses coarse steps with hysteresis (~2 min, ~1.5 min, ~1 min); a dash appears while unavailable; interpolated percentages never reach 100%. Model initialization remains indeterminate. Cancel stops the Python process group and FFmpeg children.
-3. Choose Beep, Silence, or Custom on the welcome screen before loading media. **Preview with censorship** is enabled by default. Advanced opens the original immediately after analysis and prepares censored audio in the background. You can play and seek during preparation; when ready, the player switches audio at the current position and preserves playback. Click a word or timeline marker to hear 0.2 seconds before the word and 0.2 seconds after it. A temporary WAV uses the export mixer, without re-encoding video or rerunning recognition. Completed sound variants are cached per track, so returning to Beep/Silence/Custom skips preparation. Word edits and timing changes update only affected audio windows, including overlapping intervals, fades, and full cue tails. Source audio is decoded once per track in the session. Undo reuses a matching cached version or applies local patches. The prepared preview keeps playing during updates, and the new version takes over at the current position. A different custom cue prepares its own variant. Review Words follows playback with a smooth native scroll (respecting Reduce Motion), scrolling to and highlighting the latest censored word on the selected track. Seeking recalculates that selection; Listen in Context keeps the clicked word selected during its pre-roll. Turning the checkbox off returns to the original. Export always applies censorship; **Play export** opens the saved result.
+1. On the welcome screen, select **Beep**, **Silence** or **Custom**, then drop a video/audio file or choose **Open Media…** (⌘O).
+2. Follow stage progress. Downloads show transferred bytes and total size when known. Media checks and model preparation show explanatory text and an activity indicator. Recognition and export show progress, elapsed time and estimated time remaining; approximate values are marked with ≈. Cancel stops the worker and its media-processing tasks.
+3. Listen to the result. **Preview with censorship** is enabled by default. Advanced opens the original immediately after analysis and prepares censored audio in the background. You can play and seek during preparation; when ready, the player switches audio at the current position and preserves playback. Click a word or timeline marker to hear 0.2 seconds before the word and 0.2 seconds after it. A temporary WAV uses the export mixer, without re-encoding video or rerunning recognition. Completed sound variants are cached per track, so returning to Beep/Silence/Custom skips preparation. Word edits and timing changes update only affected audio windows, including overlapping intervals, fades, and full cue tails. Source audio is decoded once per track in the session. Undo reuses a matching cached version or applies local patches. The prepared preview keeps playing during updates, and the new version takes over at the current position. A different custom cue prepares its own variant. Review Words follows playback with a smooth native scroll (respecting Reduce Motion), scrolling to and highlighting the latest censored word on the selected track. Seeking recalculates that selection; Listen in Context keeps the clicked word selected during its pre-roll. Turning the checkbox off returns to the original. Export always applies censorship; **Play export** opens the saved result.
 4. Uncheck false positives; use **All words** to flag a missed transcript word. **Add interval** handles words absent from the transcript. The timing button edits exact mute boundaries in seconds. ⌘Z undoes up to 100 review edits.
-Unchecked words remain in **Flagged** with **Censoring off**, so you can enable them again directly. This list membership is saved in the review draft; the header shows the number of candidates separately from the number selected for censorship. Words manually selected from **All words** also remain in the review list after unchecking.
 
-5. Pick **Beep**, **Silence**, or drop/choose custom audio. The full custom cue plays once at original speed. Speech resumes at the same approved mute endpoint, even while a cue tail is still playing. A cue is only cut by the end of the entire media, not by word length. Overlapping mute ranges form one interval with one cue.
+   Unchecked words remain in **Flagged** with **Censoring off**, so you can enable them again directly. This list membership is saved in the review draft; the header shows the number of candidates separately from the number selected for censorship. Words manually selected from **All words** also remain in the review list after unchecking.
+
+5. Adjust the censor sound if needed: choose **Beep**, **Silence**, or drop/choose custom audio. The full custom cue plays once at original speed. Speech resumes at the same approved mute endpoint, even while a cue tail is still playing. A cue is only cut by the end of the entire media, not by word length. Overlapping mute ranges form one interval with one cue.
 6. Choose **Audio Only** or **Video**, then **Export** (⌘E). Existing files are never overwritten; choose another filename. For a codec/container mismatch, try MOV or MKV. There is no silent fallback to video re-encoding.
 
 In Settings → Censoring, choose **Word middle (default)** or **Whole word**. The choice applies when opening media, including imported transcripts, and is saved with the review. Whole word uses the exact recognized word boundaries, without a cap tied to cue length. Existing reviews and manual edits are not recalculated. Recognition caches are reused across both styles.
 
-Default automatic mute intervals use the same middle-word rule and 0.383021s cap as the approved `beep_trimmed.wav` reference. Switching sounds does not recalculate these intervals. Manual intervals use your exact boundaries. The original CLI and local reviewed media remain untouched.
+Default automatic mute intervals use the same middle-word rule and 0.383021s cap as the approved `beep_trimmed.wav` reference. Switching sounds does not recalculate these intervals. Manual intervals use your exact boundaries.
 
 Reviews autosave to `~/Library/Application Support/bleeply/last-review.json`; **Resume Last Review** reopens the latest successful review. Word timestamps and classifications are cached separately under `cache/` in that folder. The last review is replaced when a new source finishes analysis. Clicking **Custom** activates the saved custom sound immediately. If no sound has been saved yet, it opens the audio file chooser; cancelling or a failed import keeps the previous selection. Click the filename below the sound selector to choose a replacement, or drop a new sound there. Cancelling replacement keeps the current mode and saved sound. The sound mode and custom audio are retained across launches. Custom audio is copied into `Custom Sounds/` in the app support directory; it remains available if the original cue is moved or deleted. Replacing it keeps only the new saved copy. Export checks source size/modification time and refuses changed media. Preview audio is a temporary session cache of decoded source audio and up to eight recent variants, cleared on Home, a new source, or normal app exit. APFS snapshots use copy-on-write so small edits do not copy an entire long WAV; other filesystems fall back to a file copy, but still process only the changed audio windows. It contains audio only and has a 7 GiB session budget. Older variants and decoded tracks are evicted first, keeping current playback and update inputs. If a preview cannot fit the budget or leave 1 GiB free on disk, the app explains the limit; original playback and export remain available. Abandoned processing and preview folders are cleaned up after a crash, with leases protecting live app instances and workers. Recognition cache and history share a 256 MiB budget and a 30-day retention period; cleanup runs before and after analysis, and reuse refreshes a transcript’s retention date. Models, original recordings, exports, custom sounds, and the saved review are excluded from cleanup. Settings → Storage explains these limits.
 

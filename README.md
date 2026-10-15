@@ -2,7 +2,10 @@
 
 # bleeply
 
-Local speech recognition and profanity censoring for Russian video and audio, with experimental English support in the desktop app. A native **macOS app** wraps the Python engine with drag and drop, a review timeline, and clean audio/video export. Your recordings stay on your Mac.
+Find and censor profanity in video and audio on your Mac. Use a beep, silence or
+your own sound, review detected words on a timeline, and export the result.
+Russian is supported, with experimental English support. Speech recognition and
+processing run locally; your recordings stay on your Mac.
 
 [Privacy Policy](docs/privacy-policy.md) · [Support](docs/support.md) · [Open Source Licenses](docs/third-party.md)
 
@@ -10,26 +13,33 @@ Local speech recognition and profanity censoring for Russian video and audio, wi
 
 ## Download for macOS
 
-The [v0.1.9 release](https://github.com/IceRedline/bleeply/releases/tag/v0.1.9)
-provides a self-contained DMG for **Apple Silicon, macOS 15.0 or later**.
-Quit the previous app, open the DMG, and drag **bleeply** to **Applications**. If the previous version has a different app name, remove that old app after the update succeeds; keep its Application Support data for automatic migration.
-Python, FFmpeg and the recognition engines are included; Homebrew and this
-repository are not needed. Models download separately: when one is missing, choose **OK** in the download
-prompt to allow model downloads and continue processing. Downloads
-can be several GB, depending on the model. Afterwards recognition works offline.
+**Requires an Apple Silicon Mac running macOS 15.0 or later.**
 
-The release is signed with Developer ID and notarized by Apple. The Intel build
-is not included in this release. New builds store models and caches under
-`~/Library/Application Support/bleeply/` and migrate the previous data folder
-on first launch. Moving or updating the app does not remove them.
+1. [Download bleeply 0.1.9](https://github.com/IceRedline/bleeply/releases/download/v0.1.9/bleeply-0.1.9-arm64.dmg).
+2. Open the DMG and drag **bleeply** to **Applications**.
+3. Open **bleeply** from Applications and choose a video or audio file.
+4. If prompted, allow the selected speech model to download. Once it is downloaded, recognition works offline.
 
-See the release assets for the DMG download size. Most of the installed app's
-space is used by the two bundled Python runtimes
-and their recognition libraries. To update from an earlier version, replace the app in
-Applications; your settings, downloaded models and saved review are retained.
+The app is signed with Developer ID and notarized by Apple. Python, FFmpeg and
+the recognition engines are included. Model downloads can be several GB;
+Settings shows an estimate for the selected model. Recordings are processed on
+your Mac. An Intel installer is not available.
 
-See [release build instructions](scripts/release/README.md) for packaging and
-verification. The setup below is for building from source.
+[Release notes and checksums](https://github.com/IceRedline/bleeply/releases/tag/v0.1.9)
+· [macOS user guide](macOS/README.md)
+
+### Updating an existing installation
+
+If bleeply is already installed, close it before replacing it in Applications.
+Settings, downloaded models and the last saved review are retained.
+
+When updating from a version with the former app name, launch the new app once
+to migrate its data to `~/Library/Application Support/bleeply/`. After confirming
+your saved work is available, remove the old application from Applications.
+Keep its Application Support data until migration has succeeded.
+
+The setup below is for building from source. See the
+[release build instructions](scripts/release/README.md) for packaging and signing.
 
 ## Setup
 
@@ -49,9 +59,9 @@ python3.11 -m venv .venv
 bash scripts/build-macos.sh --open
 ```
 
-Open `build/bleeply.app` from Finder afterwards. This is a local development build with an ad-hoc signature: the repository, Python environment, FFmpeg, and model files remain external dependencies. If the repository moves, rebuild or update its location in Settings (`⌘,`).
+The build command opens `build/bleeply.app`; you can also open it from Finder later. This is a local development build with an ad-hoc signature: the repository, Python environment, FFmpeg, and model files remain external dependencies. If the repository moves, rebuild or update its location in Settings (`⌘,`).
 
-Optional Apple GPU recognition:
+For Whisper recognition on Apple GPU, also install:
 
 ```sh
 .venv/bin/pip install -r requirements-mlx.txt
@@ -76,8 +86,7 @@ word list (`profanity.en.txt`); review contextual false positives and missed wor
 There is no automatic language detection or mixed-language censorship mode. Parakeet
 itself auto-detects speech language; the selected language controls its profanity list.
 Language is recorded in reviews and recognition history, and English/Russian runs use
-separate caches. Existing Russian benchmark caches remain reusable (WhisperKit helper
-changes still invalidate its cache). Changing language applies to the next file.
+separate caches. Changing language applies to the next file.
 
 The app reuses recognition results across normal relaunches of the same installed
 build. Updating, rebuilding, or reinstalling the app (even the same version)
@@ -91,9 +100,11 @@ again to obtain a fresh transcript after an update.
 - **Multiple audio tracks:** both modes analyze each track independently. Advanced shows separate timeline rows and a track selector for listening and editing. Video export preserves separate processed audio tracks.
 - **Home:** click the logo, the Home button, or press `⌘⇧H`. During processing this cancels the worker and returns to file selection. **Resume Last Review** restores the latest autosaved review.
 
-The drop target stays in place when switching modes; controls below it fade. The window background extends behind the native traffic lights and changes color with the processing stage.
-
-Reading media uses a simple activity indicator without percentages. Other stage progress uses worker reports where available. Sparse recognition/export updates are supplemented by an approximate percentage (≈). Three compact columns show progress, elapsed time, and estimated time remaining in the current stage. Remaining time is calculated from smoothed real worker throughput and shown in coarse steps (for example, ~2 min, ~1.5 min, ~1 min), with hysteresis to avoid flicker near boundaries; a dash appears until measurements are available or when an old estimate expires. Interpolated percentages never complete a stage. WhisperKit's initial download shows received/total MB, followed by installation and Core ML preparation.
+Downloads show received bytes and the total size when available. Media checks
+and model preparation show an activity indicator with a description of the current
+step. Recognition and export show progress, elapsed time and an estimated time
+remaining. Approximate values are marked with ≈; an estimate appears only once
+there is enough progress to calculate it.
 
 **Settings → Censoring → Edit word lists…** edits the full censor list and a
 **Never censor** list separately for Russian and English. Lists accept one word per
@@ -123,7 +134,10 @@ One **Engine** picker selects the backend for the next file:
 All engines still require a separate model download. For source builds, install
 the additional recognition dependencies described below.
 
-CPU and MLX now offer a temporary **Model · testing** picker: **Large v3** (default, full model) or **Large v3 Turbo**. The choice applies to the next opened file and uses a separate recognition cache. WhisperKit currently keeps its pinned Large v3 Turbo weights. WhisperKit is an Argmax framework; its model is **not an Apple speech model** and must also be downloaded. It is not Apple's Speech framework. Native execution does not guarantee higher accuracy or model download availability.
+In **Settings → Recognition**, the **Model · testing** picker offers Whisper
+Large v3 (the default) and Large v3 Turbo for CPU and Apple GPU. WhisperKit uses
+Large v3 Turbo through Core ML. Engine and model changes apply to the next file;
+each configuration has its own recognition cache.
 
 On Apple Silicon, both **CPU** and **Apple GPU · MLX / MPS** also offer experimental **Parakeet v3**,
 **Parakeet Ultra**, **Qwen3-ASR 1.7B**, and **GigaAM v3 RNNT**. Their runtime is
@@ -132,7 +146,7 @@ already included in the DMG. For a source build, install it with
 `.runtime/asr-env/bin/python` automatically for these models unless a custom Python
 executable is configured. The standard development runtime remains in `.venv`;
 the release selects its bundled runtimes automatically.
-Model weights download on first use only when downloads are enabled. The new
+Model weights download on first use only when downloads are enabled. These
 models run on the selected device, including their word alignment. CPU runs use
 float32 and disable MLX JIT compilation, so they do not require a compiler or
 loading generated libraries. They can be slower and use more memory than GPU
@@ -149,14 +163,12 @@ that still cannot be located reliably keep their original timing for review.
 Alignment retry/fallback counts are recorded in recognition history. This does
 not change existing reviews, manual mute intervals, or custom-cue playback.
 
-On the initial 19.93-second local reference using Turbo, MLX found 4/4 reviewed occurrences in three runs; CPU found 3/4; WhisperKit found 2/4, 3/4, and 3/4. This small sample is insufficient for a general quality ranking. WhisperKit remains experimental. See the [WhisperKit setup and reproducible benchmark](experiments/README.md).
+WhisperKit remains experimental. See the [WhisperKit guide](experiments/README.md) for setup and the results of a small local comparison; those results are not a general accuracy ranking.
 
 For development, `requirements.txt` already includes the Python dependencies for
 WhisperKit model downloads; `scripts/build-macos.sh` builds its Swift helper.
 
-There is one app, **bleeply**, with CPU, MLX, and WhisperKit in the same Engine picker. The build always bundles the native WhisperKit helper; model weights are still downloaded only when requested. Choose WhisperKit and allow the initial download, or prepare the weights with `scripts/prepare-whisperkit.py`. The first Core ML preparation can take several minutes.
-
-Upgrading removes obsolete generated app bundles from `build/` after building the replacement. On first launch, the standard app imports missing settings, the saved custom sound, and the last review from Lab without overwriting existing standard-app data. Original Lab data stays intact; model caches already live in the shared repository.
+The build includes the native WhisperKit helper. Model weights download on first use with permission, or can be prepared with `scripts/prepare-whisperkit.py`. Initial Core ML preparation can take several minutes.
 
 ## Exports
 
@@ -180,7 +192,7 @@ worker; choosing WhisperKit does not currently remove the Python dependency.
 
 The release embeds two Python environments to preserve the tested dependency
 versions for its recognition backends. Model weights are downloaded separately
-and run locally. The app is not yet a Python-free implementation.
+and run locally.
 
 ## CLI
 
@@ -234,10 +246,10 @@ Import existing caches (safe to repeat; changed cache contents create another re
 ```sh
 .venv/bin/python scripts/import-recognition-history.py \
   --output 'тесты bleeply/recognition-history' \
-  "$HOME/Library/Application Support/bleeply/cache" \
-  /path/to/legacy-lab/cache
+  "$HOME/Library/Application Support/bleeply/cache"
 ```
 
+Additional cache folders can be passed as positional arguments.
 Optional `--source /path/to/video` attaches the filename and duration only to
 caches with the same SHA-256. Imported records are labelled `cache_import` and
 reclassified with the current matcher. Old run time, cache-hit status, and
@@ -262,6 +274,19 @@ Code lives in `censor/`, the SwiftUI app in `macOS/`, the experimental native he
 
 ## Limitations
 
-Recognition can miss words or place approximate boundaries, especially with music, overlapping voices, shouting, or fast speech. Review important material in Advanced and listen to the export. Muting affects the entire selected track, including music; this does not separate voices from a mixed recording. After analysis, **Preview with censorship** automatically prepares a temporary WAV using the export mixer. Original playback remains available while preparation runs; ready audio replaces it at the current position. The video is never copied or re-encoded. Completed Beep, Silence, and Custom variants are cached per track, so switching back does not render again. Word and timing edits patch only the affected audio windows, including fades and complete cue tails, instead of rendering the full recording again. Source audio is decoded once per track for the session. The current prepared preview stays playable while an edit is applied; the updated version replaces it at the current position. A different custom cue prepares its own variant. The session retains decoded source audio and up to eight recent preview variants, uses copy-on-write snapshots on APFS, and clears them on Home, a new source, or normal app exit. Preview audio has a 7 GiB session budget; older variants and decoded tracks are removed first. A preview that cannot fit the budget or leave 1 GiB of disk space shows an error while original playback and export remain available. Abandoned processing folders are cleaned up after a crash. Recognition cache and history share a 256 MiB budget and a 30-day retention period, enforced before and after analysis. Reusing a transcript refreshes its retention date. These limits do not delete models, original recordings, exports, custom sounds, or the saved review. The checkbox affects listening only; exports always apply the reviewed censoring. **Play export** opens the exported file. Desktop exports decode each track once and mix censorship in one-second blocks, processing only active intervals and sound tails. Single-track WAV export streams directly to its destination without a full-length intermediate; video and multitrack exports retain independent track processing and video stream copy.
+Recognition can miss words or place approximate boundaries, especially with music,
+overlapping voices, shouting or fast speech. Review important material in Advanced
+and listen to the export. English detection is experimental. Muting affects the
+entire selected audio track, including music; it does not separate voices from a
+mixed recording.
 
-Waveform zoom remains future work.
+Censored previews use temporary decoded audio and need free disk space. The preview
+cache has a 7 GiB session budget and requires at least 1 GiB of free disk space.
+If a preview cannot fit, original playback and export remain available. Recognition
+cache and history share a 256 MiB budget and a 30-day retention period. Cleanup
+preserves models, original recordings, exports, custom sounds and the saved review.
+See the [macOS guide](macOS/README.md#workflow) for preview and storage details.
+
+Video export keeps the original video stream and processed audio tracks. Subtitles,
+alternate video angles and additional data streams are not preserved. Waveform zoom
+is not available. FCPXML and JSON export are available through the CLI only.
