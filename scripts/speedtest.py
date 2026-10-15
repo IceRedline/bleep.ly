@@ -19,6 +19,7 @@ sys.path.insert(0, str(ROOT))
 MANIFEST = ROOT / "benchmarks/turbo-en.json"
 WORK = ROOT / ".cache/speedtest"
 HELPER = ROOT / ".cache/whisperkit-build/release/BleepWhisperKit"
+REFERENCE_AUDIO = ROOT / "benchmarks/fixtures/turbo-en.flac"
 PACKAGES = ("faster-whisper", "ctranslate2", "mlx-whisper", "mlx", "mlx-metal", "onnxruntime", "numpy", "huggingface-hub", "av")
 MODES = {"cpu": "CPU · faster-whisper int8", "gpu": "GPU · MLX float16", "ane": "CPU + Neural Engine · WhisperKit"}
 
@@ -115,6 +116,28 @@ def host_info():
             "power_source": capture("pmset", "-g", "batt").splitlines()[0],
             "power_settings": capture("pmset", "-g", "custom"),
             "thermal_status": capture("pmset", "-g", "therm")}
+
+
+def source_info():
+    """GitHub ZIPs have no .git; fingerprint executable source in either case."""
+    paths = set((ROOT / "censor").rglob("*.py"))
+    paths.update(ROOT.glob("profanity*.txt"))
+    paths.update(ROOT.glob("requirements*.txt"))
+    paths.update((ROOT / "experiments/WhisperKitRunner").glob("Package.*"))
+    paths.update((ROOT / "experiments/WhisperKitRunner/Sources").rglob("*.swift"))
+    paths.update([ROOT / "scripts/speedtest.py", ROOT / "scripts/release/requirements-mlx-macos15.lock"])
+    digest = hashlib.sha256()
+    for path in sorted(p for p in paths if p.is_file()):
+        digest.update(str(path.relative_to(ROOT)).encode() + b"\0" + sha256(path).encode() + b"\0")
+    result = dict(source_sha256=digest.hexdigest(), git_commit=None, git_dirty=None)
+    try:
+        # An archive unpacked inside some other repository must not inherit its identity.
+        if Path(capture("git", "-C", str(ROOT), "rev-parse", "--show-toplevel")).resolve() == ROOT.resolve():
+            result.update(git_commit=capture("git", "-C", str(ROOT), "rev-parse", "HEAD"),
+                          git_dirty=bool(capture("git", "-C", str(ROOT), "status", "--porcelain")))
+    except (OSError, subprocess.CalledProcessError):
+        pass
+    return result
 
 
 def stop_process(process):
@@ -222,8 +245,7 @@ def run(args, manifest):
               "timestamp_utc": datetime.now(timezone.utc).isoformat(), "host": host_info(), "packages": versions,
               "wheel_tags": wheel_tags,
               "dependencies": {d.metadata["Name"]: d.version for d in importlib.metadata.distributions()},
-              "git_commit": capture("git", "-C", str(ROOT), "rev-parse", "HEAD"),
-              "git_dirty": bool(capture("git", "-C", str(ROOT), "status", "--porcelain")),
+              **source_info(),
               "ffmpeg": capture("ffmpeg", "-version").splitlines()[0],
               "helper_sha256": sha256(HELPER), "model_assets": assets,
               "repeats": args.repeats, "cooldown_seconds": args.cooldown, "runs": []}
@@ -274,10 +296,12 @@ def main(argv=None):
     audio.add_argument("--video", type=Path, required=True)
     audio.add_argument("--output", type=Path, default=WORK / "turbo-en.flac")
     prep = sub.add_parser("prepare", help="Explicitly download and fingerprint pinned weights")
+    verify = sub.add_parser("verify-audio", help="Validate the bundled reference before downloading models")
+    verify.add_argument("--audio", type=Path, default=REFERENCE_AUDIO)
     bench = sub.add_parser("run", help="Run all three pipelines sequentially, with network downloads disabled")
     for target in [prep, bench]:
         target.add_argument("--whisperkit-model", type=Path, default=ROOT / ".cache/whisperkit/model")
-    bench.add_argument("--audio", type=Path, default=WORK / "turbo-en.flac")
+    bench.add_argument("--audio", type=Path, default=REFERENCE_AUDIO)
     bench.add_argument("--output", type=Path)
     bench.add_argument("--repeats", type=int, default=3, help="Measured runs per pipeline after one first-observed run")
     bench.add_argument("--timeout", type=float, default=3600, help="Maximum seconds per worker")
@@ -292,6 +316,9 @@ def main(argv=None):
             prepare_audio(args.video, args.output, manifest)
         elif args.command == "prepare":
             prepare(manifest, args.whisperkit_model)
+        elif args.command == "verify-audio":
+            validate_audio(args.audio, manifest)
+            print("Reference audio verified.")
         else:
             return run(args, manifest)
     except (OSError, ValueError, subprocess.CalledProcessError) as error:
