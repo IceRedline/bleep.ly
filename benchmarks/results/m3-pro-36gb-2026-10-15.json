@@ -1,0 +1,382 @@
+{
+  "schema": 1,
+  "fixture": {
+    "id": "turbo-en-v1",
+    "title": "Silver Surfer (NES), AVGN Episode 27 — full English audio",
+    "author": "Cinemassacre",
+    "author_url": "https://cinemassacre.com/silver-surfer-nes-angry-video-game-nerd-avgn-episode-27/",
+    "source_url": "https://odysee.com/@Cinemassacre:b/silver-surfer-avgn:298124556cd99c257f36a8107d63e6d909757e0b",
+    "video_sha256": "e58d5c395c889a18a6e29e32be0732ee1e5758b030679809d5b32d4a5becf346",
+    "audio_pcm_sha256": "459f87d30b40d110989a43aae9f6e1af9d4bd145dd1357c5060e234b3a263506",
+    "sample_rate": 16000,
+    "channels": 1,
+    "pcm_format": "s16le",
+    "samples": 10055541,
+    "duration_seconds": 628.4713125,
+    "models": {
+      "cpu": {
+        "repo": "mobiuslabsgmbh/faster-whisper-large-v3-turbo",
+        "revision": "0a363e9161cbc7ed1431c9597a8ceaf0c4f78fcf",
+        "patterns": [
+          "config.json",
+          "model.bin",
+          "tokenizer.json",
+          "vocabulary.*",
+          "preprocessor_config.json"
+        ]
+      },
+      "gpu": {
+        "repo": "mlx-community/whisper-large-v3-turbo",
+        "revision": "a4aaeec0636e6fef84abdcbe3544cb2bf7e9f6fb",
+        "patterns": [
+          "config.json",
+          "*.safetensors",
+          "*.npz"
+        ]
+      }
+    }
+  },
+  "audio_file_sha256": "56833a22915a0e9def0c6893b4ba7fb568fa7d026468c096aa5efe18e9a934dc",
+  "timestamp_utc": "2026-10-15T10:19:00.889487+00:00",
+  "host": {
+    "chip": "Apple M3 Pro",
+    "memory_bytes": 38654705664,
+    "physical_cpu_cores": 12,
+    "logical_cpu_cores": 12,
+    "gpu_cores": [
+      "18"
+    ],
+    "macos": "26.6.2",
+    "os_build": "25G83",
+    "architecture": "arm64",
+    "python": "3.11.15",
+    "power_source": "Now drawing from 'Battery Power'",
+    "power_settings": "Battery Power:\n Sleep On Power Button 1\n lowpowermode         0\n standby              1\n ttyskeepawake        1\n hibernatemode        3\n powernap             1\n hibernatefile        /var/vm/sleepimage\n displaysleep         20\n womp                 0\n networkoversleep     0\n sleep                1\n lessbright           1\n tcpkeepalive         1\n disksleep            10\nAC Power:\n Sleep On Power Button 1\n lowpowermode         0\n standby              1\n ttyskeepawake        1\n hibernatemode        3\n powernap             1\n hibernatefile        /var/vm/sleepimage\n displaysleep         20\n womp                 1\n networkoversleep     0\n sleep                1\n tcpkeepalive         1\n disksleep            10",
+    "thermal_status": "Note: No thermal warning level has been recorded\nNote: No performance warning level has been recorded\nNote: No CPU power status has been recorded"
+  },
+  "packages": {
+    "faster-whisper": "1.2.1",
+    "ctranslate2": "4.8.2",
+    "mlx-whisper": "0.4.3",
+    "mlx": "0.32.3",
+    "mlx-metal": "0.32.3",
+    "onnxruntime": "1.23.2",
+    "numpy": "2.4.6",
+    "huggingface-hub": "1.33.0",
+    "av": "18.1.0"
+  },
+  "wheel_tags": {
+    "faster-whisper": [
+      "py3-none-any"
+    ],
+    "ctranslate2": [
+      "cp311-cp311-macosx_11_0_arm64"
+    ],
+    "mlx-whisper": [
+      "py3-none-any"
+    ],
+    "mlx": [
+      "cp311-cp311-macosx_15_0_arm64"
+    ],
+    "mlx-metal": [
+      "py3-none-macosx_15_0_arm64"
+    ],
+    "onnxruntime": [
+      "cp311-cp311-macosx_13_0_arm64"
+    ],
+    "numpy": [
+      "cp311-cp311-macosx_14_0_arm64"
+    ],
+    "huggingface-hub": [
+      "py3-none-any"
+    ],
+    "av": [
+      "cp311-abi3-macosx_14_0_arm64"
+    ]
+  },
+  "dependencies": {
+    "coloredlogs": "15.0.1",
+    "humanfriendly": "10.0",
+    "av": "18.1.0",
+    "click": "8.5.0",
+    "torch": "2.14.1",
+    "setuptools": "82.0.1",
+    "packaging": "26.3",
+    "protobuf": "7.36.2",
+    "tokenizers": "0.23.3",
+    "requests": "2.34.2",
+    "networkx": "3.6.1",
+    "numpy": "2.4.6",
+    "mlx-whisper": "0.4.3",
+    "mlx": "0.32.3",
+    "httpcore": "1.0.9",
+    "onnxruntime": "1.23.2",
+    "sympy": "1.14.0",
+    "hf-xet": "1.7.0",
+    "tqdm": "4.70.1",
+    "urllib3": "2.8.0",
+    "h11": "0.16.0",
+    "mpmath": "1.3.0",
+    "PyYAML": "6.0.3",
+    "fsspec": "2026.9.0",
+    "ctranslate2": "4.8.2",
+    "filelock": "4.2.0",
+    "llvmlite": "0.50.0",
+    "certifi": "2026.7.22",
+    "scipy": "1.17.1",
+    "Jinja2": "3.1.6",
+    "regex": "2026.9.29",
+    "pip": "26.1",
+    "numba": "0.68.0",
+    "flatbuffers": "25.12.19",
+    "tiktoken": "0.14.0",
+    "more-itertools": "11.2.1",
+    "httpx": "0.28.1",
+    "typing_extensions": "4.16.0",
+    "MarkupSafe": "3.0.4",
+    "faster-whisper": "1.2.1",
+    "charset-normalizer": "3.5.2",
+    "anyio": "4.15.1",
+    "mlx-metal": "0.32.3",
+    "huggingface_hub": "1.33.0",
+    "idna": "3.20"
+  },
+  "git_commit": "0e7184d16681ed9023c38f122c6dba93378d171c",
+  "git_dirty": false,
+  "ffmpeg": "ffmpeg version 8.1.2 Copyright (c) 2000-2026 the FFmpeg developers",
+  "helper_sha256": "9a6987fdbdc6d5991d6a5ac420a4d2ada969a50d45267834825125b7b7e035e4",
+  "model_assets": {
+    "cpu": {
+      "revision": "0a363e9161cbc7ed1431c9597a8ceaf0c4f78fcf",
+      "files": {
+        "config.json": "b0253ea6c0d3bea6b1e19e91a02acfd3b53f4467362efcb5a3e6b16c9b3a9b7e",
+        "model.bin": "e76620f83d5f5b69efd3d87e3dc180c1bd21df9fbebacfd4335e5e1efcc018da",
+        "preprocessor_config.json": "7ccc62c6f2765af1f3b46c00c9b5894426835a05021c8b9c01eecb6dfb542711",
+        "tokenizer.json": "297b13372ac43916285644fb9687add3cc62ee2a1adb60da3dc25cc94c1871fd",
+        "vocabulary.json": "c69260f2ab26d659b7c398f9a2b2b48ed0df16c3b47d7326782fd9cba71690c1"
+      }
+    },
+    "gpu": {
+      "revision": "a4aaeec0636e6fef84abdcbe3544cb2bf7e9f6fb",
+      "files": {
+        "config.json": "b34fc29e4e11e0a25e812775dd67f4dd16fc2c8eb43d28ae25ff7d660ecb6379",
+        "weights.safetensors": "951ed3fc1203e6a62467abb2144a96ce7eafca8fa77e3704fdb8635ff3e7f8a6"
+      }
+    },
+    "ane": {
+      "revision": "0f63a7800b00dd0226abd051b906c246e1907482",
+      "tokenizer_revision": "41f01f3fe87f28c78e2fbf8b568835947dd65ed9",
+      "files": {
+        "AudioEncoder.mlmodelc/analytics/coremldata.bin": "b58d36a7f4a729570b46b424ed8d847baefa07580e6cb9d47773ae738f8b845a",
+        "AudioEncoder.mlmodelc/coremldata.bin": "ffa9eb76e8e9d9be75a4d527e5249e61d67fd43081c5aa110fd24efa6c8c5ea3",
+        "AudioEncoder.mlmodelc/metadata.json": "3f8920fecd553c40dfc978e1b2664cefbac80d97937c2c160e079b37cfa95e13",
+        "AudioEncoder.mlmodelc/model.mil": "9aac7799f12bc5fc414cb0bd6b60536d4fb7723d8bb0d879e3c0ceb220b224aa",
+        "AudioEncoder.mlmodelc/model.mlmodel": "c5eb570c19871d7b0c59e0a84718cc9c8cde77a94273886de87e866961262e2c",
+        "AudioEncoder.mlmodelc/weights/weight.bin": "98daf651a919978e28fe185daf55ce2f70085a8e59fa07fe8a4d08c87d368ae4",
+        "MelSpectrogram.mlmodelc/analytics/coremldata.bin": "c5be419f8622083ac7046306400643539f0e7577c843448c36defc090d41e7ce",
+        "MelSpectrogram.mlmodelc/coremldata.bin": "98efa1e351b759e078c4044668926d32bee886caf7596ae897e08e21da45565a",
+        "MelSpectrogram.mlmodelc/metadata.json": "2bc552e09a6f124d9e6c178dd1a6979e010206acb26308b2224887c9dcbeb35f",
+        "MelSpectrogram.mlmodelc/model.mil": "c270b95b5f81d7f7d0b8a3e8f991d4e5812a37cad29349868a35b91f3a6a4463",
+        "MelSpectrogram.mlmodelc/weights/weight.bin": "009d9fb8f6b589accfa08cebf1c712ef07c3405229ce3cfb3a57ee033c9d8a49",
+        "TextDecoder.mlmodelc/analytics/coremldata.bin": "47703aed03fbfa5128e118cfe6519024006f953a53e921d66003f1412c27996c",
+        "TextDecoder.mlmodelc/coremldata.bin": "605dad4099a82cf2c7afe93e6d8e322f1c16d4160ab27bd017ec2517b81c1bdd",
+        "TextDecoder.mlmodelc/metadata.json": "de6afb1e8fa1d01568b8d96283ca17af19f6124f151d0fdbdbd5917edc7b4836",
+        "TextDecoder.mlmodelc/model.mil": "1a1c2ec962fc7c9d2de9e2e4cf2d3827c8671f86a918b5698c00bf62c322ed3f",
+        "TextDecoder.mlmodelc/model.mlmodel": "03b79e4355e814c56239ea809e5d8f6432d70d74256bc9d70c27184fe9fcec48",
+        "TextDecoder.mlmodelc/weights/weight.bin": "47b2703aa37448e09cf2f06e45984fabd5ded4c34ba3400cec38a5294af39dc1",
+        "bleep-model.json": "24a16dec40f3d178c1012ef4cd933ec59dd67d5c070811eb51c078485244e257",
+        "tokenizer.json": "297b13372ac43916285644fb9687add3cc62ee2a1adb60da3dc25cc94c1871fd",
+        "tokenizer_config.json": "844b642c73a91359722f47b35705f7174686df33d252695d8572cf9ac03a6389"
+      }
+    }
+  },
+  "repeats": 3,
+  "cooldown_seconds": 15,
+  "runs": [
+    {
+      "status": "ok",
+      "wall_seconds": 185.00927579199924,
+      "analysis_seconds": 184.45157499999914,
+      "duration_seconds": 628.471313,
+      "word_count": 1946,
+      "recognition_seconds": 184.171926084,
+      "native_metrics": {},
+      "mode": "cpu",
+      "iteration": 0
+    },
+    {
+      "status": "ok",
+      "wall_seconds": 64.91215100000045,
+      "analysis_seconds": 64.57236499999999,
+      "duration_seconds": 628.471313,
+      "word_count": 1953,
+      "recognition_seconds": 64.30837274999976,
+      "native_metrics": {},
+      "mode": "gpu",
+      "iteration": 0
+    },
+    {
+      "status": "ok",
+      "wall_seconds": 50.81562091700107,
+      "analysis_seconds": 50.644569207999666,
+      "duration_seconds": 628.471313,
+      "word_count": 1948,
+      "recognition_seconds": 50.34209254199959,
+      "native_metrics": {
+        "inference_seconds": 48.307623583334134,
+        "compute_units": "cpuAndNeuralEngine",
+        "load_seconds": 1.6658031249990017,
+        "peak_memory_bytes": 273760256,
+        "sdk_version": "1.1.0"
+      },
+      "mode": "ane",
+      "iteration": 0
+    },
+    {
+      "status": "ok",
+      "wall_seconds": 170.3727750829985,
+      "analysis_seconds": 170.22181737500068,
+      "duration_seconds": 628.471313,
+      "word_count": 1946,
+      "recognition_seconds": 169.96493179199933,
+      "native_metrics": {},
+      "mode": "cpu",
+      "iteration": 1
+    },
+    {
+      "status": "ok",
+      "wall_seconds": 41.49102366700026,
+      "analysis_seconds": 41.28026312500151,
+      "duration_seconds": 628.471313,
+      "word_count": 1953,
+      "recognition_seconds": 41.01395329099978,
+      "native_metrics": {},
+      "mode": "gpu",
+      "iteration": 1
+    },
+    {
+      "status": "ok",
+      "wall_seconds": 51.236772124999334,
+      "analysis_seconds": 51.05492054100068,
+      "duration_seconds": 628.471313,
+      "word_count": 1942,
+      "recognition_seconds": 50.752796624999974,
+      "native_metrics": {
+        "compute_units": "cpuAndNeuralEngine",
+        "load_seconds": 1.486692458332982,
+        "inference_seconds": 48.90996495833497,
+        "peak_memory_bytes": 274071552,
+        "sdk_version": "1.1.0"
+      },
+      "mode": "ane",
+      "iteration": 1
+    },
+    {
+      "status": "ok",
+      "wall_seconds": 170.42043358299998,
+      "analysis_seconds": 170.28345595799874,
+      "duration_seconds": 628.471313,
+      "word_count": 1946,
+      "recognition_seconds": 170.0190740829985,
+      "native_metrics": {},
+      "mode": "cpu",
+      "iteration": 2
+    },
+    {
+      "status": "ok",
+      "wall_seconds": 41.41191195899955,
+      "analysis_seconds": 41.180578917001185,
+      "duration_seconds": 628.471313,
+      "word_count": 1953,
+      "recognition_seconds": 40.91800616599903,
+      "native_metrics": {},
+      "mode": "gpu",
+      "iteration": 2
+    },
+    {
+      "status": "ok",
+      "wall_seconds": 50.962788333999924,
+      "analysis_seconds": 50.79642020799838,
+      "duration_seconds": 628.471313,
+      "word_count": 1943,
+      "recognition_seconds": 50.503560375000234,
+      "native_metrics": {
+        "compute_units": "cpuAndNeuralEngine",
+        "load_seconds": 1.4369930000011664,
+        "inference_seconds": 48.70548570833307,
+        "peak_memory_bytes": 272744448,
+        "sdk_version": "1.1.0"
+      },
+      "mode": "ane",
+      "iteration": 2
+    },
+    {
+      "status": "ok",
+      "wall_seconds": 170.0243835830006,
+      "analysis_seconds": 169.83913170800042,
+      "duration_seconds": 628.471313,
+      "word_count": 1946,
+      "recognition_seconds": 169.5830600420013,
+      "native_metrics": {},
+      "mode": "cpu",
+      "iteration": 3
+    },
+    {
+      "status": "ok",
+      "wall_seconds": 41.53767591700125,
+      "analysis_seconds": 41.272602708000704,
+      "duration_seconds": 628.471313,
+      "word_count": 1953,
+      "recognition_seconds": 41.01058541599923,
+      "native_metrics": {},
+      "mode": "gpu",
+      "iteration": 3
+    },
+    {
+      "status": "ok",
+      "wall_seconds": 52.244961958000204,
+      "analysis_seconds": 52.05759095800022,
+      "duration_seconds": 628.471313,
+      "word_count": 1946,
+      "recognition_seconds": 51.76609104099953,
+      "native_metrics": {
+        "compute_units": "cpuAndNeuralEngine",
+        "sdk_version": "1.1.0",
+        "load_seconds": 1.4475028333326918,
+        "inference_seconds": 49.961996833333615,
+        "peak_memory_bytes": 272973824
+      },
+      "mode": "ane",
+      "iteration": 3
+    }
+  ],
+  "summary": {
+    "cpu": {
+      "label": "CPU · faster-whisper int8",
+      "status": "ok",
+      "first_wall_seconds": 185.00927579199924,
+      "median_seconds": 170.3727750829985,
+      "min_seconds": 170.0243835830006,
+      "max_seconds": 170.42043358299998,
+      "realtime_factor": 0.2710907748601469
+    },
+    "gpu": {
+      "label": "GPU · MLX float16",
+      "status": "ok",
+      "first_wall_seconds": 64.91215100000045,
+      "median_seconds": 41.49102366700026,
+      "min_seconds": 41.41191195899955,
+      "max_seconds": 41.53767591700125,
+      "realtime_factor": 0.06601896195063044
+    },
+    "ane": {
+      "label": "CPU + Neural Engine · WhisperKit",
+      "status": "ok",
+      "first_wall_seconds": 50.81562091700107,
+      "median_seconds": 51.236772124999334,
+      "min_seconds": 50.962788333999924,
+      "max_seconds": 52.244961958000204,
+      "realtime_factor": 0.0815260316675144
+    }
+  }
+}

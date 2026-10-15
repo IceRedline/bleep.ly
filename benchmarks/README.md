@@ -7,9 +7,13 @@ from M3 Pro timings.
 
 | Mac | Memory | CPU: faster-whisper int8 | GPU: MLX float16 | CPU + Neural Engine: WhisperKit |
 | --- | ---: | ---: | ---: | ---: |
-| M1 | — | Not measured | Not measured | Not measured |
+| M1 Air | 8 GiB | Not measured | Not measured | Not measured |
 | M3 | — | Not measured | Not measured | Not measured |
-| M3 Pro | 36 GiB | Pending measurement | Pending measurement | Pending measurement |
+| M3 Pro | 36 GiB | 170.37 s | 41.49 s | 51.24 s |
+
+M3 Pro measurement: 12 CPU / 18 GPU cores, macOS 26.6.2 (25G83), battery
+power, Low Power Mode off. [Readable report](results/m3-pro-36gb-2026-10-15.md) ·
+[Full measurements and provenance](results/m3-pro-36gb-2026-10-15.json).
 
 Cells report median wall time in seconds for **three fresh worker processes**
 after one initial run per pipeline. Every run processes the complete 628.471 s
@@ -117,3 +121,8 @@ An 11-minute first setup is possible, but that duration alone does not establish
 that everything is healthy. Separate download time, first `load_seconds`, and
 repeated `load_seconds` before diagnosing it. Repeated multi-minute loading
 warrants investigation of cache reuse, memory pressure and model installation.
+
+For context, a January 2025 [upstream user report](https://github.com/argmaxinc/argmax-oss-swift/issues/268)
+describes nearly ten minutes to first-load the 632 MB Turbo variant on an M1 Pro.
+That is an anecdote from a different model variant / SDK setup, not a timing
+guarantee for this application or evidence that every long load is healthy.
