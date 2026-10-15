@@ -11,7 +11,7 @@ import dmgbuild
 
 ROOT = Path(__file__).resolve().parents[2]
 parser = argparse.ArgumentParser()
-parser.add_argument('--version', default='0.1.8')
+parser.add_argument('--version', default='0.1.9')
 parser.add_argument('--background-only', action='store_true')
 args = parser.parse_args()
 folder = ROOT/'build/release'

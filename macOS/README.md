@@ -1,10 +1,10 @@
 # bleeply for macOS
 
 Native SwiftUI front end for the Python engine. The signed, Apple-notarized
-[0.1.4 release](https://github.com/IceRedline/bleeply/releases/tag/v0.1.4) supports
+[0.1.9 release](https://github.com/IceRedline/bleeply/releases/tag/v0.1.9) supports
 **Apple Silicon and macOS 15.0 or later**. It includes Python, FFmpeg and the
 recognition engines; only model weights download separately. Install it by
-dragging the app from the DMG to **Applications**. Historical installers retain their original branding; new builds use **bleeply**.
+dragging **bleeply** from the DMG to **Applications**. Quit the previous app first. If it has a different app name, remove the old app after the update succeeds; keep its Application Support data for automatic migration.
 
 The instructions below describe development builds. The Swift app targets
 macOS 14+; its included WhisperKit helper requires Swift 5.10 or later. Use
