@@ -1,3 +1,5 @@
+<p align="center"><img src="../icon.PNG" alt="bleeply icon" width="128"></p>
+
 # bleeply for macOS
 
 Native SwiftUI front end for the Python engine. The signed, Apple-notarized
