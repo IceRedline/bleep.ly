@@ -35,7 +35,7 @@ with (Path(app) / 'Contents/Info.plist').open('wb') as file:
         'CFBundlePackageType': 'APPL',
         'CFBundleIconFile': 'AppIcon',
         'CFBundleShortVersionString': '0.1.9',
-        'CFBundleVersion': '19',
+        'CFBundleVersion': '20',
         'BleepBuildID': str(uuid.uuid4()),
         'LSMinimumSystemVersion': '14.0',
         'NSHighResolutionCapable': True,

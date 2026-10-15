@@ -68,7 +68,10 @@ struct ContentView: View {
         HStack(alignment: .center, spacing: 10) {
             Button(action: model.goHome) {
                 HStack(spacing: 10) {
-                    Image(systemName: "waveform").font(.title2.weight(.semibold)).foregroundStyle(.mint)
+                    Image("HeaderLogo", bundle: .main)
+                        .resizable().scaledToFit().frame(width: 44, height: 44)
+                        .frame(width: 34, height: 30)
+                        .accessibilityHidden(true)
                     Text("bleeply").font(.system(size: 24, weight: .bold, design: .rounded)).tracking(-0.7)
                 }
             }.buttonStyle(.plain).help("Return home").accessibilityLabel("bleeply · Home")

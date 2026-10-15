@@ -223,7 +223,7 @@ print(json.dumps(files))
     info_path = app/'Contents/Info.plist'
     info = plistlib.loads(info_path.read_bytes())
     info.pop('BleepProjectRoot', None)
-    info.update(CFBundleShortVersionString=args.version, CFBundleVersion='19', LSMinimumSystemVersion=minimum,
+    info.update(CFBundleShortVersionString=args.version, CFBundleVersion='20', LSMinimumSystemVersion=minimum,
                 BleepBuildID=str(uuid.uuid4()))
     info_path.write_bytes(plistlib.dumps(info))
     subprocess.run(['bash', str(ROOT/'scripts/build-theme.sh'), str(app)], check=True)
