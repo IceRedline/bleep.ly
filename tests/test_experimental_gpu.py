@@ -9,6 +9,44 @@ from censor.utils import CensorError
 
 
 class ExperimentalGPUTests(unittest.TestCase):
+    def test_cpu_models_do_not_require_metal_and_use_float32(self):
+        from contextlib import nullcontext
+        from unittest.mock import Mock
+        for name in ('parakeet-v3', 'parakeet-ultra', 'qwen3-asr'):
+            with self.subTest(model=name):
+                mx = Mock()
+                mx.metal.is_available.return_value = False
+                mx.stream.return_value = nullcontext()
+                parakeet = Mock()
+                parakeet.return_value.transcribe.return_value = SimpleNamespace(tokens=[])
+                qwen = Mock(return_value=SimpleNamespace(chunks=[], segments=[]))
+                modules = {'mlx': SimpleNamespace(core=mx), 'mlx.core': mx,
+                           'parakeet_mlx': SimpleNamespace(from_pretrained=parakeet),
+                           'mlx_qwen3_asr': SimpleNamespace(transcribe=qwen)}
+                with patch.dict('sys.modules', modules):
+                    engine = ExperimentalGPUBackend(name, ['/model', '/aligner'], device='cpu')
+                    self.assertEqual(engine.transcribe(Path('audio.wav'), lambda _: None), [])
+                mx.metal.is_available.assert_not_called()
+                mx.set_default_device.assert_called_once_with(mx.cpu)
+                mx.disable_compile.assert_called_once_with()
+                mx.stream.assert_called_once_with(mx.cpu)
+                if name.startswith('parakeet'):
+                    self.assertEqual(parakeet.call_args.kwargs['dtype'], mx.float32)
+                    self.assertEqual(parakeet.return_value.transcribe.call_args.kwargs['dtype'], mx.float32)
+                else:
+                    self.assertEqual(qwen.call_args.kwargs['dtype'], mx.float32)
+
+    def test_cpu_and_gpu_caches_are_separate_for_every_model(self):
+        with tempfile.TemporaryDirectory() as folder, patch('censor.experimental_gpu.importlib.metadata.version', return_value='test'):
+            source = Path(folder) / 'source.wav'
+            source.write_bytes(b'source')
+            for model in MODELS:
+                gpu, _ = cache_identity(source, model, 0)
+                cpu, metadata = cache_identity(source, model, 0, device='cpu')
+                self.assertNotEqual(cpu, gpu)
+                self.assertEqual(metadata['device'], 'CPU')
+                self.assertEqual(metadata['compute_type'], 'float32')
+
     def test_bundled_gigaam_uses_writable_model_directory(self):
         with tempfile.TemporaryDirectory() as folder, patch.dict('os.environ', {'BLEEP_MODEL_CACHE': folder}), \
                 patch('huggingface_hub.snapshot_download', return_value='/cached-aligner') as download:

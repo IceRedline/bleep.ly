@@ -39,10 +39,12 @@ brew link --force ffmpeg@8
 With no saved preferences, the development app uses the project's `.venv/bin/python`, CPU/faster-whisper, full `large-v3`, and Russian speech. The temporary **Model · testing** picker selects Large v3 or Large v3 Turbo for CPU and MLX. WhisperKit keeps its pinned Turbo model. Selection applies to new files, and each model has a separate recognition cache. Large v3 has its own initial download. Choose **Apple GPU · MLX / MPS** in Settings to use the existing MLX implementation. The same app includes **WhisperKit · Experimental** in the Engine picker; see [WhisperKit setup](../experiments/README.md). Missing models trigger a **Download model?** prompt before any model download. **OK** remembers permission for missing models and continues processing the same file; **No** cancels and keeps recognition offline. Change this decision using **Allow first-time model download** in Settings. Cached models do not prompt. The app reuses the repository’s `.cache/huggingface` model cache (or an explicitly inherited `HF_HOME`). Recognition happens locally with every engine. No recording is uploaded.
 
 Changing **Video language** selects a model preset: Russian selects GigaAM v3
-on Apple Silicon; English selects Whisper Large v3 Turbo and retains CPU if it
+on Apple Silicon; English selects Whisper Large v3 Turbo. Both retain CPU if it
 was already selected. Selecting the same language or relaunching preserves
-manual model choices. GigaAM is unavailable for English. The GPU picker also
-includes Parakeet v3, Parakeet Ultra and Qwen3-ASR 1.7B. For development, install
+manual model choices. GigaAM is unavailable for English. On Apple Silicon, both CPU and GPU pickers
+include GigaAM v3, Parakeet v3, Parakeet Ultra and Qwen3-ASR 1.7B. CPU selection
+also applies to word alignment. CPU uses float32 with no runtime compilation;
+recognition caches are separate from GPU, while downloaded weights are shared. For development, install
 their separate runtime with `bash scripts/setup-experimental-gpu.sh`; release
 DMGs already contain it. See [recognition options](../README.md#recognition).
 

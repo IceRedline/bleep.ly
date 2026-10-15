@@ -32,12 +32,16 @@ enum RecognitionModel: String, CaseIterable {
     }
 
     static func choices(backend: String, language: VideoLanguage = .russian) -> [Self] {
-        let candidates: [Self] = backend == "mlx" ? allCases : [.largeV3, .turbo]
+        #if arch(arm64)
+        let candidates: [Self] = backend == "whisperkit" ? [.turbo] : allCases
+        #else
+        let candidates: [Self] = [.largeV3, .turbo]
+        #endif
         return candidates.filter { language == .russian || $0 != .gigaAM }
     }
 
     static func engine(model: String, selected: String) -> String {
-        guard selected == "mlx" else { return selected }
+        guard selected == "mlx" || selected == "faster-whisper" else { return selected }
         switch Self(rawValue: model) {
         case .parakeetV3, .parakeetUltra: return "parakeet-mlx"
         case .qwen: return "mlx-qwen3-asr"

@@ -138,7 +138,7 @@ final class AppModel: ObservableObject {
         let currentBackend = WhisperKitExperiment.backend(defaults: defaults)
         #if arch(arm64)
         let recommended: RecognitionModel = language == .russian ? .gigaAM : .turbo
-        let backend = language == .russian || currentBackend != "faster-whisper" ? "mlx" : "faster-whisper"
+        let backend = currentBackend == "faster-whisper" ? "faster-whisper" : "mlx"
         #else
         let recommended: RecognitionModel = language == .russian ? .largeV3 : .turbo
         let backend = "faster-whisper"
@@ -201,6 +201,7 @@ final class AppModel: ObservableObject {
                         ? RuntimePaths.history(root: root, support: supportDirectory)
                         : supportDirectory.appendingPathComponent("recognition-history")).path,
                     "backend": recognitionBackend,
+                    "device": selectedBackend == "faster-whisper" ? "cpu" : "gpu",
                     "model": selectedRecognitionModel,
                     "language": selectedLanguage.rawValue,
                     "word_lists": selectedWordLists,

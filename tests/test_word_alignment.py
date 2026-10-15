@@ -1,6 +1,6 @@
 import unittest
 from types import SimpleNamespace
-from unittest.mock import Mock
+from unittest.mock import Mock, patch
 
 from censor.models import WordTimestamp as Word
 from censor.utils import CensorError
@@ -12,6 +12,19 @@ def aligned(text, start, end):
 
 
 class WordAlignmentTests(unittest.TestCase):
+    def test_cpu_alignment_never_selects_gpu(self):
+        mx = Mock()
+        mx.metal.is_available.return_value = False
+        factory = Mock()
+        with patch.dict('sys.modules', {'mlx': SimpleNamespace(core=mx), 'mlx.core': mx,
+                'mlx_qwen3_asr.forced_aligner': SimpleNamespace(
+                    ForcedAligner=factory, ForcedAlignTextProcessor=Mock())}):
+            WordAligner('/cached-aligner', device='cpu')
+        mx.metal.is_available.assert_not_called()
+        mx.set_default_device.assert_called_once_with(mx.cpu)
+        mx.disable_compile.assert_called_once_with()
+        factory.assert_called_once_with(model_path='/cached-aligner', dtype=mx.float32)
+
     def aligner(self, outputs):
         a = WordAligner.__new__(WordAligner)
         a.backend = Mock()

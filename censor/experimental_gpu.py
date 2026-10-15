@@ -1,4 +1,4 @@
-"""Experimental Apple GPU recognizers; shared word/mute/export pipeline stays unchanged."""
+"""Additional Apple Silicon recognizers with explicit CPU/GPU device selection."""
 import hashlib
 import importlib.metadata
 import json
@@ -63,13 +63,15 @@ def prepare_hub_asset(repo, revision, name, offline, notify):
                              allow_patterns=["*.json", "*.safetensors", "*.txt", "*.model", "*.vocab"])
 
 
-def cache_identity(source, model, audio_index, progress=None, language="ru"):
+def cache_identity(source, model, audio_index, progress=None, language="ru", device="gpu"):
+    if device not in {"cpu", "gpu"}:
+        raise CensorError("Choose CPU or GPU for recognition.")
     backend, repo, revision = MODELS[model]
     package = "gigaam" if backend == "gigaam-mps" else backend
     try:
         version = importlib.metadata.version(package)
     except importlib.metadata.PackageNotFoundError as exc:
-        raise CensorError("Experimental GPU dependencies are missing. Run scripts/setup-experimental-gpu.sh.") from exc
+        raise CensorError("Additional recognition dependencies are missing. Run scripts/setup-experimental-gpu.sh.") from exc
     metadata = dict(schema=1, adapter_version=1, source_sha256=file_hash(source, progress),
                     backend=backend, backend_version=version, model=repo, model_revision=revision,
                     model_choice=model, audio_index=audio_index, word_timestamps=True,
@@ -94,6 +96,8 @@ def cache_identity(source, model, audio_index, progress=None, language="ru"):
     # Keep existing Russian benchmark caches usable; separate English detection runs.
     if language != "ru" and backend == "parakeet-mlx":
         metadata["detection_language"] = language
+    if device == "cpu":
+        metadata.update(device="CPU", compute_type="float32", device_adapter_version=1)
     key = hashlib.sha256(json.dumps(metadata, sort_keys=True).encode()).hexdigest()
     return key, metadata
 
@@ -115,7 +119,10 @@ def merge_subwords(tokens):
 
 
 class ExperimentalGPUBackend:
-    def __init__(self, model, assets, language="ru", stage=None):
+    def __init__(self, model, assets, language="ru", stage=None, device="gpu"):
+        if device not in {"cpu", "gpu"}:
+            raise CensorError("Choose CPU or GPU for recognition.")
+        self.device = device
         if language not in {"ru", "en"} or (model == "gigaam-v3" and language != "ru"):
             raise CensorError("Unsupported language for this model.")
         self.language = language
@@ -128,22 +135,29 @@ class ExperimentalGPUBackend:
         if self.model == "gigaam-v3":
             return self.gigaam(audio, progress)
         import mlx.core as mx
-        if not mx.metal.is_available():
+        if self.device == "gpu" and not mx.metal.is_available():
             raise CensorError("Apple Metal GPU is unavailable; no CPU fallback is used.")
-        mx.set_default_device(mx.gpu)
+        device = mx.cpu if self.device == "cpu" else mx.gpu
+        mx.set_default_device(device)
+        if self.device == "cpu":
+            # CPU JIT emits unsigned dylibs and needs a compiler on the user's
+            # Mac. Eager execution works in the signed release runtime too.
+            mx.disable_compile()
         mx.random.seed(0)
-        with mx.stream(mx.gpu):
+        with mx.stream(device):
             if self.model.startswith("parakeet-"):
                 self.stage("Loading Parakeet model")
                 from parakeet_mlx import from_pretrained
-                model = from_pretrained(self.assets[0], dtype=mx.bfloat16)
+                dtype = mx.float32 if self.device == "cpu" else mx.bfloat16
+                model = from_pretrained(self.assets[0], dtype=dtype)
                 self.stage("Recognizing speech")
-                result = model.transcribe(audio, chunk_duration=120, overlap_duration=15,
+                result = model.transcribe(audio, dtype=dtype, chunk_duration=120, overlap_duration=15,
                                           chunk_callback=lambda current, total: progress(current / 16000))
                 return merge_subwords(result.tokens)
             from mlx_qwen3_asr import transcribe
             self.stage("Loading Qwen model")
             result = transcribe(str(audio), model=self.assets[0], forced_aligner=self.assets[1],
+                                dtype=mx.float32 if self.device == "cpu" else mx.float16,
                                 language={"ru": "Russian", "en": "English"}[self.language], return_timestamps=True, return_chunks=True,
                                 on_progress=lambda event: progress(event.get("processed_audio_sec", 0)))
             if any(chunk.get("truncated") for chunk in (result.chunks or [])):
@@ -151,7 +165,7 @@ class ExperimentalGPUBackend:
             return [WordTimestamp(item["text"], item["start"], item["end"]) for item in result.segments or []]
 
     def gigaam(self, audio, progress):
-        # Explicit MPS and no operator fallback: unsupported GPU operations fail visibly.
+        # Honor the selected device; GPU operations never silently fall back to CPU.
         os.environ["PYTORCH_ENABLE_MPS_FALLBACK"] = "0"
         import torch
         import gigaam
@@ -159,14 +173,14 @@ class ExperimentalGPUBackend:
         from faster_whisper.audio import decode_audio
         from faster_whisper.vad import get_speech_timestamps, VadOptions
         from .word_alignment import WordAligner
-        if not torch.backends.mps.is_available():
+        if self.device == "gpu" and not torch.backends.mps.is_available():
             raise CensorError("Apple MPS GPU is unavailable; no CPU fallback is used.")
         torch.manual_seed(0)
         self.stage("Loading GigaAM model")
-        model = gigaam.load_model("v3_e2e_rnnt", device="mps", fp16_encoder=False,
+        model = gigaam.load_model("v3_e2e_rnnt", device="cpu" if self.device == "cpu" else "mps", fp16_encoder=False,
                                   use_flash=False, download_root=self.assets[0])
         self.stage("Loading word alignment model")
-        aligner = WordAligner(self.assets[1])
+        aligner = WordAligner(self.assets[1], device=self.device)
         self.stage("Preparing speech detection")
         data = decode_audio(str(audio), sampling_rate=16000)
         chunks = get_speech_timestamps(data, VadOptions(max_speech_duration_s=20))
@@ -184,6 +198,7 @@ class ExperimentalGPUBackend:
                            for w in aligner.align(segment, native)]
                 append_window_words(words, current, window)
                 progress(window.own_end)
-        torch.mps.synchronize()
+        if self.device == "gpu":
+            torch.mps.synchronize()
         self.metrics['word_alignment'] = aligner.metrics
         return words
