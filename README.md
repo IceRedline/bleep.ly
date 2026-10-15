@@ -253,6 +253,10 @@ swift test --disable-sandbox --package-path macOS --scratch-path .cache/swift-bu
 
 Python integration tests generate short media with FFmpeg and check actual audio, independent track censorship, complete cue tails, video stream identity, cache behavior, and no-clobber exports. Swift tests cover the real Python bridge, native playback, explicit video/audio saving, cancellation/Home, progress, context duration, and stable window layout. Native tests need a local macOS session with media services. Inference is mocked in regression tests; actual engine comparison is a separate offline benchmark.
 
+For repeatable Turbo CPU / MLX GPU / Core ML measurements across Macs, use
+[`make speedtest`](benchmarks/README.md). It checks one fixed English audio fixture,
+reports first-run preparation separately, and records three repeated runs per pipeline.
+
 Code lives in `censor/`, the SwiftUI app in `macOS/`, the experimental native helper in `experiments/WhisperKitRunner/`, and build tools in `scripts/`. Source media, transcripts, generated exports, weights, virtual environments, and caches are excluded from Git.
 
 ## Limitations

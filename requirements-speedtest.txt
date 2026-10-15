@@ -1,0 +1,8 @@
+# Same inference versions for comparisons across machines; macOS arm64 / Python 3.12.
+-r requirements-mlx.txt
+faster-whisper==1.2.1
+ctranslate2==4.8.2
+mlx==0.32.3
+numpy==2.4.6
+huggingface-hub==1.33.0
+av==18.1.0
