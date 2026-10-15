@@ -2,6 +2,7 @@ import Foundation
 import WhisperKit
 import ArgmaxCore
 import Darwin
+import CoreML
 
 // Model acquisition belongs to Python's explicit, pinned download step. Even a
 // tokenizer fallback inside the SDK must not silently access the network here.
@@ -19,6 +20,7 @@ struct Request: Decodable {
     var modelFolder: String
     var output: String
     var language: String?
+    var computeUnits: String?
 }
 struct Word: Encodable {
     var word: String
@@ -30,6 +32,7 @@ struct Result: Encodable {
     var loadSeconds: Double
     var inferenceSeconds: Double
     var peakMemoryBytes: Int
+    var computeUnits: String
     var sdkVersion = "1.1.0"
 }
 func emit(_ value: [String: Any]) {
@@ -47,6 +50,15 @@ struct Runner {
             let request = try JSONDecoder().decode(Request.self, from: Data(contentsOf: URL(fileURLWithPath: CommandLine.arguments[1])))
             let language = request.language ?? "ru"
             guard ["ru", "en"].contains(language) else { throw NSError(domain: "Unsupported media language", code: 1) }
+            let computeUnits = request.computeUnits ?? "default"
+            guard ["default", "cpuAndNeuralEngine"].contains(computeUnits) else {
+                throw NSError(domain: "Unsupported compute units", code: 1)
+            }
+            // Benchmark policy excludes GPU; Core ML still chooses CPU or ANE
+            // per operation. Normal application requests keep SDK defaults.
+            let computeOptions: ModelComputeOptions? = computeUnits == "cpuAndNeuralEngine"
+                ? ModelComputeOptions(melCompute: .cpuOnly, audioEncoderCompute: .cpuAndNeuralEngine,
+                                      textDecoderCompute: .cpuAndNeuralEngine) : nil
             let folder = URL(fileURLWithPath: request.modelFolder)
             let output = URL(fileURLWithPath: request.output)
             guard !FileManager.default.fileExists(atPath: output.path) else { throw NSError(domain: "Output already exists", code: 1) }
@@ -56,6 +68,7 @@ struct Runner {
             let start = ProcessInfo.processInfo.systemUptime
             let pipe = try await WhisperKit(WhisperKitConfig(
                 modelFolder: folder.path, tokenizerFolder: folder,
+                computeOptions: computeOptions,
                 verbose: false, prewarm: true, load: true, download: false))
             let loaded = ProcessInfo.processInfo.systemUptime
             pipe.segmentDiscoveryCallback = { segments in
@@ -82,7 +95,7 @@ struct Runner {
             var usage = rusage()
             getrusage(RUSAGE_SELF, &usage)
             let result = Result(words: words, loadSeconds: loaded - start, inferenceSeconds: finished - loaded,
-                                peakMemoryBytes: Int(usage.ru_maxrss))
+                                peakMemoryBytes: Int(usage.ru_maxrss), computeUnits: computeUnits)
             let encoder = JSONEncoder(); encoder.keyEncodingStrategy = .convertToSnakeCase
             try encoder.encode(result).write(to: output, options: .atomic)
         } catch {

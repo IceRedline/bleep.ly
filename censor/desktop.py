@@ -145,13 +145,15 @@ def analyze_track(request):
             from .whisperkit_backend import WhisperKitBackend, prepare_assets, cache_identity
             model_folder = Path(request["whisperkit_model_folder"]).resolve()
             executable = Path(request["whisperkit_executable"]).resolve()
+            compute_units = request.get("whisperkit_compute_units", "default")
             native_engine = WhisperKitBackend(executable, model_folder,
-                stage=lambda label: report(label, 0), language=language)
+                stage=lambda label: report(label, 0), language=language, compute_units=compute_units)
             report("Preparing WhisperKit model", 0)
             prepare_assets(model_folder, offline=request.get("offline", True),
                            progress=report)
             key, metadata = cache_identity(source, model_folder, executable, info.audio_index,
-                                          tracking("Reading media", source.stat().st_size), language=language)
+                                          tracking("Reading media", source.stat().st_size), language=language,
+                                          compute_units=compute_units)
         else:
             key, metadata = cache_key(source, model, language, compute, info.audio_index,
                                       tracking("Reading media", source.stat().st_size), backend=backend)
