@@ -8,7 +8,7 @@ speedtest:
 
 # Explicit downloads and compilation, excluded from all measurements.
 speedtest-setup:
-	python3.12 -m venv .venv
+	python3.11 -m venv .venv
 	$(PYTHON) -m pip install -r requirements-speedtest.txt
 	swift build --package-path experiments/WhisperKitRunner --scratch-path .cache/whisperkit-build -c release
 	$(PYTHON) scripts/speedtest.py prepare

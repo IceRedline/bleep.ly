@@ -1,4 +1,4 @@
-# Same inference versions for comparisons across machines; macOS arm64 / Python 3.12.
+# Same inference versions for comparisons across machines; macOS arm64 / Python 3.11.
 -r requirements-mlx.txt
 faster-whisper==1.2.1
 ctranslate2==4.8.2

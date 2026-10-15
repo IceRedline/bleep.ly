@@ -18,7 +18,7 @@ software versions, model fingerprints and hardware details are retained in JSON.
 
 ## Run on another Mac
 
-Prerequisites: Apple Silicon, macOS 14+, Python 3.12, FFmpeg / FFprobe, Xcode
+Prerequisites: Apple Silicon, macOS 14+, Python 3.11, FFmpeg / FFprobe, Xcode
 Command Line Tools and Git. Use a local terminal with Metal / Core ML access.
 Connect power, turn Low Power Mode off, close heavy applications and keep the
 machine's cooling conditions consistent. Do not run benchmark processes in parallel.
