@@ -178,9 +178,9 @@ per pipeline. Smaller is faster; transcript caches are bypassed.
 
 | Mac | Memory | CPU: faster-whisper int8 | GPU: MLX float16 | CPU + Neural Engine: WhisperKit |
 | --- | ---: | ---: | ---: | ---: |
-| M1 Air | 8 GiB | Not measured | Not measured | Not measured |
+| M1 Air | 8 GiB | 419 s | 176 s | 601 s |
 | M3 | — | Not measured | Not measured | Not measured |
-| M3 Pro | 36 GiB | 170.37 s | 41.49 s | 51.24 s |
+| M3 Pro | 36 GiB | 170 s | 41 s | 51 s |
 
 Measured on an M3 Pro with 12 CPU / 18 GPU cores, macOS 26.6.2, battery power,
 and Low Power Mode off. These are application pipelines with different runtimes,
