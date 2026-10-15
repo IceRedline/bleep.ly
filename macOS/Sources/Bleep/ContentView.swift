@@ -360,7 +360,16 @@ struct ContentView: View {
                     .foregroundStyle(.secondary)
             }
             HStack(spacing: 12) {
-                if document.hasVideo {
+                if let url = model.exportURL {
+                    Button("Show in Finder") { NSWorkspace.shared.activateFileViewerSelecting([url]) }
+                        .buttonStyle(.borderedProminent)
+                    Menu("Save Another Copy…") {
+                        if document.hasVideo {
+                            Button("Save as Video") { model.export(as: "video") }
+                        }
+                        Button("Save as Audio") { model.export(as: "audio") }
+                    }.menuStyle(.borderlessButton).fixedSize()
+                } else if document.hasVideo {
                     Button("Save as Video") { model.export(as: "video") }
                         .buttonStyle(.borderedProminent).keyboardShortcut("e", modifiers: .command)
                     Button("Save as Audio") { model.export(as: "audio") }
