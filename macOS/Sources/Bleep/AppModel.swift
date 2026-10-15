@@ -426,11 +426,22 @@ final class AppModel: ObservableObject {
     }
 
     private func makePlayerItem(document: ReviewDocument, track index: Int, audioURL: URL? = nil) async throws -> AVPlayerItem {
-        if document.audioCount == 1 && audioURL == nil { return AVPlayerItem(url: document.url) }
         let asset = AVURLAsset(url: document.url)
-        let audio = try await asset.loadTracks(withMediaType: .audio)
-        let video = try await asset.loadTracks(withMediaType: .video)
-        guard audio.indices.contains(index) else { throw BridgeFailure(message: "Audio track is unavailable.") }
+        if audioURL == nil && !document.hasVideo {
+            // Ogg/Opus support varies by macOS version. FFmpeg can decode sources
+            // that AVFoundation cannot open; original playback must work too.
+            let ogg = ["ogg", "oga", "opus", "ogx"].contains(document.url.pathExtension.lowercased())
+            let playable = ogg ? false : ((try? await asset.load(.isPlayable)) ?? false)
+            if !playable {
+                let decoded = try await censoredPreview.originalAudio(document: document, track: index, root: root, python: python)
+                return try await makePlayerItem(document: document, track: index, audioURL: decoded)
+            }
+        }
+        if document.audioCount == 1 && audioURL == nil { return AVPlayerItem(asset: asset) }
+        // A prepared WAV does not require AVFoundation to understand the source audio.
+        let audio = audioURL == nil ? try await asset.loadTracks(withMediaType: .audio) : []
+        let video = document.hasVideo ? try await asset.loadTracks(withMediaType: .video) : []
+        if audioURL == nil && !audio.indices.contains(index) { throw BridgeFailure(message: "Audio track is unavailable.") }
         let composition = AVMutableComposition()
         var origin = CMTime.zero
         if let sourceVideo = video.first, document.hasVideo {
@@ -468,7 +479,7 @@ final class AppModel: ObservableObject {
         let playbackToken = previewGeneration
         player.pause()
         player.replaceCurrentItem(with: item)
-        if censored, let composition = item.asset as? AVComposition,
+        if let composition = item.asset as? AVComposition,
            let audio = composition.tracks(withMediaType: .audio).first {
             censoredPreview.protectPlayback(audio.segments.first(where: { !$0.isEmpty })?.sourceURL)
         } else { censoredPreview.protectPlayback(nil) }
