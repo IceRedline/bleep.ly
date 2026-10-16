@@ -14,15 +14,20 @@ Build and test the Swift app, then commit the source before preparing a candidat
 
 ```sh
 bash scripts/release/build-pyav.sh
+python3 scripts/release/app_store_runtime.py fetch
 python3 scripts/release/testflight-macos.py prepare \
-  --output build/testflight-0.1.9-20 --build-number 20 \
+  --output build/testflight-0.1.9-22 --build-number 22 \
   --copyright 'Copyright © 2026 YOUR NAME'
 ```
 
 This clones the existing release and replaces its Swift executable with
 `.cache/swift-build/release/Bleep`. Python engine source and word lists come from
 the same committed checkout. The pinned runtimes remain from the source
-release except PyAV, which is replaced in both by the locally built LGPL wheel.
+release except PyAV, which is replaced in both by the locally built LGPL wheel,
+and SciPy, which uses the hash-pinned OpenBLAS wheel. The unused Tcl/Tk GUI stack
+is removed. The compiler runtime source archive, including LGPL libquadmath,
+and its rebuild instructions accompany the SciPy wheel. See
+[the native dependency audit](../../docs/app-store-binary-audit.md) for details.
 Offline policy/support documents and the corresponding FFmpeg/PyAV sources are
 included. `preparation.json` records the origins and wheel checksum. Source DMGs and apps are
 never modified. The resulting candidate is unsigned until the next step. Use a
@@ -31,13 +36,16 @@ new, monotonically increasing build number for every upload.
 ```sh
 security find-identity -v -p codesigning
 python3 scripts/release/testflight-macos.py sign \
-  --app build/testflight-0.1.9-20/bleeply.app \
+  --app build/testflight-0.1.9-22/bleeply.app \
   --profile /path/to/bleeply-store.provisionprofile \
   --identity APPLICATION_CERTIFICATE_SHA1 \
   --installer-identity '3rd Party Mac Developer Installer: YOUR NAME (TEAM_ID)' \
-  --pkg build/testflight-0.1.9-20/bleeply-0.1.9-20.pkg
+  --pkg build/testflight-0.1.9-22/bleeply-0.1.9-22.pkg
 ```
 
+The build number above is an example; increase it after every upload.
+Signing also rejects the four known API references from the build 21 review
+and verifies the compiler runtime source archive and license notices.
 Signing checks the profile's app, platform, expiration and certificate before
 changing the candidate. Child executables inherit App Sandbox; Python retains
 its JIT entitlements. The parent grants network access for model downloads and
