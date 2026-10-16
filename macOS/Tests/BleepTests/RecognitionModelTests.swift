@@ -24,8 +24,28 @@ final class RecognitionModelTests: XCTestCase {
         defaults.set("/usr/bin/python3", forKey: "pythonPath")
         try WordListPreferences.save([.russian: WordListDraft(censor: "бля", allow: "бляха")], defaults: defaults)
         let model = AppModel(defaults: defaults, supportDirectory: folder.appendingPathComponent("support"))
+        XCTAssertEqual(model.videoLanguage, .english, "A fresh installation starts in English")
+        await model.open(folder.appendingPathComponent("source.wav"), workflow: .advanced)?.value
+        XCTAssertEqual(model.error, "Request captured without inference")
+        let initialRequest = try XCTUnwrap(JSONSerialization.jsonObject(with: Data(contentsOf: folder.appendingPathComponent("captured.json"))) as? [String: Any])
+        XCTAssertEqual(initialRequest["language"] as? String, "en")
+        XCTAssertEqual(initialRequest["model"] as? String, "large-v3-turbo")
+        XCTAssertEqual(initialRequest["backend"] as? String, "faster-whisper")
+        XCTAssertEqual(initialRequest["word_lists"] as? [String: [String]], [:])
+
+        model.selectLanguage(.russian)
+        XCTAssertEqual(model.videoLanguage, .russian)
+        XCTAssertEqual(defaults.string(forKey: "recognitionModel"), "gigaam-v3")
+        XCTAssertEqual(defaults.string(forKey: "backend"), "faster-whisper")
+        await model.open(folder.appendingPathComponent("source.wav"), workflow: .advanced)?.value
+        let firstRussianRequest = try XCTUnwrap(JSONSerialization.jsonObject(with: Data(contentsOf: folder.appendingPathComponent("captured.json"))) as? [String: Any])
+        XCTAssertEqual(firstRussianRequest["language"] as? String, "ru")
+        XCTAssertEqual(firstRussianRequest["model"] as? String, "gigaam-v3")
+        XCTAssertEqual(firstRussianRequest["backend"] as? String, "gigaam-mps")
+        XCTAssertEqual(firstRussianRequest["device"] as? String, "cpu")
+
         for (backend, choice, expected, engine) in [
-            ("faster-whisper", "", "large-v3", "faster-whisper"),
+            ("faster-whisper", "", "large-v3-turbo", "faster-whisper"),
             ("faster-whisper", "large-v3-turbo", "large-v3-turbo", "faster-whisper"),
             ("faster-whisper", "qwen3-asr", "qwen3-asr", "mlx-qwen3-asr"),
             ("faster-whisper", "gigaam-v3", "gigaam-v3", "gigaam-mps"),
@@ -33,7 +53,7 @@ final class RecognitionModelTests: XCTestCase {
             ("faster-whisper", "parakeet-ultra", "parakeet-ultra", "parakeet-mlx"),
             ("mlx", "large-v3", "large-v3", "mlx"),
             ("mlx", "large-v3-turbo", "large-v3-turbo", "mlx"),
-            ("mlx", "invalid", "large-v3", "mlx"),
+            ("mlx", "invalid", "large-v3-turbo", "mlx"),
             ("mlx", "parakeet-v3", "parakeet-v3", "parakeet-mlx"),
             ("mlx", "parakeet-ultra", "parakeet-ultra", "parakeet-mlx"),
             ("mlx", "qwen3-asr", "qwen3-asr", "mlx-qwen3-asr"),
@@ -80,6 +100,9 @@ final class RecognitionModelTests: XCTestCase {
         defaults.set("qwen3-asr", forKey: "recognitionModel")
         model.selectLanguage(.russian)
         XCTAssertEqual(defaults.string(forKey: "recognitionModel"), "qwen3-asr", "Selecting the same language keeps a manual override")
+        let restoredRussian = AppModel(defaults: defaults, supportDirectory: folder.appendingPathComponent("support3"))
+        XCTAssertEqual(restoredRussian.videoLanguage, .russian)
+        XCTAssertEqual(RecognitionModel.requested(defaults: defaults, backend: "mlx"), "qwen3-asr", "Relaunching keeps a manual override")
         defaults.set("whisperkit", forKey: "backend")
         model.selectLanguage(.english)
         XCTAssertEqual(defaults.string(forKey: "backend"), "mlx")

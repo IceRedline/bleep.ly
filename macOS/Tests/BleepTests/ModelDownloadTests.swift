@@ -55,8 +55,8 @@ final class ModelDownloadTests: XCTestCase {
         XCTAssertEqual(ModelDownloadPermission.selected(defaults: defaults), .ask)
         let task = try XCTUnwrap(model.open(source))
         try await waitForPrompt(model)
-        XCTAssertTrue(model.modelDownloadMessage.contains("Whisper Large v3 · CPU"))
-        XCTAssertTrue(model.modelDownloadMessage.contains("3.1 GB"))
+        XCTAssertTrue(model.modelDownloadMessage.contains("Whisper Large v3 Turbo · CPU"))
+        XCTAssertTrue(model.modelDownloadMessage.contains("1.7 GB"))
         for _ in 0..<100 where window.attachedSheet == nil {
             try await Task.sleep(nanoseconds: 10_000_000)
         }
