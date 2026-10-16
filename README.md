@@ -178,7 +178,7 @@ per pipeline. Smaller is faster; transcript caches are bypassed.
 
 | Mac | Memory | CPU: faster-whisper int8 | GPU: MLX float16 | CPU + Neural Engine: WhisperKit |
 | --- | ---: | ---: | ---: | ---: |
-| M1 Air | 8 GiB | 419 s | 176 s | 601 s |
+| M1 Air | 8 GiB | 267 s | 157 s | 74 s |
 | M3 | — | Not measured | Not measured | Not measured |
 | M3 Pro | 36 GiB | 170 s | 41 s | 51 s |
 
