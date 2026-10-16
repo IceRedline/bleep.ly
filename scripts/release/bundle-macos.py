@@ -128,7 +128,9 @@ def main():
     parser.add_argument('--audit-only', type=Path)
     args = parser.parse_args()
     if args.audit_only:
-        app_icons.audit(args.audit_only)
+        # CI also audits bare site-packages directories, which have no app icon.
+        if args.audit_only.suffix == '.app':
+            app_icons.audit(args.audit_only)
         files, minimum = audit(args.audit_only)
         print(json.dumps(dict(native_files=len(files), minimum_macos=minimum)))
         return

@@ -1,6 +1,7 @@
 import importlib.util
 from pathlib import Path
 import subprocess
+import sys
 import tempfile
 import unittest
 from unittest.mock import patch
@@ -13,6 +14,21 @@ spec.loader.exec_module(bundle)
 
 
 class ReleaseCompatibilityTests(unittest.TestCase):
+    def test_runtime_cli_audit_does_not_require_app_metadata(self):
+        with patch.object(sys, 'argv', ['bundle-macos.py', '--audit-only', '/tmp/site-packages']), \
+             patch.object(bundle, 'audit', return_value=([], '15.0')) as native, \
+             patch.object(bundle.app_icons, 'audit') as icon:
+            bundle.main()
+            native.assert_called_once_with(Path('/tmp/site-packages'))
+            icon.assert_not_called()
+
+    def test_app_cli_audit_checks_primary_icon(self):
+        with patch.object(sys, 'argv', ['bundle-macos.py', '--audit-only', '/tmp/bleeply.app']), \
+             patch.object(bundle, 'audit', return_value=([], '15.0')), \
+             patch.object(bundle.app_icons, 'audit') as icon:
+            bundle.main()
+            icon.assert_called_once_with(Path('/tmp/bleeply.app'))
+
     def audit_fixture(self, build, dependency='/usr/lib/libSystem.B.dylib'):
         with tempfile.TemporaryDirectory() as temporary:
             folder = Path(temporary)
