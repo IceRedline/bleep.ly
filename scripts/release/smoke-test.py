@@ -31,6 +31,16 @@ import sys, ssl, importlib, importlib.metadata, ctypes, pathlib, tempfile, wave
 for module in ['censor.desktop', 'faster_whisper', 'mlx_whisper', 'torch', 'onnxruntime', 'numpy', 'certifi']:
     importlib.import_module(module)
 import av
+import numpy as np
+from scipy import linalg, signal, sparse
+from scipy.linalg import cython_blas, cython_lapack
+matrix = np.array([[3., 1.], [1., 2.]])
+assert np.allclose(matrix @ linalg.solve(matrix, [9., 8.]), [9., 8.])
+u, s, vh = linalg.svd(matrix)
+assert np.allclose((u * s) @ vh, matrix)
+assert signal.resample_poly(np.ones(480), 1, 3).shape == (160,)
+assert np.allclose(sparse.linalg.spsolve(sparse.csc_matrix(matrix), [9., 8.]), [2., 3.])
+print('SciPy BLAS/LAPACK, resampling and sparse solve passed', flush=True)
 for library in (pathlib.Path(av.__file__).parent/'.dylibs').glob('*.dylib'):
     native = ctypes.CDLL(str(library))
     license = getattr(native, library.name.split('.')[0][3:] + '_license')

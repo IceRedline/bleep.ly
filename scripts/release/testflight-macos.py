@@ -19,6 +19,7 @@ import sys
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import pyav_distribution
+import app_store_runtime
 spec = importlib.util.spec_from_file_location('bundle', Path(__file__).with_name('bundle-macos.py'))
 bundle = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(bundle)
@@ -127,6 +128,7 @@ def prepare(args):
     shutil.copy2(args.executable, app/'Contents/MacOS/Bleep')
     runtime_origin = refresh_engine(app, source_commit)
     pyav = pyav_distribution.install(app)
+    store_runtime = app_store_runtime.install(app)
     documentation = app/'Contents/Resources/Documentation'
     documentation.mkdir(exist_ok=True)
     for name in ['privacy-policy.md', 'support.md', 'third-party.md']:
@@ -143,6 +145,7 @@ def prepare(args):
     subprocess.run(['bash', str(ROOT/'scripts/build-theme.sh'), str(app)], check=True)
     bundle.normalize_permissions(app)
     manifest = dict(source_app=str(source), app_source_commit=source_commit, runtime_origin=runtime_origin, pyav=pyav,
+                    app_store_runtime=store_runtime,
                     engine=json.loads((app/'Contents/Resources/Engine/runtime.json').read_text()),
                     build=args.build_number, version=info['CFBundleShortVersionString'],
                     executable_sha256=hashlib.sha256((app/'Contents/MacOS/Bleep').read_bytes()).hexdigest())
@@ -163,6 +166,8 @@ def sign(args):
     clear_quarantine(app)
     bundle.normalize_permissions(app)
     pyav_distribution.audit(app)
+    app_store_runtime.audit(app)
+    app_store_runtime.audit_distribution(app)
     files, _ = bundle.audit(app)
     child = {'com.apple.security.app-sandbox': True, 'com.apple.security.inherit': True}
     python = {**child, 'com.apple.security.cs.allow-jit': True,

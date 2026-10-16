@@ -14,6 +14,10 @@ The LGPL-covered components remain under their own license. Nothing in bleeply's
 
 ## Other components
 
+Mac App Store builds use the official SciPy 1.17.1 macOS 12 arm64 wheel with its bundled OpenBLAS implementation instead of the Accelerate-linked variant. SciPy, OpenBLAS and compiler runtime license notices are preserved in `scipy-1.17.1.dist-info/LICENSE.txt` in both Python runtimes. The wheel URL and SHA-256 are recorded in `Contents/Resources/ThirdParty/app-store-runtime.json`. The optional Tcl/Tk GUI stack is omitted; the application interface uses SwiftUI.
+
+This wheel also includes the dynamically linked LGPL-2.1-or-later libquadmath library and GCC runtime libraries covered by the GCC Runtime Library Exception. GCC 12.1 Darwin source code, including libquadmath and its build machinery, is included in `ThirdParty/Sources/gcc-12.1-darwin-r0.tar.gz`. See `SCIPY-RUNTIME-SOURCES.txt` alongside it for build provenance and instructions for rebuilding and replacing the LGPL library in a local app copy. The LGPL modification and debugging rights described above apply to libquadmath as well.
+
 The app includes CPython (Python Software Foundation License), WhisperKit (MIT), and the Python packages listed in the bundled requirements lockfiles. See the ThirdParty folder and each runtime's lib/python3.11/site-packages/*dist-info license directories for their complete notices.
 
 Recognition model weights are downloaded separately from their publishers. Their licenses and notices accompany the respective model repositories. bleeply does not claim ownership of third-party software or model weights.
