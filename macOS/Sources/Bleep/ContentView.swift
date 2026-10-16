@@ -11,7 +11,7 @@ struct ContentView: View {
     @State private var editingWord: ReviewWord?
     @State private var sliderTravelInsets = SliderTravelInsets()
     @AppStorage("backend") private var backend = "faster-whisper"
-    @AppStorage("recognitionModel") private var recognitionModel = RecognitionModel.largeV3.rawValue
+    @AppStorage("recognitionModel") private var recognitionModel = RecognitionModel.defaultSelection.rawValue
 
     private var tint: Color {
         switch model.phase {
@@ -115,7 +115,7 @@ struct ContentView: View {
                             Text(language.title).tag(language)
                         }
                     }.pickerStyle(.menu).fixedSize()
-                    Text("\(backend == "whisperkit" ? "WhisperKit · Large v3 Turbo" : (RecognitionModel(rawValue: recognitionModel) ?? .largeV3).title) · \(model.videoLanguage == .english ? "English detection" : "Russian detection")")
+                    Text("\(backend == "whisperkit" ? "WhisperKit · Large v3 Turbo" : (RecognitionModel(rawValue: recognitionModel) ?? .defaultSelection).title) · \(model.videoLanguage == .english ? "English detection" : "Russian detection")")
                         .font(.caption).foregroundStyle(.secondary)
                     Text("You can change the model in Settings.")
                         .font(.caption).foregroundStyle(.secondary)

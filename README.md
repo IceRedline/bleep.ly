@@ -79,7 +79,7 @@ The subtitle shows the selected model and language. You can override it in Setti
 change; relaunching or selecting the same language keeps your manual choice. GigaAM
 is the Russian preset selected on a language change, based on the local trial,
 not a proven accuracy winner. With no saved preferences, the app starts in
-Russian with CPU / Whisper Large v3.
+English with CPU / Whisper Large v3 Turbo.
 Settings hides GigaAM for English. Downloads still
 require **Allow first-time model download**. English detection uses an experimental
 word list (`profanity.en.txt`); review contextual false positives and missed words.

@@ -66,11 +66,11 @@ struct SettingsView: View {
     @AppStorage("projectRoot") private var projectRoot = AppModel.defaultRoot
     @AppStorage("pythonPath") private var pythonPath = ""
     @AppStorage("backend") private var backend = "faster-whisper"
-    @AppStorage("recognitionModel") private var recognitionModel = RecognitionModel.largeV3.rawValue
+    @AppStorage("recognitionModel") private var recognitionModel = RecognitionModel.defaultSelection.rawValue
     @AppStorage("allowDownloads") private var allowDownloads = false
     @AppStorage("modelDownloadConsentAnswered") private var modelDownloadConsentAnswered = false
     @AppStorage("censorStyle") private var censorStyle = "middle"
-    @AppStorage("videoLanguage") private var videoLanguage = "ru"
+    @AppStorage("videoLanguage") private var videoLanguage = VideoLanguage.defaultSelection.rawValue
     @State private var showWordLists = false
 
     var body: some View {
@@ -99,7 +99,7 @@ struct SettingsView: View {
                     Text(backend == "mlx" ? "Faster · GPU recognition" : "Classic · CPU recognition")
                         .font(.caption).foregroundStyle(.secondary)
                     Picker("Model · testing", selection: $recognitionModel) {
-                        ForEach(RecognitionModel.choices(backend: backend, language: VideoLanguage(rawValue: videoLanguage) ?? .russian), id: \.rawValue) { model in
+                        ForEach(RecognitionModel.choices(backend: backend, language: VideoLanguage(rawValue: videoLanguage) ?? .defaultSelection), id: \.rawValue) { model in
                             Text(model.title).tag(model.rawValue)
                         }
                     }
@@ -120,8 +120,8 @@ struct SettingsView: View {
                     .font(.caption).foregroundStyle(.secondary)
             }
             .onChange(of: backend) { _, value in
-                if !RecognitionModel.choices(backend: value, language: VideoLanguage(rawValue: videoLanguage) ?? .russian).contains(where: { $0.rawValue == recognitionModel }), value != "whisperkit" {
-                    recognitionModel = RecognitionModel.largeV3.rawValue
+                if !RecognitionModel.choices(backend: value, language: VideoLanguage(rawValue: videoLanguage) ?? .defaultSelection).contains(where: { $0.rawValue == recognitionModel }), value != "whisperkit" {
+                    recognitionModel = RecognitionModel.defaultSelection.rawValue
                 }
             }
             Section("Censoring") {
@@ -164,13 +164,13 @@ struct SettingsView: View {
         .tint(.mint)
         .onAppear { WhisperKitExperiment.migratePreferences(defaults: .standard) }
         .sheet(isPresented: $showWordLists) {
-            WordListEditor(root: RuntimePaths.bundledRoot ?? URL(fileURLWithPath: projectRoot), language: VideoLanguage(rawValue: videoLanguage) ?? .russian)
+            WordListEditor(root: RuntimePaths.bundledRoot ?? URL(fileURLWithPath: projectRoot), language: VideoLanguage(rawValue: videoLanguage) ?? .defaultSelection)
         }
     }
 
     private var downloadEstimate: ModelDownloadEstimate {
-        let selected = RecognitionModel.choices(backend: backend, language: VideoLanguage(rawValue: videoLanguage) ?? .russian)
-            .contains { $0.rawValue == recognitionModel } ? recognitionModel : RecognitionModel.largeV3.rawValue
+        let selected = RecognitionModel.choices(backend: backend, language: VideoLanguage(rawValue: videoLanguage) ?? .defaultSelection)
+            .contains { $0.rawValue == recognitionModel } ? recognitionModel : RecognitionModel.defaultSelection.rawValue
         return ModelDownloadEstimate(backend: RecognitionModel.engine(model: selected, selected: backend), model: selected)
     }
 }
