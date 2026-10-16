@@ -19,6 +19,7 @@ SUPPORTED_MACOS = (15, 0)
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import pyav_distribution
 import app_store_runtime
+import app_icons
 
 
 def macho_files(folder):
@@ -127,6 +128,7 @@ def main():
     parser.add_argument('--audit-only', type=Path)
     args = parser.parse_args()
     if args.audit_only:
+        app_icons.audit(args.audit_only)
         files, minimum = audit(args.audit_only)
         print(json.dumps(dict(native_files=len(files), minimum_macos=minimum)))
         return
