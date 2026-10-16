@@ -116,7 +116,7 @@ overwrite existing release artifacts.
 bash scripts/build-macos.sh
 bash scripts/release/build-ffmpeg.sh
 bash scripts/release/build-pyav.sh
-python3 scripts/release/bundle-macos.py --version 0.1.9
+python3 scripts/release/bundle-macos.py --version 0.1.9 --build-number 22
 python3 scripts/release/sign-macos.py --identity 'Developer ID Application: YOUR NAME (TEAM_ID)' build/release/bleeply.app
 python3 scripts/release/smoke-test.py build/release/bleeply.app
 ```
@@ -125,6 +125,16 @@ The FFmpeg script builds unmodified LGPL sources with only system frameworks,
 without Homebrew dynamic libraries, network protocols, GPL or nonfree options.
 The source archive SHA-256 is pinned. Include that archive with every binary
 release. Do not silently substitute a system FFmpeg.
+
+Both distribution channels use the same OpenBLAS-backed SciPy wheel and omit
+the optional Tcl/Tk stack. Run `python3 scripts/release/app_store_runtime.py fetch`
+before bundling either channel. Version and build numbers must match for a paired
+release. Sandbox entitlements, provisioning and signing identities differ by
+channel. For an existing checked Store candidate, create the matching direct
+download payload with `paired-release.py prepare`, sign it with Developer ID,
+then run `paired-release.py verify` against both signed apps before publishing.
+The verifier compares all resources and normalizes Mach-O signatures before
+comparing executable code; only channel-specific metadata is allowed to differ.
 
 PyAV 18.1.0's upstream wheel vendors its own FFmpeg and x264/x265 libraries,
 independently of our command-line helpers. Never ship it unchanged. The separate

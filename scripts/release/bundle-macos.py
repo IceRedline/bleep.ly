@@ -18,6 +18,8 @@ MAGIC = {b'\xcf\xfa\xed\xfe', b'\xce\xfa\xed\xfe', b'\xfe\xed\xfa\xcf', b'\xca\x
 SUPPORTED_MACOS = (15, 0)
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import pyav_distribution
+import app_store_runtime
+import app_icons
 
 
 def macho_files(folder):
@@ -121,13 +123,19 @@ def audit(app):
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--version', default='0.1.9')
+    parser.add_argument('--build-number', help='Shared monotonically increasing build number for both channels')
     parser.add_argument('--python', type=Path, default=ROOT/'.cache/release-python/cpython-3.11.15-macos-aarch64-none')
     parser.add_argument('--audit-only', type=Path)
     args = parser.parse_args()
     if args.audit_only:
+        # CI also audits bare site-packages directories, which have no app icon.
+        if args.audit_only.suffix == '.app':
+            app_icons.audit(args.audit_only)
         files, minimum = audit(args.audit_only)
         print(json.dumps(dict(native_files=len(files), minimum_macos=minimum)))
         return
+    if not args.build_number or not args.build_number.isdecimal() or int(args.build_number) < 1:
+        parser.error('--build-number must be a positive integer shared with the Store candidate')
     app = ROOT/'build/release/bleeply.app'
     app.parent.mkdir(parents=True, exist_ok=True)
     if app.exists():
@@ -215,15 +223,17 @@ print(json.dumps(files))
         for license_file in package.glob('LICENSE*'):
             if license_file.is_file(): shutil.copy2(license_file, licenses/f'{package.name}-{license_file.name}')
     pyav = pyav_distribution.install(app)
+    shared_runtime = app_store_runtime.install(app)
     normalize_permissions(app)
     files, minimum = audit(app)
     manifest = dict(version=args.version, source_commit=subprocess.check_output(['git','rev-parse','HEAD'],cwd=ROOT,text=True).strip(),
-                    architecture='arm64', python='3.11.15', ffmpeg='8.1.2', pyav=pyav, minimum_macos=minimum)
+                    architecture='arm64', python='3.11.15', ffmpeg='8.1.2', pyav=pyav,
+                    shared_runtime=shared_runtime, minimum_macos=minimum)
     (engine/'runtime.json').write_text(json.dumps(manifest, indent=2)+'\n')
     info_path = app/'Contents/Info.plist'
     info = plistlib.loads(info_path.read_bytes())
     info.pop('BleepProjectRoot', None)
-    info.update(CFBundleShortVersionString=args.version, CFBundleVersion='20', LSMinimumSystemVersion=minimum,
+    info.update(CFBundleShortVersionString=args.version, CFBundleVersion=args.build_number, LSMinimumSystemVersion=minimum,
                 BleepBuildID=str(uuid.uuid4()))
     info_path.write_bytes(plistlib.dumps(info))
     subprocess.run(['bash', str(ROOT/'scripts/build-theme.sh'), str(app)], check=True)

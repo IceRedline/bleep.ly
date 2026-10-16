@@ -15,6 +15,9 @@ parser.add_argument('--identity', required=True)
 parser.add_argument('app', type=Path)
 args = parser.parse_args()
 bundle.normalize_permissions(args.app)
+bundle.app_icons.audit(args.app)
+bundle.app_store_runtime.audit(args.app)
+bundle.app_store_runtime.audit_distribution(args.app)
 files, minimum = bundle.audit(args.app)
 files = [p for p in files if p != args.app/'Contents/MacOS/Bleep']
 def sign(path):

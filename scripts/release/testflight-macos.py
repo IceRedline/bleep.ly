@@ -165,6 +165,7 @@ def sign(args):
     shutil.copy2(args.profile, app/'Contents/embedded.provisionprofile')
     clear_quarantine(app)
     bundle.normalize_permissions(app)
+    bundle.app_icons.audit(app)
     pyav_distribution.audit(app)
     app_store_runtime.audit(app)
     app_store_runtime.audit_distribution(app)

@@ -19,7 +19,6 @@ mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
 cp .cache/swift-build/release/Bleep "$APP/Contents/MacOS/Bleep"
 mkdir -p "$APP/Contents/Resources/Documentation"
 cp docs/privacy-policy.md docs/support.md docs/third-party.md "$APP/Contents/Resources/Documentation/"
-bash scripts/build-icon.sh "$APP/Contents/Resources/AppIcon.icns"
 /usr/bin/python3 - "$APP" "$ROOT" <<'PY'
 import plistlib
 import sys
