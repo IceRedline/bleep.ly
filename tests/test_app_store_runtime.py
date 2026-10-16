@@ -68,6 +68,31 @@ class AppStoreRuntimeTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, 'no Mach-O'):
                 runtime.audit(Path(folder))
 
+    def test_missing_or_corrupt_compiler_sources_cannot_be_distributed(self):
+        with tempfile.TemporaryDirectory() as folder:
+            app = Path(folder)
+            with self.assertRaisesRegex(ValueError, 'compiler runtime source'):
+                runtime.audit_distribution(app)
+            source = app/'Contents/Resources/ThirdParty/Sources'/runtime.SOURCE_ARCHIVE
+            source.parent.mkdir(parents=True)
+            source.write_bytes(b'wrong archive')
+            with self.assertRaisesRegex(ValueError, 'compiler runtime source'):
+                runtime.audit_distribution(app)
+
+    def test_license_notices_are_required_in_both_runtimes(self):
+        with tempfile.TemporaryDirectory() as folder, patch.object(runtime, 'verify_source'):
+            app = Path(folder)
+            instructions = app/'Contents/Resources/ThirdParty/Sources/SCIPY-RUNTIME-SOURCES.txt'
+            instructions.parent.mkdir(parents=True)
+            instructions.write_text('instructions')
+            for name in ('Python', 'PythonGPU'):
+                with self.assertRaisesRegex(ValueError, name):
+                    runtime.audit_distribution(app)
+                license = app/'Contents/Resources/Runtime'/name/'lib/python3.11/site-packages/scipy-1.17.1.dist-info/LICENSE.txt'
+                license.parent.mkdir(parents=True)
+                license.write_text('OpenBLAS libquadmath GCC RUNTIME LIBRARY EXCEPTION')
+            runtime.audit_distribution(app)
+
 
 if __name__ == '__main__':
     unittest.main()

@@ -167,6 +167,7 @@ def sign(args):
     bundle.normalize_permissions(app)
     pyav_distribution.audit(app)
     app_store_runtime.audit(app)
+    app_store_runtime.audit_distribution(app)
     files, _ = bundle.audit(app)
     child = {'com.apple.security.app-sandbox': True, 'com.apple.security.inherit': True}
     python = {**child, 'com.apple.security.cs.allow-jit': True,

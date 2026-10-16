@@ -23,6 +23,9 @@ python3 scripts/release/app_store_runtime.py fetch
 Run `testflight-macos.py prepare` with a new output directory and build number
 as usual. Preparation installs the wheel, preserves its license notices and
 records its provenance in `Contents/Resources/ThirdParty/app-store-runtime.json`.
+The fetch step also downloads hash-pinned GCC Darwin 12.1 sources. Preparation
+includes them with rebuild/replacement instructions for the LGPL libquadmath
+dependency, and signing verifies the source archive and license notices.
 The `sign` command repeats the audit before signing. Existing signed releases
 and developer Python environments are not modified.
 

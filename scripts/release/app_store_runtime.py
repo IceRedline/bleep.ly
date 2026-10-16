@@ -13,6 +13,42 @@ WHEEL = 'scipy-1.17.1-cp311-cp311-macosx_12_0_arm64.whl'
 SHA256 = 'e18f12c6b0bc5a592ed23d3f7b891f68fd7f8241d69b7883769eb5d5dfb52696'
 URL = 'https://files.pythonhosted.org/packages/f7/58/bccc2861b305abdd1b8663d6130c0b3d7cc22e8d86663edbc8401bfd40d4/' + WHEEL
 CACHE = ROOT/'.cache/app-store-runtime/wheels'
+SOURCE_ARCHIVE = 'gcc-12.1-darwin-r0.tar.gz'
+SOURCE_SHA256 = '75cd91f0291ea1863119ce6fdeaa6478a267c941f59128cb22635351f5d2c3f8'
+SOURCE_URL = 'https://codeload.github.com/iains/gcc-12-branch/tar.gz/912ae4b9e6c9572ff9ef1c5be6693ff336324361'
+SOURCE_NOTICE = '''SciPy's bundled compiler runtime sources
+
+The official SciPy 1.17.1 macOS 12 arm64 wheel links OpenBLAS, libgfortran,
+libgcc and libquadmath dynamically. Its complete copyright/license notices
+are in scipy-1.17.1.dist-info/LICENSE.txt in BOTH Python runtimes. OpenBLAS is
+BSD-licensed; GCC runtime libraries use GPL with the GCC Runtime Library
+Exception; libquadmath is LGPL-2.1-or-later.
+
+The upstream wheel build selects Francois-Xavier Coudert's ARM GCC 12.1
+Monterey toolchain, built from Iain Sandoe's GCC Darwin branch. The unmodified
+GCC 12.1 Darwin r0 source archive is included here, containing libquadmath,
+the compiler runtimes and their build machinery. See the pinned archive URL
+and checksum in ../app-store-runtime.json. Upstream build provenance:
+https://github.com/scipy/scipy/blob/v1.17.1/tools/wheels/cibw_before_build_macos.sh
+https://github.com/fxcoudert/gfortran-for-macOS/releases/tag/12.1-monterey
+https://github.com/fxcoudert/gfortran-for-macOS/blob/c1ab08eea60c5701f42e9d218fc7b26ef0cb2ac2/build_package.md
+
+To rebuild: extract the archive, install Xcode command-line tools plus GMP,
+MPFR, MPC and ISL, and use a separate build directory. Follow the upstream
+toolchain build notes above with these GCC 12.1 sources, aarch64-apple-darwin
+as the build target, and --enable-languages=c,c++,fortran --disable-multilib
+--with-sysroot=$(xcrun --show-sdk-path). Run make and install into a staging
+directory using DESTDIR. No GCC source patches are applied by bleeply.
+
+To use a modified LGPL library, replace libquadmath.0.dylib under
+Contents/Resources/Runtime/Python*/lib/python3.11/site-packages/scipy/.dylibs
+in BOTH runtimes of a local app copy with an ABI-compatible arm64 build.
+Preserve @loader_path dependency paths (inspect with otool -L and adjust with
+install_name_tool). Re-sign changed Mach-O files and the app copy using your
+own signing identity. You may modify these LGPL components and reverse
+engineer their integration to debug those modifications; no permission from
+bleeply's developer is required. Do not modify the installed signed release.
+'''
 MACHO_MAGIC = {b'\xcf\xfa\xed\xfe', b'\xce\xfa\xed\xfe', b'\xfe\xed\xfa\xcf',
                b'\xfe\xed\xfa\xce', b'\xca\xfe\xba\xbe', b'\xbe\xba\xfe\xca',
                b'\xca\xfe\xba\xbf', b'\xbf\xba\xfe\xca'}
@@ -27,6 +63,11 @@ def verify_wheel(path):
         raise ValueError(f'Wrong SciPy wheel checksum: {path}')
 
 
+def verify_source(path):
+    if not path.is_file() or hashlib.sha256(path.read_bytes()).hexdigest() != SOURCE_SHA256:
+        raise ValueError(f'Missing or mismatched compiler runtime source: {path}')
+
+
 def fetch():
     """Download explicitly; candidate preparation itself works offline."""
     CACHE.mkdir(parents=True, exist_ok=True)
@@ -37,6 +78,14 @@ def fetch():
             raise ValueError('Downloaded SciPy wheel checksum mismatch')
         path.write_bytes(data)
     verify_wheel(path)
+    source = CACHE.parent/'sources'/SOURCE_ARCHIVE
+    if not source.exists():
+        data = urllib.request.urlopen(SOURCE_URL, timeout=120).read()
+        if hashlib.sha256(data).hexdigest() != SOURCE_SHA256:
+            raise ValueError('Downloaded compiler runtime source checksum mismatch')
+        source.parent.mkdir(parents=True, exist_ok=True)
+        source.write_bytes(data)
+    verify_source(source)
     print(path)
 
 
@@ -58,6 +107,8 @@ def install(app, cache=CACHE):
     if not wheel.is_file():
         raise ValueError('Run python3 scripts/release/app_store_runtime.py fetch first')
     verify_wheel(wheel)
+    source = cache.parent/'sources'/SOURCE_ARCHIVE
+    verify_source(source)
     removed = {}
     with zipfile.ZipFile(wheel) as archive:
         for name in archive.namelist():
@@ -78,12 +129,29 @@ def install(app, cache=CACHE):
             archive.extractall(site)
             removed[runtime.name] = remove_tk(runtime)
     metadata = dict(scipy='1.17.1', blas='OpenBLAS', wheel=WHEEL, wheel_sha256=SHA256,
+                    compiler_runtime_source=dict(archive=SOURCE_ARCHIVE, sha256=SOURCE_SHA256, url=SOURCE_URL),
                     wheel_url=URL, removed_optional_tk=removed)
     third_party = app/'Contents/Resources/ThirdParty'
     third_party.mkdir(parents=True, exist_ok=True)
+    sources = third_party/'Sources'
+    sources.mkdir(exist_ok=True)
+    shutil.copy2(source, sources/SOURCE_ARCHIVE)
+    (sources/'SCIPY-RUNTIME-SOURCES.txt').write_text(SOURCE_NOTICE)
     (third_party/'app-store-runtime.json').write_text(json.dumps(metadata, indent=2)+'\n')
     audit(app)
+    audit_distribution(app)
     return metadata
+
+
+def audit_distribution(app):
+    third_party = app/'Contents/Resources/ThirdParty'
+    verify_source(third_party/'Sources'/SOURCE_ARCHIVE)
+    if not (third_party/'Sources/SCIPY-RUNTIME-SOURCES.txt').is_file():
+        raise ValueError('Missing compiler runtime rebuild instructions')
+    for name in ('Python', 'PythonGPU'):
+        license = app/'Contents/Resources/Runtime'/name/'lib/python3.11/site-packages/scipy-1.17.1.dist-info/LICENSE.txt'
+        if not license.is_file() or not all(text in license.read_text() for text in ('OpenBLAS', 'libquadmath', 'GCC RUNTIME LIBRARY EXCEPTION')):
+            raise ValueError(f'Missing SciPy dependency license notices: {name}')
 
 
 def audit(app):
