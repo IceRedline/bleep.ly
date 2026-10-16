@@ -9,7 +9,27 @@ processing run locally; your recordings stay on your Mac.
 
 [Privacy Policy](docs/privacy-policy.md) · [Support](docs/support.md) · [Open Source Licenses](docs/third-party.md)
 
-**Contents:** [Download](#download-for-macos) · [Setup](#setup) · [App workflow](#app-workflow) · [Recognition](#recognition) · [Turbo benchmark](#turbo-benchmark) · [Exports](#exports) · [Architecture](#architecture) · [CLI](#cli) · [Checks](#checks) · [Limitations](#limitations)
+**Contents:** 
+
+[Download](#download-for-macos)
+
+[Setup](#setup)
+
+[App workflow](#app-workflow)
+
+[Recognition](#recognition)
+
+[Turbo benchmark](#turbo-benchmark)
+
+[Exports](#exports)
+
+[Architecture](#architecture)
+
+[CLI](#cli)
+
+[Checks](#checks)
+
+[Limitations](#limitations)
 
 ## Download for macOS
 
