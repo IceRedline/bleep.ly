@@ -135,8 +135,8 @@ All engines still require a separate model download. For source builds, install
 the additional recognition dependencies described below.
 
 In **Settings → Recognition**, the **Model · testing** picker offers Whisper
-Large v3 (the default) and Large v3 Turbo for CPU and Apple GPU. WhisperKit uses
-Large v3 Turbo through Core ML. Engine and model changes apply to the next file;
+Large v3 and Large v3 Turbo (the first-launch default) for CPU and Apple GPU.
+WhisperKit uses Large v3 Turbo through Core ML. Engine and model changes apply to the next file;
 each configuration has its own recognition cache.
 
 On Apple Silicon, both **CPU** and **Apple GPU · MLX / MPS** also offer experimental **Parakeet v3**,
@@ -179,16 +179,18 @@ per pipeline. Smaller is faster; transcript caches are bypassed.
 | Mac | Memory | CPU: faster-whisper int8 | GPU: MLX float16 | CPU + Neural Engine: WhisperKit |
 | --- | ---: | ---: | ---: | ---: |
 | M1 Air | 8 GiB | 267 s | 157 s | 74 s |
-| M3 | — | Not measured | Not measured | Not measured |
+| M3 | 8 GiB | 206 s | 111 s | 50 s |
 | M3 Pro | 36 GiB | 170 s | 41 s | 51 s |
 
-Measured on an M3 Pro with 12 CPU / 18 GPU cores, macOS 26.6.2, battery power,
-and Low Power Mode off. These are application pipelines with different runtimes,
+M3 measurements use 8 CPU / 10 GPU cores; M3 Pro uses 12 CPU / 18 GPU cores.
+Both ran macOS 26.6.2 on battery power with Low Power Mode off.
+These are application pipelines with different runtimes,
 precisions and decoding settings; compare the same column across Macs. Core ML
 may use CPU for some operations in the Neural Engine column.
 
 [Full results and setup instructions](benchmarks/README.md) ·
-[Individual measurements](benchmarks/results/m3-pro-36gb-2026-10-15.json)
+[M3 measurements](benchmarks/results/m3-8gb-2026-10-16.json) ·
+[M3 Pro measurements](benchmarks/results/m3-pro-36gb-2026-10-15.json)
 
 To measure another Mac, double-click [`Run Speed Test.command`](Run%20Speed%20Test.command)
 in the repository or an extracted source ZIP. It installs missing prerequisites,
