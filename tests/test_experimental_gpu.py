@@ -81,11 +81,11 @@ class ExperimentalGPUTests(unittest.TestCase):
                 _, qwen = cache_identity(source, 'qwen3-asr', 0)
                 self.assertIn('aligner_revision', qwen)
                 _, gigaam = cache_identity(source, 'gigaam-v3', 0)
-                self.assertEqual(gigaam['adapter_version'], 3)
+                self.assertEqual(gigaam['adapter_version'], 4)
                 self.assertEqual(gigaam['overlap_seconds'], 2)
                 self.assertEqual(gigaam['stitching'], 'midpoint-ownership-v1')
                 self.assertEqual(gigaam['aligner_revision'], qwen['aligner_revision'])
-                self.assertEqual(gigaam['alignment'], 'qwen-bounded-retry-v1')
+                self.assertEqual(gigaam['alignment'], 'qwen-bounded-retry-v2')
 
     def test_offline_preparation_cannot_download_gigaam(self):
         with tempfile.TemporaryDirectory() as folder, patch('censor.experimental_gpu.ROOT', Path(folder)):

@@ -6,6 +6,9 @@ from .utils import CensorError
 
 RATE = 16000
 MAX_START_SHIFT = .6
+# The pinned Qwen aligner quantizes timestamps in 80 ms steps. Allow that
+# rounding, but reject spans detached from the recognizer's word interval.
+MAX_SPAN_GAP = .08
 
 
 class WordAligner:
@@ -46,7 +49,8 @@ class WordAligner:
                 and 0 <= word.start < word.end <= duration + 1e-6
                 and word.end - word.start >= .04 - 1e-6
                 and abs(word.start - original.start) <= MAX_START_SHIFT
-                and word.end <= original.end + MAX_START_SHIFT)
+                and word.end <= original.end + MAX_START_SHIFT
+                and max(original.start - word.end, word.start - original.end) <= MAX_SPAN_GAP + 1e-6)
 
     def align(self, audio, words):
         # Punctuation remains attached to lexical words, but stand-alone dashes

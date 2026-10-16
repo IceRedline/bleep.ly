@@ -41,6 +41,9 @@ final class MultiTrackWorkflowTests: XCTestCase {
         let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
         defer { defaults.removePersistentDomain(forName: suite) }
         defaults.set(root.path, forKey: "projectRoot")
+        // Match the Russian Large v3 cache prepared above, independently of first-launch defaults.
+        defaults.set("ru", forKey: "videoLanguage")
+        defaults.set("large-v3", forKey: "recognitionModel")
         let model = AppModel(defaults: defaults, supportDirectory: support)
         await model.open(source, workflow: .fast)?.value
         XCTAssertNil(model.error)

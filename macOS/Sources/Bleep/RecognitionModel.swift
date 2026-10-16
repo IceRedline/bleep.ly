@@ -4,10 +4,12 @@ enum VideoLanguage: String, CaseIterable {
     case russian = "ru"
     case english = "en"
 
+    static let defaultSelection: Self = .english
+
     var title: String { self == .russian ? "Русский" : "English" }
 
     static func selected(defaults: UserDefaults) -> Self {
-        Self(rawValue: defaults.string(forKey: "videoLanguage") ?? "") ?? .russian
+        Self(rawValue: defaults.string(forKey: "videoLanguage") ?? "") ?? defaultSelection
     }
 }
 
@@ -20,6 +22,8 @@ enum RecognitionModel: String, CaseIterable {
     case qwen = "qwen3-asr"
     case gigaAM = "gigaam-v3"
 
+    static let defaultSelection: Self = .turbo
+
     var title: String {
         switch self {
         case .largeV3: "Whisper Large v3"
@@ -31,7 +35,7 @@ enum RecognitionModel: String, CaseIterable {
         }
     }
 
-    static func choices(backend: String, language: VideoLanguage = .russian) -> [Self] {
+    static func choices(backend: String, language: VideoLanguage = .defaultSelection) -> [Self] {
         #if arch(arm64)
         let candidates: [Self] = backend == "whisperkit" ? [.turbo] : allCases
         #else
@@ -52,8 +56,8 @@ enum RecognitionModel: String, CaseIterable {
 
     static func requested(defaults: UserDefaults, backend: String) -> String {
         if backend == "whisperkit" { return Self.turbo.rawValue }
-        let model = Self(rawValue: defaults.string(forKey: "recognitionModel") ?? "") ?? .largeV3
+        let model = Self(rawValue: defaults.string(forKey: "recognitionModel") ?? "") ?? defaultSelection
         return choices(backend: backend, language: VideoLanguage.selected(defaults: defaults)).contains(model)
-            ? model.rawValue : Self.largeV3.rawValue
+            ? model.rawValue : defaultSelection.rawValue
     }
 }
