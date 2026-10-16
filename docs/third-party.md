@@ -14,6 +14,8 @@ The LGPL-covered components remain under their own license. Nothing in bleeply's
 
 ## Other components
 
+Mac App Store builds use the official SciPy 1.17.1 macOS 12 arm64 wheel with its bundled OpenBLAS implementation instead of the Accelerate-linked variant. SciPy, OpenBLAS and compiler runtime license notices are preserved in `scipy-1.17.1.dist-info/LICENSE.txt` in both Python runtimes. The wheel URL and SHA-256 are recorded in `Contents/Resources/ThirdParty/app-store-runtime.json`. The optional Tcl/Tk GUI stack is omitted; the application interface uses SwiftUI.
+
 The app includes CPython (Python Software Foundation License), WhisperKit (MIT), and the Python packages listed in the bundled requirements lockfiles. See the ThirdParty folder and each runtime's lib/python3.11/site-packages/*dist-info license directories for their complete notices.
 
 Recognition model weights are downloaded separately from their publishers. Their licenses and notices accompany the respective model repositories. bleeply does not claim ownership of third-party software or model weights.
