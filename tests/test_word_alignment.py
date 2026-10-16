@@ -53,6 +53,31 @@ class WordAlignmentTests(unittest.TestCase):
         self.assertEqual(a.align([0] * 32000, [word]), [word])
         self.assertEqual(a.metrics['native_fallbacks'], 1)
 
+    def test_zero_duration_retry_cannot_move_word_into_preceding_silence(self):
+        # A real GigaAM word at 21.86 s, relative to its window at 20.104 s.
+        # Qwen first collapses it to one timestamp, then places the retry
+        # 0.52 s early, entirely before the recognizer's word interval.
+        a = self.aligner([[aligned('Блядь', 1.92, 1.92)], [aligned('Блядь', .08, .24)]])
+        word = Word('Блядь,', 1.7586461538461537, 2.0384307692307693, True)
+        self.assertEqual(a.align([0] * 83136, [word]), [word])
+        self.assertEqual(a.metrics, dict(words=1, local_retries=1, native_fallbacks=1))
+
+    def test_disjoint_spans_within_start_shift_limit_are_retried(self):
+        word = Word('word', 1, 1.2)
+        for start, end in [(.48, .64), (1.56, 1.72)]:
+            with self.subTest(start=start, end=end):
+                a = self.aligner([[aligned('word', start, end)], [aligned('word', .6, .84)]])
+                result = a.align([0] * 32000, [word])
+                self.assertAlmostEqual(result[0].start, 1)
+                self.assertAlmostEqual(result[0].end, 1.24)
+                self.assertEqual(a.metrics, dict(words=1, local_retries=1, native_fallbacks=0))
+
+    def test_short_native_token_allows_one_alignment_frame_of_rounding(self):
+        a = self.aligner([[aligned('word', 1.16, 1.32)]])
+        self.assertEqual(a.align([0] * 32000, [Word('word', 1.04, 1.08)]),
+                         [Word('word', 1.16, 1.32)])
+        self.assertEqual(a.metrics['local_retries'], 0)
+
     def test_incomplete_or_mismatched_transcript_is_not_silently_zipped(self):
         for values in [[], [aligned('another', .5, 1)]]:
             a = self.aligner([values])

@@ -88,9 +88,9 @@ def cache_identity(source, model, audio_index, progress=None, language="ru", dev
         metadata.update(aligner_model=ALIGNER[0], aligner_revision=ALIGNER[1])
     if backend == "gigaam-mps":
         metadata["backend_revision"] = "7447938d791c4f3e643386ee22c33777004293a5"
-        metadata.update(adapter_version=3, context_seconds=CONTEXT_SECONDS,
+        metadata.update(adapter_version=4, context_seconds=CONTEXT_SECONDS,
                         overlap_seconds=2 * CONTEXT_SECONDS, stitching="midpoint-ownership-v1",
-                        alignment="qwen-bounded-retry-v1",
+                        alignment="qwen-bounded-retry-v2",
                         mlx_version=importlib.metadata.version("mlx"),
                         aligner_backend_version=importlib.metadata.version("mlx-qwen3-asr"))
     # Keep existing Russian benchmark caches usable; separate English detection runs.
