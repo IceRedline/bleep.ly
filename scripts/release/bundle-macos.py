@@ -122,7 +122,7 @@ def audit(app):
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument('--version', default='0.1.9')
+    parser.add_argument('--version', default='0.1.10')
     parser.add_argument('--build-number', help='Shared monotonically increasing build number for both channels')
     parser.add_argument('--python', type=Path, default=ROOT/'.cache/release-python/cpython-3.11.15-macos-aarch64-none')
     parser.add_argument('--audit-only', type=Path)

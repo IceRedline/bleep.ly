@@ -65,7 +65,7 @@ validation or a TestFlight installation test.
 
 ## Direct-download release
 
-Release **0.1.9** supports **Apple Silicon, macOS 15.0 or later**. MLX stays at
+Release **0.1.10** supports **Apple Silicon, macOS 15.0 or later**. MLX stays at
 0.32.3, but uses the official Sequoia wheels pinned by URL and SHA-256 in
 `requirements-mlx-macos15.lock`. A version-only pip pin on a Tahoe build host
 selects different wheels requiring macOS 26.2, which caused the 0.1.0 restriction.
@@ -116,7 +116,7 @@ overwrite existing release artifacts.
 bash scripts/build-macos.sh
 bash scripts/release/build-ffmpeg.sh
 bash scripts/release/build-pyav.sh
-python3 scripts/release/bundle-macos.py --version 0.1.9 --build-number 22
+python3 scripts/release/bundle-macos.py --version 0.1.10 --build-number 24
 python3 scripts/release/sign-macos.py --identity 'Developer ID Application: YOUR NAME (TEAM_ID)' build/release/bleeply.app
 python3 scripts/release/smoke-test.py build/release/bleeply.app
 ```
@@ -169,12 +169,12 @@ outer app. Python executables allow JIT and unsigned executable memory for Numba
 library validation stays enabled. Use the same Developer ID for all code.
 
 ```sh
-.cache/dmg-tools/bin/python scripts/release/build-dmg.py --version 0.1.9
-codesign --sign 'Developer ID Application: YOUR NAME (TEAM_ID)' --timestamp dist/bleeply-0.1.9-arm64.dmg
-xcrun notarytool submit dist/bleeply-0.1.9-arm64.dmg --keychain-profile bleeply-notary --wait
-xcrun stapler staple dist/bleeply-0.1.9-arm64.dmg
-xcrun stapler validate dist/bleeply-0.1.9-arm64.dmg
-spctl --assess --type open --context context:primary-signature --verbose=2 dist/bleeply-0.1.9-arm64.dmg
+.cache/dmg-tools/bin/python scripts/release/build-dmg.py --version 0.1.10
+codesign --sign 'Developer ID Application: YOUR NAME (TEAM_ID)' --timestamp dist/bleeply-0.1.10-arm64.dmg
+xcrun notarytool submit dist/bleeply-0.1.10-arm64.dmg --keychain-profile bleeply-notary --wait
+xcrun stapler staple dist/bleeply-0.1.10-arm64.dmg
+xcrun stapler validate dist/bleeply-0.1.10-arm64.dmg
+spctl --assess --type open --context context:primary-signature --verbose=2 dist/bleeply-0.1.10-arm64.dmg
 ```
 
 Apple's [distribution workflow](https://developer.apple.com/documentation/xcode/packaging-mac-software-for-distribution)

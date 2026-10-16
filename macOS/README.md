@@ -3,7 +3,7 @@
 # bleeply for macOS
 
 Native SwiftUI front end for the Python engine. The signed, Apple-notarized
-[0.1.9 release](https://github.com/IceRedline/bleeply/releases/tag/v0.1.9) supports
+[0.1.10 release](https://github.com/IceRedline/bleeply/releases/tag/v0.1.10) supports
 **Apple Silicon and macOS 15.0 or later**. It includes Python, FFmpeg and the
 recognition engines; only model weights download separately. Install it by
 opening the DMG, dragging **bleeply** to **Applications**, and opening the app
